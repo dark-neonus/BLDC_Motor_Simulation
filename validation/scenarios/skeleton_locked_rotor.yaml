@@ -1,0 +1,6 @@
+# V-SKEL-001: locked rotor, 1 V on q axis → i_q(t) = (V/R)(1 − e^{−t R/L}), τ = L/R = 2.5 ms.
+duration: 0.0125      # 5 τ
+dt: 2.5e-7            # τ/10000
+record_every: 2.5e-5  # τ/100
+lock_rotor: true
+vq_open_loop: 1.0

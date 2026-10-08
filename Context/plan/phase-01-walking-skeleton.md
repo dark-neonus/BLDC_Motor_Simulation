@@ -49,7 +49,7 @@
   - **Verify:** Test: play 0.2 s at scale 1 → sim time ≈ 0.2 s ± 10 %; pause stops time; reset zeroes the state.
   - **Done when:** The test passes; there are no busy-wait CPU spins while paused (use a blocking recv when paused).
 
-- [ ] **P01.T04** — CLI `run-scenario` (minimal YAML → CSV + Parquet)
+- [x] **P01.T04** — CLI `run-scenario` (minimal YAML → CSV + Parquet)
   - **Depends:** P01.T02
   - **Do:**
     1. `bldc-sim run-scenario <file.yaml> --out <dir>`.

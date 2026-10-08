@@ -1,0 +1,5 @@
+# V-SKEL-002: free spin with v_d = 0, v_q = 6 V → steady speed from the model's steady-state equations.
+duration: 0.5
+dt: 5.0e-6
+record_every: 1.0e-3
+vq_open_loop: 6.0

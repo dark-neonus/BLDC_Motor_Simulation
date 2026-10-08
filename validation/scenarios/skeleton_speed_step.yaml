@@ -1,0 +1,4 @@
+# FOC speed step 0 → 20 rad/s at t = 0.01 s (demo / smoke).
+duration: 0.2
+actions:
+  - { t: 0.01, set_target_speed: 20.0 }
