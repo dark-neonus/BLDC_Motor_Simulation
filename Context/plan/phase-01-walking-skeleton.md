@@ -94,7 +94,7 @@
   - **Done when:** The test passes.
   - **If stuck:** Copy the structure of the rmcp `examples/servers` streamable-HTTP example at the locked version (TROUBLESHOOTING §2).
 
-- [ ] **P01.T07** — Web skeleton: WS client, play/pause, one uPlot, spinning Pixi rotor
+- [x] **P01.T07** — Web skeleton: WS client, play/pause, one uPlot, spinning Pixi rotor
   - **Depends:** P01.T05
   - **Do:**
     1. Vite proxy `/api` (with `ws: true`) and `/mcp` → 8787.
