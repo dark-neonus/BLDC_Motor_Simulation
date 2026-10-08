@@ -3,6 +3,7 @@
 
 pub mod mcp;
 pub mod routes;
+pub mod static_files;
 pub mod ws;
 
 use std::net::SocketAddr;
@@ -26,6 +27,7 @@ pub fn router(state: AppState) -> Router {
         .nest_service("/mcp", mcp)
         .merge(routes::api())
         .merge(ws::routes())
+        .merge(static_files::routes())
         .with_state(state)
         .layer(TraceLayer::new_for_http())
 }
@@ -40,12 +42,16 @@ pub async fn serve(listener: TcpListener, state: AppState) -> std::io::Result<()
 }
 
 /// Bind `addr`, spawn the simulation and serve (blocking until shutdown).
-pub fn run_blocking(addr: SocketAddr) -> std::io::Result<()> {
+pub fn run_blocking(addr: SocketAddr, open_browser: bool) -> std::io::Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move {
         let listener = TcpListener::bind(addr).await?;
         tracing::info!("bldc-sim listening on http://{}", listener.local_addr()?);
-        println!("bldc-sim listening on http://{}", listener.local_addr()?);
+        let url = format!("http://{}", listener.local_addr()?);
+        println!("bldc-sim listening on {url}  (docs: {url}/docs/, MCP: {url}/mcp)");
+        if open_browser && let Err(e) = open::that(&url) {
+            tracing::warn!("could not open a browser: {e}");
+        }
         let state = AppState {
             sim: Arc::new(SimHandle::spawn()),
         };

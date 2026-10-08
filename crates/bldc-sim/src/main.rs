@@ -24,6 +24,9 @@ enum Cmd {
         /// Address to bind (localhost only by default).
         #[arg(long, default_value = "127.0.0.1")]
         host: std::net::IpAddr,
+        /// Open the UI in the default browser.
+        #[arg(long)]
+        open: bool,
     },
     /// Run a scenario file headless and write signals.parquet, signals.csv and meta.json.
     RunScenario {
@@ -44,7 +47,9 @@ fn main() -> anyhow::Result<()> {
         .init();
     let cli = Cli::parse();
     match cli.command {
-        Some(Cmd::Serve { port, host }) => Ok(sim_api::run_blocking((host, port).into())?),
+        Some(Cmd::Serve { port, host, open }) => {
+            Ok(sim_api::run_blocking((host, port).into(), open)?)
+        }
         Some(Cmd::RunScenario { file, out }) => cli::run_scenario::run(&file, &out),
         None => {
             println!(

@@ -38,13 +38,17 @@ dev:
 
 # Docs dev server (:3000)
 docs-dev:
-    @if [ -f docs/package.json ]; then pnpm -C docs start; else echo "SKIP docs (until P01.T08)"; fi
+    pnpm -C docs start
 
-# Release build: single binary (embeds UI/docs once P01.T10 lands)
+# Release build: single binary with the web UI and docs embedded
 build:
     pnpm -C web build
-    @if [ -f docs/package.json ]; then pnpm -C docs build; else echo "SKIP docs build (until P01.T08)"; fi
-    cargo build --release -p bldc-sim
+    pnpm -C docs build
+    cargo build --release -p bldc-sim --features embed
+
+# Build and run the single binary, opening the browser
+run: build
+    ./target/release/bldc-sim serve --open
 
 # ---------------------------------------------------------------- tests
 
@@ -98,7 +102,7 @@ check-fast: fmt-check lint test-rust test-web plan-check
 # Full gate, run at phase gates
 check: check-fast validate e2e
     pnpm -C web build
-    @if [ -f docs/package.json ]; then pnpm -C docs build; else echo "SKIP docs build (until P01.T08)"; fi
+    pnpm -C docs build
 
 # ---------------------------------------------------------------- codegen
 

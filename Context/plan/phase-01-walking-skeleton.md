@@ -130,7 +130,7 @@
   - **Verify:** `just validate` → 2 passed (+ smoke).
   - **Done when:** Green.
 
-- [ ] **P01.T10** — `just dev` / `just build` single binary with embedded UI
+- [x] **P01.T10** — `just dev` / `just build` single binary with embedded UI
   - **Depends:** P01.T07
   - **Do:**
     - `just dev` runs `cargo run -p bldc-sim -- serve` and `pnpm -C web dev` concurrently, killing both on Ctrl-C (use a just recipe with `trap`, or `pnpm dlx concurrently`).

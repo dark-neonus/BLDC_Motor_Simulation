@@ -19,5 +19,8 @@ serde = { workspace = true, features = ["derive"] }
 anyhow.workspace = true
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
+[features]
+embed = ["sim-api/embed-ui", "sim-api/embed-docs"]
+
 [lints]
 workspace = true
