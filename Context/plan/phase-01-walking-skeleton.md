@@ -37,7 +37,7 @@
   - **Verify:** Test: a speed step 0 → 20 rad/s settles within 2 % in < 0.5 s, overshoot < 20 %, |i_q| never exceeds I_max.
   - **Done when:** The test passes and the step response is logged.
 
-- [ ] **P01.T03** — Sim runner thread with commands and state snapshots
+- [x] **P01.T03** — Sim runner thread with commands and state snapshots
   - **Depends:** P01.T02
   - **Do:**
     - A dedicated OS thread owns the model.
