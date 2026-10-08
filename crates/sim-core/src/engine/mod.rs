@@ -10,5 +10,6 @@ pub mod fidelity;
 pub mod integrate;
 pub mod plant;
 pub mod rng;
+pub mod runner;
 pub mod signals;
 pub mod time;

@@ -97,7 +97,7 @@
   - **Verify:** Test: changing a param mid-run takes effect at the next event boundary and emits exactly one event.
   - **Done when:** Passing.
 
-- [~] **P03.T08** — Runner: pacing, time scale, step, sim/real ratio
+- [x] **P03.T08** — Runner: pacing, time scale, step, sim/real ratio
   - **Depends:** P03.T07
   - **Do:**
     - Replace the skeleton runner. A dedicated thread runs chunks; time scale ranges from 1e-4 (slow motion) to `max` (unpaced).
@@ -108,7 +108,7 @@
   - **Verify:** Tests: scale 0.1 → sim ≈ 0.1× wall time; `max` → ratio ≫ 1; paused CPU ~0 (measure the loop iteration count while paused).
   - **Done when:** Passing.
 
-- [ ] **P03.T09** — Snapshots (save/restore full state)
+- [~] **P03.T09** — Snapshots (save/restore full state)
   - **Depends:** P03.T08, P03.T11
   - **Do:** Serialize the engine state with serde + MessagePack: time, plant state, every block's internal state (`snapshot()/restore()`), RNG states, event queue, fidelity config and scene parameters. Snapshots are kept in memory (named) and can be exported to a file.
   - **Files:** `crates/sim-core/src/engine/snapshot.rs`
