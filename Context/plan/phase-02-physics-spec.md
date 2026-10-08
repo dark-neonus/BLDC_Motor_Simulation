@@ -43,7 +43,7 @@
   - **Verify:** Every entry has a resolvable identifier (check URLs/DOIs).
   - **Done when:** The page builds and the keys are used consistently.
 
-- [ ] **P02.T02** — Conventions (EQ-CONV-*)
+- [x] **P02.T02** — Conventions (EQ-CONV-*)
   - **Depends:** P02.T01
   - **Do:** Write `conventions.md`:
     - Frames: abc, αβ, dq.
