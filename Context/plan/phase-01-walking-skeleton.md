@@ -24,7 +24,7 @@
     - Free spin at constant `vd = 0`, `vq = V`: the final ω matches the steady-state solution of the model equations with all derivatives set to 0. Solve that test-side with a scalar bisection on ω. With B → 0 it tends to ω ≈ V/(p·λ). Tolerance 1e-4 relative.
   - **Done when:** Both analytic tests pass.
 
-- [ ] **P01.T02** — Minimal FOC: current PI + velocity PI, voltage limit
+- [x] **P01.T02** — Minimal FOC: current PI + velocity PI, voltage limit
   - **Depends:** P01.T01
   - **Do:**
     - Ideal DC bus V_bus = 24 V (ideal source).
