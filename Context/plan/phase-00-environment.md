@@ -41,7 +41,7 @@
   - **Done when:** Versions are pinned and recorded.
   - **If stuck:** `cargo:` backends need a working rust first: install rust, then re-run `mise install`. Or add `cargo-binstall` to mise for faster installs.
 
-- [ ] **P00.T04** — Repo skeleton, ignores, editor config, README stub
+- [x] **P00.T04** — Repo skeleton, ignores, editor config, README stub
   - **Depends:** P00.T03
   - **Do:**
     1. Create the folder layout from CONVENTIONS §1 **except `web/` and `docs/`**. Those are created by their scaffolders (T06, P01.T08), which fail or prompt on existing directories. Empty dirs get a `.gitkeep`.
