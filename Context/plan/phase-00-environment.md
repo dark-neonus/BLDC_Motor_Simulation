@@ -114,7 +114,7 @@
   - **Verify:** Make a deliberately mis-formatted Rust file, stage it, and `git commit` is rejected. Revert.
   - **Done when:** Hooks block bad commits and pass good ones in under ~10 s.
 
-- [ ] **P00.T10** — Agent entry point `CLAUDE.md` (+ `AGENTS.md` symlink)
+- [x] **P00.T10** — Agent entry point `CLAUDE.md` (+ `AGENTS.md` symlink)
   - **Depends:** P00.T08
   - **Do:** Write a short root `CLAUDE.md` (≤ 60 lines) with:
     - the project one-liner
