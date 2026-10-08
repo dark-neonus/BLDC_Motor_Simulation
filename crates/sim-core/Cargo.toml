@@ -18,4 +18,9 @@ rmp-serde = "1.3.1"
 workspace = true
 
 [dev-dependencies]
+criterion = "0.8.2"
 diffsol = "0.17.1"
+
+[[bench]]
+name = "engine"
+harness = false

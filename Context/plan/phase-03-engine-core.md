@@ -139,7 +139,7 @@
   - **Verify:** `just test && just validate && just e2e` — all P01 tests green.
   - **Done when:** Green, and no code path uses the old runner.
 
-- [ ] **P03.T13** — Criterion benchmarks
+- [x] **P03.T13** — Criterion benchmarks
   - **Depends:** P03.T12
   - **Do:** Benchmarks: plant steps/s (skeleton motor), events/s with 3 rates, and full engine sim/real ratio at dt = 5 µs. Add `just bench`.
   - **Files:** `crates/sim-core/benches/engine.rs`
@@ -169,7 +169,7 @@
     - a damped one → loss integral = initial energy − final within 1e-9
   - **Done when:** Passing. P05–P09 use `energy.residual` in their tests; P10.T04 adds the engine-wide property test.
 
-- [ ] **P03.T14** — Phase gate
+- [~] **P03.T14** — Phase gate
   - **Depends:** P03.T01, P03.T02, P03.T03, P03.T04, P03.T05, P03.T06, P03.T07, P03.T08, P03.T09, P03.T10, P03.T11, P03.T12, P03.T13, P03.T15, P03.T16
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-03-done`.
