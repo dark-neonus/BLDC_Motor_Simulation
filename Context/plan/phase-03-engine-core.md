@@ -64,7 +64,7 @@
   - **Done when:** Passing. If diffsol's build is heavy, gate it behind the feature `xcheck`, run it in `just check` (not `check-fast`), and record the decision.
   - **If stuck:** Check docs.rs for the locked diffsol version. Its API differs between 0.x versions (builder vs problem structs).
 
-- [ ] **P03.T05** — Multi-rate event scheduler
+- [x] **P03.T05** — Multi-rate event scheduler
   - **Depends:** P03.T03
   - **Do:**
     - Implement `Engine::step_until`. Fixed-period blocks are scheduled with integer periods + phase; variable-event blocks are polled for `next_event`.
@@ -78,7 +78,7 @@
     - a variable-event block firing at irregular times is honored exactly
   - **Done when:** Tests pass.
 
-- [ ] **P03.T06** — Fidelity configuration
+- [~] **P03.T06** — Fidelity configuration
   - **Depends:** P03.T05
   - **Do:** `FidelityConfig { tier: Ideal|Standard|Detailed, dt_max, inverter_mode: Averaged|Switching, enable_cogging, enable_iron_loss, enable_saturation, enable_thermal, enable_sensor_nonideal, … }` with tier presets that the user can override per flag. Default `dt_max` rules from EQ-NUM (e.g. min(τ_e/20, T_pwm/200) in switching mode). Expose the resulting values as signals `sim.dt_max`, `sim.tier`.
   - **Files:** `crates/sim-core/src/engine/fidelity.rs`
