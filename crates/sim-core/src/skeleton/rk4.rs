@@ -39,6 +39,11 @@ mod tests {
             rk4_step(&mut x, dt, |x, dx| dx[0] = -x[0]);
         }
         let exact = (-1.0f64).exp();
-        assert!((x[0] - exact).abs() < 1e-9, "x = {}, exact = {exact}", x[0]);
+        // RK4 global error ~ C·dt⁴ ≈ 1e-8·C with C ≪ 1 here; 1e-9 abs + 1e-9 rel.
+        assert!(
+            (x[0] - exact).abs() <= 1e-9 + 1e-9 * exact,
+            "x = {}, exact = {exact}",
+            x[0]
+        );
     }
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import { history } from "../state/sim";
+import { history, PLOT_WINDOW_S } from "../state/sim";
 
 /** Rolling plot of motor.omega, ctrl.omega_ref and motor.i_q (redrawn each animation frame). */
 export function SpeedPlot() {
@@ -24,13 +24,13 @@ export function SpeedPlot() {
     };
     const plot = new uPlot(opts, [[], [], [], []], el);
     let raf = 0;
-    let lastLen = -1;
+    let lastT = Number.NaN;
     const draw = () => {
-      const arrays = history.toArrays();
-      // Reorder to [t, omega, i_q, omega_ref] to match the series above.
-      if (arrays[0].length !== lastLen || arrays[0].length === history.capacity) {
+      const last = history.lastTime;
+      if (last !== lastT) {
+        const arrays = history.toArrays(PLOT_WINDOW_S);
         plot.setData([arrays[0], arrays[1], arrays[2], arrays[3]]);
-        lastLen = arrays[0].length;
+        lastT = last;
       }
       raf = requestAnimationFrame(draw);
     };

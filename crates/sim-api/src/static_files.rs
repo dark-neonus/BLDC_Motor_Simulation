@@ -44,10 +44,17 @@ fn asset(file: rust_embed::EmbeddedFile) -> Response {
 #[cfg(feature = "embed-ui")]
 async fn ui(uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
-    if path.starts_with("api/") {
+    if is_api(path) {
         return StatusCode::NOT_FOUND.into_response();
     }
-    match UiAssets::get(path).or_else(|| UiAssets::get("index.html")) {
+    if let Some(f) = UiAssets::get(path) {
+        return asset(f);
+    }
+    // SPA fallback only for extension-less routes; a missing file (e.g. assets/x.js) is a 404.
+    if looks_like_file(path) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    match UiAssets::get("index.html") {
         Some(f) => asset(f),
         None => StatusCode::NOT_FOUND.into_response(),
     }
@@ -55,7 +62,7 @@ async fn ui(uri: Uri) -> Response {
 
 #[cfg(not(feature = "embed-ui"))]
 async fn ui(uri: Uri) -> Response {
-    if uri.path().starts_with("/api/") {
+    if is_api(uri.path().trim_start_matches('/')) {
         return StatusCode::NOT_FOUND.into_response();
     }
     (
@@ -98,4 +105,27 @@ async fn docs() -> Response {
         "Docs are not embedded in this build. Use `just docs-dev` (http://localhost:3000/docs/) or `just build`.",
     )
         .into_response()
+}
+
+fn is_api(path: &str) -> bool {
+    path == "api" || path.starts_with("api/")
+}
+
+#[cfg_attr(not(feature = "embed-ui"), allow(dead_code))]
+fn looks_like_file(path: &str) -> bool {
+    path.rsplit('/')
+        .next()
+        .is_some_and(|last| last.contains('.'))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn api_and_file_detection() {
+        assert!(is_api("api") && is_api("api/x") && !is_api("apis") && !is_api("app/api"));
+        assert!(looks_like_file("assets/x.js") && looks_like_file("favicon.svg"));
+        assert!(!looks_like_file("some/spa/route") && !looks_like_file(""));
+    }
 }

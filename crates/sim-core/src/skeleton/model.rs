@@ -180,14 +180,16 @@ mod tests {
             m.step(0.0, v, dt);
         }
         let expected = steady_speed(&params, v);
+        // After 0.5 s ≫ the ~1 ms electromechanical time constant the transient has decayed
+        // to round-off; 1e-4 rel (+1e-9 abs floor) leaves margin for the bisection error.
         let err = (m.state.omega - expected).abs();
         assert!(
-            err < 1e-4 * expected,
+            err <= 1e-9 + 1e-4 * expected,
             "omega={} expected={expected}",
             m.state.omega
         );
-        // Sanity vs. the B → 0 limit V/(p·λ) (B is small, so within 1 %).
+        // Sanity vs. the B → 0 limit V/(p·λ): B·ω is ~0.1 % of the torque scale, so within 1 %.
         let ideal = v / (params.p * params.lambda);
-        assert!((m.state.omega - ideal).abs() < 0.01 * ideal);
+        assert!((m.state.omega - ideal).abs() <= 1e-9 + 0.01 * ideal);
     }
 }

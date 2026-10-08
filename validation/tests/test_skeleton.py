@@ -17,9 +17,9 @@ def test_v_skel_001_locked_rotor_rl(run_scenario) -> None:
     t = df["t"].to_numpy()
     iq = df["motor.i_q"].to_numpy()
     expected = 1.0 / R * (1.0 - np.exp(-t * R / L))
-    final = 1.0 / R
-    max_err = np.max(np.abs(iq - expected))
-    assert max_err < 0.005 * final, f"max error {max_err:.3e} A"
+    # Plant dt = τ/10000 → RK4 error ≪ 1e-9 A; atol = 0.5 % of the final 1 A current
+    # (the V-SKEL criterion), rtol 1e-6 covers float round-off near the plateau.
+    np.testing.assert_allclose(iq, expected, atol=0.005 * (1.0 / R), rtol=1e-6)
     assert np.all(df["motor.omega"].to_numpy() == 0.0)
 
 
@@ -36,4 +36,6 @@ def test_v_skel_002_no_load_speed(run_scenario) -> None:
     expected = brentq(residual, 0.0, 2 * v / (P * LAMBDA))
     df = run_scenario("skeleton_no_load")
     final = df["motor.omega"].to_numpy()[-1]
-    assert abs(final - expected) < 0.005 * expected, f"omega={final} expected={expected}"
+    # 0.5 s ≫ the ~1 ms electromechanical time constant: transient fully decayed.
+    # rtol 0.5 % is the V-SKEL criterion; atol 1e-9 rad/s is a round-off floor.
+    np.testing.assert_allclose(final, expected, atol=1e-9, rtol=0.005)

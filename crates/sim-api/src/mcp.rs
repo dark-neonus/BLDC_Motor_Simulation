@@ -1,23 +1,33 @@
 //! MCP server (streamable HTTP at `/mcp`) — skeleton tool set (P01.T06).
-//! Tools operate on the same live simulation as the REST API (D-006).
+//! Tools operate on the same live simulation as the REST API (D-006) and return
+//! the state both as text and as structured content (dotted signal names).
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{ServerCapabilities, ServerConfig};
+use rmcp::model::{CallToolResult, ServerCapabilities, ServerConfig};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
-use rmcp::{ServerHandler, schemars, tool, tool_handler, tool_router};
+use rmcp::{ErrorData, ServerHandler, schemars, tool, tool_handler, tool_router};
 use serde::Deserialize;
 use sim_core::skeleton::runner::{Command, SimHandle};
+use tokio_util::sync::CancellationToken;
+
+/// Clock action for `sim_control`.
+#[derive(Debug, Clone, Copy, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ClockAction {
+    Play,
+    Pause,
+    Reset,
+}
 
 /// Arguments of `sim_control`.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct SimControlArgs {
-    /// One of "play", "pause", "reset".
-    pub action: String,
+    /// What to do with the simulation clock.
+    pub action: ClockAction,
 }
 
 /// Arguments of `set_target_speed`.
@@ -44,51 +54,60 @@ impl BldcMcp {
         }
     }
 
-    async fn settled_state_json(&self) -> String {
-        // The runner publishes right after applying a command.
-        tokio::time::sleep(Duration::from_millis(5)).await;
-        serde_json::to_string(&self.sim.state())
-            .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+    /// Run a command on the runner and return the state right after it was applied.
+    async fn command(&self, cmd: Command) -> Result<CallToolResult, ErrorData> {
+        let sim = Arc::clone(&self.sim);
+        let state = tokio::task::spawn_blocking(move || sim.request(cmd))
+            .await
+            .ok()
+            .flatten()
+            .ok_or_else(|| ErrorData::internal_error("simulation runner did not respond", None))?;
+        structured(&state)
     }
 
     #[tool(
-        description = "Get the live simulation state as JSON: t [s], omega [rad/s], theta [rad], i_d/i_q/i_a/i_b/i_c [A], omega_ref [rad/s], running, time_scale, sim_real_ratio."
+        description = "Get the live simulation state. Keys are signal paths: sim.t [s], motor.omega [rad/s], motor.theta [rad], motor.i_d/i_q/i_a/i_b/i_c [A], ctrl.omega_ref [rad/s], sim.running, sim.time_scale, sim.real_ratio."
     )]
-    async fn get_state(&self) -> String {
-        self.settled_state_json().await
+    async fn get_state(&self) -> Result<CallToolResult, ErrorData> {
+        structured(&self.sim.state())
     }
 
     #[tool(
-        description = "Control the simulation clock: action = \"play\", \"pause\" or \"reset\". Returns the new state."
+        description = "Control the simulation clock (play, pause or reset). Returns the state after the action."
     )]
     async fn sim_control(
         &self,
         Parameters(SimControlArgs { action }): Parameters<SimControlArgs>,
-    ) -> String {
-        let cmd = match action.as_str() {
-            "play" => Command::Play,
-            "pause" => Command::Pause,
-            "reset" => Command::Reset,
-            other => {
-                return format!(
-                    "{{\"error\":\"unknown action '{other}', expected play|pause|reset\"}}"
-                );
-            }
+    ) -> Result<CallToolResult, ErrorData> {
+        let cmd = match action {
+            ClockAction::Play => Command::Play,
+            ClockAction::Pause => Command::Pause,
+            ClockAction::Reset => Command::Reset,
         };
-        self.sim.send(cmd);
-        self.settled_state_json().await
+        self.command(cmd).await
     }
 
     #[tool(
-        description = "Set the motor speed setpoint in rad/s (velocity control). Returns the new state."
+        description = "Set the motor speed setpoint in rad/s (velocity control). Returns the state after the change."
     )]
     async fn set_target_speed(
         &self,
         Parameters(TargetSpeedArgs { rad_per_s }): Parameters<TargetSpeedArgs>,
-    ) -> String {
-        self.sim.send(Command::SetTargetSpeed(rad_per_s));
-        self.settled_state_json().await
+    ) -> Result<CallToolResult, ErrorData> {
+        if !rad_per_s.is_finite() {
+            return Err(ErrorData::invalid_params(
+                "rad_per_s must be a finite number",
+                None,
+            ));
+        }
+        self.command(Command::SetTargetSpeed(rad_per_s)).await
     }
+}
+
+fn structured<T: serde::Serialize>(value: &T) -> Result<CallToolResult, ErrorData> {
+    let v =
+        serde_json::to_value(value).map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+    Ok(CallToolResult::structured(v))
 }
 
 #[tool_handler(router = self.tool_router)]
@@ -98,11 +117,15 @@ impl ServerHandler for BldcMcp {
     }
 }
 
-/// The tower service to mount at `/mcp`.
-pub fn service(sim: Arc<SimHandle>) -> StreamableHttpService<BldcMcp, LocalSessionManager> {
+/// The tower service to mount at `/mcp`. Cancelling `shutdown` closes open MCP
+/// streams so graceful server shutdown can complete.
+pub fn service(
+    sim: Arc<SimHandle>,
+    shutdown: CancellationToken,
+) -> StreamableHttpService<BldcMcp, LocalSessionManager> {
     StreamableHttpService::new(
         move || Ok(BldcMcp::new(Arc::clone(&sim))),
         Default::default(),
-        StreamableHttpServerConfig::default(),
+        StreamableHttpServerConfig::default().with_cancellation_token(shutdown),
     )
 }

@@ -152,7 +152,7 @@
   - **Done when:** Green. CI e2e job enabled (uncomment in ci.yml).
   - **If stuck:** TROUBLESHOOTING §3 (headless WebGL).
 
-- [~] **P01.T12** — Phase gate
+- [x] **P01.T12** — Phase gate
   - **Depends:** P01.T01, P01.T02, P01.T03, P01.T04, P01.T05, P01.T06, P01.T07, P01.T08, P01.T09, P01.T10, P01.T11
   - **Do:** Run the PLAN.md §8 checklist. Measure and record in LOG the release-build sim/real ratio of the skeleton at dt = 5 µs (baseline for P19).
   - **Verify:** All exit criteria demonstrated.

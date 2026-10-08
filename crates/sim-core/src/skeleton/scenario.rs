@@ -70,7 +70,14 @@ pub fn simulate(sc: &SkeletonScenario) -> Result<Vec<[f64; 6]>, String> {
     }
     let mp = PmsmParams::skeleton_6020();
     let cfg = FocConfig::skeleton();
-    let steps_per_ctrl = (cfg.dt / sc.dt).round().max(1.0) as u64;
+    let ratio = cfg.dt / sc.dt;
+    if ratio < 1.0 - 1e-9 || (ratio - ratio.round()).abs() > 1e-9 {
+        return Err(format!(
+            "dt ({}) must divide the controller period ({} s)",
+            sc.dt, cfg.dt
+        ));
+    }
+    let steps_per_ctrl = ratio.round() as u64;
     let mut motor = Pmsm::new(mp);
     motor.locked = sc.lock_rotor;
     let mut foc = Foc::new(cfg, FocGains::design(&mp, &cfg));

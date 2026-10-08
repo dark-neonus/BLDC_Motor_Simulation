@@ -74,3 +74,24 @@
   - The usage guard was recalibrated to the user's 80 % reading.
 - Verified: `cargo nextest` 9/9, vitest 3/3, `just validate` 4/4; Vite proxy smoke test (page, REST, WS frames).
 - Next: P01.T08 (docs), T10, T11, T12 gate.
+
+## 2026-10-09 — P01.T08, T10–T12, Phase 01 gate (agent: Claude)
+- Did:
+  - T08: Docusaurus 3.10 (baseUrl `/docs/`, KaTeX bundled locally, Mermaid, local search, llms.txt). Heading anchors must use `{/* #id */}` (CONVENTIONS §8 updated).
+  - T10: single binary with the UI and docs embedded (`--features embed`), `serve --open`, `just build`/`just run`.
+  - T11: Playwright smoke test against the release binary + CI e2e job. Screenshot: `web/test-results/smoke.png` (rotor with 28 magnets, plot, readouts at 20 rad/s).
+- Baseline (release, plant dt 5 µs, FOC 20 kHz, max time scale): **78× real time**.
+- Phase-end review: 4 majors + 13 minors. Fixed:
+  - Ctrl-C hang with an open MCP session (CancellationToken + test)
+  - MCP structured results / enum action / real errors
+  - MCP test proves "state follows" and that REST shares the instance
+  - plot history wiped while paused (skip equal-t, sim-time window)
+  - scenario dt validation; FOC test checks the speed stays in band to 1 s
+  - atol+rtol tolerances (Rust + Python); runner test measures wall time at scale 1
+  - command replies via channel (D-012); dotted wire keys (D-012); SPA fallback 404 for missing files and `/api`
+  - KaTeX CSS version-matched and local; UI error surfacing
+  - `SimHandle::spawn` returns `Result`; separate d/q current gains
+- Not fixed: #15 (`thiserror` in the skeleton scenario) — the skeleton code is temporary and replaced in P03/P04.
+- pnpm 12 blocks dependency build scripts: `allowBuilds` in pnpm-workspace.yaml (@swc/core allowed, core-js denied).
+- Verified: `just check` green (11 Rust, 5 vitest, 4 pytest, 1 e2e, web + docs builds).
+- Next: P02.T01

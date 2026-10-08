@@ -7,7 +7,7 @@ test("play spins the motor and the UI shows it", async ({ page }) => {
   await expect(page.locator(aid("signal:sim.connected"))).toContainText("connected");
 
   await page.locator(aid("param:ctrl.omega_ref")).fill("20");
-  await page.locator(aid("action:ctrl.set_target")).click();
+  await page.locator(aid("action:ctrl.omega_ref.apply")).click();
   await page.locator(aid("action:sim.play")).click();
 
   // Speed readout must rise above zero within a few seconds.

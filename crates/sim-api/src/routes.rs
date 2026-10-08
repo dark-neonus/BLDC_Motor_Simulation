@@ -1,6 +1,7 @@
 //! REST routes (skeleton subset of the P12 API; paths are kept stable).
 
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -33,26 +34,37 @@ async fn state(State(s): State<AppState>) -> Json<StateSnapshot> {
     Json(s.sim.state())
 }
 
-/// Send a command and return the state right after it was applied.
-async fn command(s: &AppState, cmd: Command) -> Json<StateSnapshot> {
-    s.sim.send(cmd);
-    // The runner publishes immediately after applying a command; give it a moment.
-    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-    Json(s.sim.state())
+/// Send a command and return the state right after the runner applied it.
+async fn command(
+    s: &AppState,
+    cmd: Command,
+) -> Result<Json<StateSnapshot>, (StatusCode, &'static str)> {
+    let sim = std::sync::Arc::clone(&s.sim);
+    tokio::task::spawn_blocking(move || sim.request(cmd))
+        .await
+        .ok()
+        .flatten()
+        .map(Json)
+        .ok_or((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "simulation runner did not respond",
+        ))
 }
 
-async fn play(State(s): State<AppState>) -> Json<StateSnapshot> {
+type Reply = Result<Json<StateSnapshot>, (StatusCode, &'static str)>;
+
+async fn play(State(s): State<AppState>) -> Reply {
     command(&s, Command::Play).await
 }
-async fn pause(State(s): State<AppState>) -> Json<StateSnapshot> {
+async fn pause(State(s): State<AppState>) -> Reply {
     command(&s, Command::Pause).await
 }
-async fn reset(State(s): State<AppState>) -> Json<StateSnapshot> {
+async fn reset(State(s): State<AppState>) -> Reply {
     command(&s, Command::Reset).await
 }
-async fn time_scale(State(s): State<AppState>, Json(v): Json<Value>) -> Json<StateSnapshot> {
+async fn time_scale(State(s): State<AppState>, Json(v): Json<Value>) -> Reply {
     command(&s, Command::SetTimeScale(v.value)).await
 }
-async fn target_speed(State(s): State<AppState>, Json(v): Json<Value>) -> Json<StateSnapshot> {
+async fn target_speed(State(s): State<AppState>, Json(v): Json<Value>) -> Reply {
     command(&s, Command::SetTargetSpeed(v.value)).await
 }

@@ -10,10 +10,12 @@ export function RotorView() {
     if (!el) return;
     let dispose: (() => void) | undefined;
     let cancelled = false;
-    createRotorView(el, () => useSim.getState().state?.theta ?? 0).then((d) => {
-      if (cancelled) d();
-      else dispose = d;
-    });
+    createRotorView(el, () => useSim.getState().state?.["motor.theta"] ?? 0)
+      .then((d) => {
+        if (cancelled) d();
+        else dispose = d;
+      })
+      .catch((err) => useSim.getState().setError(`visualization unavailable: ${String(err)}`));
     return () => {
       cancelled = true;
       dispose?.();

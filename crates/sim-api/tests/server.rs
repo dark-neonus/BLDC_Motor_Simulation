@@ -12,7 +12,7 @@ async fn start() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let state = AppState {
-        sim: Arc::new(SimHandle::spawn()),
+        sim: Arc::new(SimHandle::spawn().unwrap()),
     };
     tokio::spawn(serve(listener, state));
     format!("127.0.0.1:{}", addr.port())
@@ -46,8 +46,8 @@ async fn rest_controls_sim_and_ws_streams_frames() {
         .json()
         .await
         .unwrap();
-    assert_eq!(st["running"], true);
-    assert_eq!(st["omega_ref"], 10.0);
+    assert_eq!(st["sim.running"], true);
+    assert_eq!(st["ctrl.omega_ref"], 10.0);
 
     let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{addr}/api/stream"))
         .await
@@ -62,7 +62,7 @@ async fn rest_controls_sim_and_ws_streams_frames() {
         if let tokio_tungstenite::tungstenite::Message::Binary(b) = msg {
             let v: serde_json::Value = rmp_serde::from_slice(&b).unwrap();
             assert_eq!(v["type"], "state");
-            let t = v["t"].as_f64().unwrap();
+            let t = v["sim.t"].as_f64().unwrap();
             assert!(t >= last_t, "time must not go backwards");
             last_t = t;
             frames += 1;

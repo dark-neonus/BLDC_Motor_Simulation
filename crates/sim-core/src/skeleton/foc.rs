@@ -44,7 +44,8 @@ pub struct PiGains {
 /// ωv = ωc/10 with Kp_v = ωv·J/Kt and Ki_v = Kp_v·ωv/4.
 #[derive(Debug, Clone, Copy)]
 pub struct FocGains {
-    pub current: PiGains,
+    pub current_d: PiGains,
+    pub current_q: PiGains,
     pub velocity: PiGains,
 }
 
@@ -54,7 +55,11 @@ impl FocGains {
         let wv = wc / 10.0;
         let kp_v = wv * m.j / m.kt();
         Self {
-            current: PiGains {
+            current_d: PiGains {
+                kp: wc * m.ld,
+                ki: wc * m.r,
+            },
+            current_q: PiGains {
                 kp: wc * m.lq,
                 ki: wc * m.r,
             },
@@ -116,8 +121,8 @@ impl Foc {
         // Current PIs (id_ref = 0).
         let e_d = 0.0 - id;
         let e_q = self.iq_ref - iq;
-        let vd = g.current.kp * e_d + self.int_d;
-        let vq = g.current.kp * e_q + self.int_q;
+        let vd = g.current_d.kp * e_d + self.int_d;
+        let vq = g.current_q.kp * e_q + self.int_q;
 
         // Voltage limit circle |v| ≤ V_bus/√3; integrate only when not limited.
         let v_max = self.cfg.v_bus / 3f64.sqrt();
@@ -126,8 +131,8 @@ impl Foc {
             let k = v_max / mag;
             (vd * k, vq * k)
         } else {
-            self.int_d += g.current.ki * e_d * dt;
-            self.int_q += g.current.ki * e_q * dt;
+            self.int_d += g.current_d.ki * e_d * dt;
+            self.int_q += g.current_q.ki * e_q * dt;
             (vd, vq)
         }
     }
@@ -138,8 +143,8 @@ mod tests {
     use super::super::model::Pmsm;
     use super::*;
 
-    /// Speed step 0 → 20 rad/s: settles within 2 % in < 0.5 s, overshoot < 20 %,
-    /// and the q current never exceeds I_max (current loop is ~first order, no overshoot).
+    /// Speed step 0 → 20 rad/s: enters the ±2 % band before 0.5 s and *stays* in it until
+    /// the end of a 1 s run, overshoot < 20 %, and |i_q| never exceeds I_max.
     #[test]
     fn speed_step_settles_without_excess_overshoot_or_current() {
         let mp = PmsmParams::skeleton_6020();
@@ -154,7 +159,7 @@ mod tests {
         let mut peak: f64 = 0.0;
         let mut max_iq: f64 = 0.0;
         let mut settled_since: Option<f64> = None;
-        while t < 0.5 {
+        while t < 1.0 {
             let s = motor.state;
             let (vd, vq) = foc.update(s.id, s.iq, s.omega);
             for _ in 0..substeps {

@@ -1,8 +1,11 @@
+import { createRequire } from "node:module";
 import type * as Preset from "@docusaurus/preset-classic";
 import type { Config } from "@docusaurus/types";
 import { themes as prismThemes } from "prism-react-renderer";
 import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
+
+const require = createRequire(import.meta.url);
 
 // Served by the bldc-sim binary at /docs (D-009), so baseUrl is /docs/ and docs live at its root.
 const config: Config = {
@@ -33,13 +36,8 @@ const config: Config = {
     ],
   ],
 
-  stylesheets: [
-    {
-      href: "https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.css",
-      type: "text/css",
-      crossorigin: "anonymous",
-    },
-  ],
+  // KaTeX CSS bundled locally (same version rehype-katex renders with), so math works offline.
+  clientModules: [require.resolve("katex/dist/katex.min.css")],
 
   themes: [
     "@docusaurus/theme-mermaid",

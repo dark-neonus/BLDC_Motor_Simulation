@@ -33,38 +33,60 @@ pub enum Command {
     Shutdown,
 }
 
-/// Published state (names follow the signal namespace, CONVENTIONS §3).
+/// Published state. Serialized with the dotted signal paths of CONVENTIONS §3
+/// (e.g. `motor.omega`), which is the wire format for REST, WS and MCP.
 #[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize)]
 pub struct StateSnapshot {
     /// Sim time [s].
+    #[serde(rename = "sim.t")]
     pub t: f64,
-    /// `motor.omega` [rad/s].
+    /// Mechanical speed [rad/s].
+    #[serde(rename = "motor.omega")]
     pub omega: f64,
-    /// `motor.theta` [rad].
+    /// Mechanical angle [rad].
+    #[serde(rename = "motor.theta")]
     pub theta: f64,
+    /// d/q currents [A].
+    #[serde(rename = "motor.i_d")]
     pub i_d: f64,
+    #[serde(rename = "motor.i_q")]
     pub i_q: f64,
+    /// Phase currents [A].
+    #[serde(rename = "motor.i_a")]
     pub i_a: f64,
+    #[serde(rename = "motor.i_b")]
     pub i_b: f64,
+    #[serde(rename = "motor.i_c")]
     pub i_c: f64,
-    /// `ctrl.omega_ref` [rad/s].
+    /// Speed setpoint [rad/s].
+    #[serde(rename = "ctrl.omega_ref")]
     pub omega_ref: f64,
+    #[serde(rename = "sim.running")]
     pub running: bool,
+    #[serde(rename = "sim.time_scale")]
     pub time_scale: f64,
     /// Achieved sim-time / wall-time ratio (EWMA).
+    #[serde(rename = "sim.real_ratio")]
     pub sim_real_ratio: f64,
+}
+
+/// A command plus an optional channel on which the runner replies with the state
+/// right after applying it (so callers never return stale state).
+struct Envelope {
+    cmd: Command,
+    reply: Option<Sender<StateSnapshot>>,
 }
 
 /// Handle to a running simulation thread.
 pub struct SimHandle {
-    tx: Sender<Command>,
+    tx: Sender<Envelope>,
     latest: Arc<Mutex<StateSnapshot>>,
     thread: Option<JoinHandle<()>>,
 }
 
 impl SimHandle {
     /// Spawn the runner thread with the skeleton motor and controller.
-    pub fn spawn() -> Self {
+    pub fn spawn() -> std::io::Result<Self> {
         let (tx, rx) = mpsc::channel();
         let latest = Arc::new(Mutex::new(StateSnapshot {
             time_scale: 1.0,
@@ -73,14 +95,30 @@ impl SimHandle {
         let shared = Arc::clone(&latest);
         let thread = std::thread::Builder::new()
             .name("sim-runner".into())
-            .spawn(move || Runner::new(shared).run(rx))
-            .ok();
-        Self { tx, latest, thread }
+            .spawn(move || Runner::new(shared).run(rx))?;
+        Ok(Self {
+            tx,
+            latest,
+            thread: Some(thread),
+        })
     }
 
-    /// Send a command (ignored if the thread has exited).
+    /// Send a command without waiting (ignored if the thread has exited).
     pub fn send(&self, cmd: Command) {
-        let _ = self.tx.send(cmd);
+        let _ = self.tx.send(Envelope { cmd, reply: None });
+    }
+
+    /// Send a command and wait (≤ 1 s) for the state right after it was applied.
+    /// Blocking: from async code call it via `tokio::task::spawn_blocking`.
+    pub fn request(&self, cmd: Command) -> Option<StateSnapshot> {
+        let (tx, rx) = mpsc::channel();
+        self.tx
+            .send(Envelope {
+                cmd,
+                reply: Some(tx),
+            })
+            .ok()?;
+        rx.recv_timeout(Duration::from_secs(1)).ok()
     }
 
     /// Latest published state.
@@ -92,7 +130,7 @@ impl SimHandle {
 
 impl Drop for SimHandle {
     fn drop(&mut self) {
-        let _ = self.tx.send(Command::Shutdown);
+        self.send(Command::Shutdown);
         if let Some(t) = self.thread.take() {
             let _ = t.join();
         }
@@ -124,8 +162,16 @@ impl Runner {
         }
     }
 
-    /// Apply a command; returns false on shutdown.
-    fn apply(&mut self, cmd: Command) -> bool {
+    /// Apply a command, publish and reply; returns false on shutdown.
+    fn apply(&mut self, env: Envelope) -> bool {
+        let keep_running = self.apply_cmd(env.cmd);
+        if let Some(reply) = env.reply {
+            let _ = reply.send(self.snapshot());
+        }
+        keep_running
+    }
+
+    fn apply_cmd(&mut self, cmd: Command) -> bool {
         match cmd {
             Command::Play => self.running = true,
             Command::Pause => self.running = false,
@@ -155,6 +201,10 @@ impl Runner {
     }
 
     fn publish(&self) {
+        *self.shared.lock().unwrap_or_else(|e| e.into_inner()) = self.snapshot();
+    }
+
+    fn snapshot(&self) -> StateSnapshot {
         let s = self.motor.state;
         let theta_e = self.motor.params.p * s.theta;
         let (sin, cos) = theta_e.sin_cos();
@@ -162,7 +212,7 @@ impl Runner {
         let i_alpha = s.id * cos - s.iq * sin;
         let i_beta = s.id * sin + s.iq * cos;
         let k = 3f64.sqrt() / 2.0;
-        let snap = StateSnapshot {
+        StateSnapshot {
             t: self.t,
             omega: s.omega,
             theta: s.theta,
@@ -175,18 +225,21 @@ impl Runner {
             running: self.running,
             time_scale: self.time_scale,
             sim_real_ratio: self.ratio,
-        };
-        *self.shared.lock().unwrap_or_else(|e| e.into_inner()) = snap;
+        }
     }
 
-    fn run(mut self, rx: Receiver<Command>) {
+    fn run(mut self, rx: Receiver<Envelope>) {
         self.publish();
         loop {
             if !self.running {
                 // Paused: block until a command arrives (0 % CPU).
                 match rx.recv() {
-                    Ok(cmd) if self.apply(cmd) => {}
-                    _ => return,
+                    Ok(env) => {
+                        if !self.apply(env) {
+                            return;
+                        }
+                    }
+                    Err(_) => return,
                 }
             } else if !self.run_paced(&rx) {
                 return;
@@ -196,7 +249,7 @@ impl Runner {
 
     /// Run while playing, pacing sim time to wall time × scale.
     /// Returns `false` on shutdown, `true` when paused or when pacing must restart.
-    fn run_paced(&mut self, rx: &Receiver<Command>) -> bool {
+    fn run_paced(&mut self, rx: &Receiver<Envelope>) -> bool {
         let wall0 = Instant::now();
         let sim0 = self.t;
         let scale = self.time_scale;
@@ -229,8 +282,9 @@ impl Runner {
                 Duration::ZERO
             };
             match rx.recv_timeout(wait) {
-                Ok(cmd) => {
-                    if !self.apply(cmd) {
+                Ok(env) => {
+                    let cmd = env.cmd;
+                    if !self.apply(env) {
                         return false;
                     }
                     if matches!(cmd, Command::SetTimeScale(_) | Command::Reset) {
@@ -256,17 +310,21 @@ mod tests {
 
     #[test]
     fn play_pace_pause_reset() {
-        let h = SimHandle::spawn();
-        h.send(Command::SetTimeScale(0.1));
-        h.send(Command::SetTargetSpeed(10.0));
-        h.send(Command::Play);
-        wait(400);
-        h.send(Command::Pause);
-        wait(50);
-        let s = h.state();
+        let h = SimHandle::spawn().expect("spawn runner");
+        h.request(Command::SetTimeScale(1.0));
+        h.request(Command::SetTargetSpeed(10.0));
+        let start = Instant::now();
+        h.request(Command::Play);
+        wait(200);
+        let s = h.request(Command::Pause).expect("reply");
+        let wall = start.elapsed().as_secs_f64();
         assert!(!s.running);
-        // 0.4 s wall at scale 0.1 → ≈ 0.04 s sim (±10 %, the P01.T03 criterion; scale 0.1 keeps debug builds real-time).
-        assert!((s.t - 0.04).abs() < 0.004, "sim t = {}", s.t);
+        // Sim time follows the *measured* wall time × scale within ±10 % (P01.T03 criterion).
+        assert!(
+            (s.t - wall).abs() <= 0.1 * wall,
+            "sim t = {}, wall = {wall}",
+            s.t
+        );
         assert!(
             s.omega > 1.0,
             "motor should be spinning, omega = {}",
@@ -274,14 +332,21 @@ mod tests {
         );
 
         // Paused: time does not advance.
-        wait(150);
+        wait(100);
         assert_eq!(h.state().t, s.t);
 
-        h.send(Command::Reset);
-        wait(50);
-        let r = h.state();
+        let r = h.request(Command::Reset).expect("reply");
         assert_eq!(r.t, 0.0);
         assert_eq!(r.omega, 0.0);
         assert_eq!(r.i_q, 0.0);
+    }
+
+    #[test]
+    fn request_returns_state_after_the_command() {
+        let h = SimHandle::spawn().expect("spawn runner");
+        let s = h.request(Command::SetTargetSpeed(7.5)).expect("reply");
+        assert_eq!(s.omega_ref, 7.5);
+        let s = h.request(Command::Play).expect("reply");
+        assert!(s.running);
     }
 }

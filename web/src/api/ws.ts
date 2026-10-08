@@ -4,6 +4,7 @@ import type { StateFrame } from "./types";
 export interface StreamHandlers {
   onState: (frame: StateFrame) => void;
   onConnection: (connected: boolean) => void;
+  onError?: (message: string) => void;
 }
 
 /** Connect to the MessagePack state stream with automatic reconnect (backoff up to 5 s). */
@@ -22,8 +23,12 @@ export function connectStream(handlers: StreamHandlers): () => void {
       handlers.onConnection(true);
     };
     ws.onmessage = (ev) => {
-      const msg = decode(new Uint8Array(ev.data as ArrayBuffer)) as { type?: string };
-      if (msg.type === "state") handlers.onState(msg as StateFrame);
+      try {
+        const msg = decode(new Uint8Array(ev.data as ArrayBuffer)) as { type?: string };
+        if (msg.type === "state") handlers.onState(msg as StateFrame);
+      } catch (err) {
+        handlers.onError?.(`bad stream frame: ${String(err)}`);
+      }
     };
     ws.onclose = () => {
       handlers.onConnection(false);

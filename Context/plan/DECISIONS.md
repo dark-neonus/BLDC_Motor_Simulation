@@ -52,3 +52,8 @@
 - **Context:** P00.T03 needs reproducible toolchains.
 - **Decision:** `mise.toml` pins rust 1.99.0 (with `rust-toolchain.toml`: rustfmt, clippy), node 24.21.0 (LTS), pnpm 12.10.1, python 3.13.16, uv 0.12.23, just 1.58.0, lefthook 2.2.0, gh 2.102.0, cargo-nextest 0.9.146, cargo-insta 1.49.0. These were the latest at this date.
 - **Consequences:** `mise install` reproduces the environment. Bump versions deliberately, with a new decision entry.
+
+## D-012 — State wire format uses dotted signal paths; commands reply with post-apply state · 2026-10-09 · accepted
+- **Context:** The P01 review found the skeleton JSON/msgpack keys were bare (`omega`, `running`) and that REST/MCP returned state after a 5 ms sleep (racy).
+- **Decision:** REST, WS (msgpack frames `{type, v, ...}`) and MCP (`structured_content`) all serialize state with the CONVENTIONS §3 paths (`sim.t`, `motor.omega`, `ctrl.omega_ref`, `sim.running` …). Commands go to the runner with a reply channel, and the response is the state right after the command was applied (`SimHandle::request`).
+- **Consequences:** These interfaces are stable from P01 on (P12 extends them). UI and tests index by dotted keys.

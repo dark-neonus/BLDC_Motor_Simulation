@@ -5,19 +5,30 @@ import { SpeedPlot } from "./plots/SpeedPlot";
 import { useSim } from "./state/sim";
 import { RotorView } from "./viz/RotorView";
 
+const fmt = (v: number | undefined, digits: number) => (v === undefined ? "–" : v.toFixed(digits));
+
 /** Walking-skeleton UI (P01.T07): controls, live readouts, one plot and the rotor view. */
 export default function App() {
-  const { connected, state, setConnected, setState } = useSim();
+  const { connected, state, error, setConnected, setState, setError } = useSim();
   const [target, setTarget] = useState("20");
 
   useEffect(
-    () => connectStream({ onState: setState, onConnection: setConnected }),
-    [setState, setConnected],
+    () => connectStream({ onState: setState, onConnection: setConnected, onError: setError }),
+    [setState, setConnected, setError],
   );
+
+  /** Run an API call; surface failures in the status line instead of dropping them. */
+  const run = (label: string, call: () => Promise<unknown>) => {
+    call().then(
+      () => setError(null),
+      (err) => setError(`${label} failed: ${String(err)}`),
+    );
+  };
 
   const applyTarget = () => {
     const v = Number(target);
-    if (Number.isFinite(v)) void api.setTargetSpeed(v);
+    if (Number.isFinite(v)) run("set target speed", () => api.setTargetSpeed(v));
+    else setError(`"${target}" is not a number`);
   };
 
   return (
@@ -26,12 +37,22 @@ export default function App() {
       <p role="status" data-agent-id="signal:sim.connected" aria-label="Connection status">
         {connected ? "● connected" : "○ disconnected"}
       </p>
+      {error && (
+        <p
+          role="alert"
+          data-agent-id="signal:ui.error"
+          aria-label="Last error"
+          style={{ color: "#c0392b" }}
+        >
+          {error}
+        </p>
+      )}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <button
           type="button"
           data-agent-id="action:sim.play"
           aria-label="Play"
-          onClick={() => void api.play()}
+          onClick={() => run("play", api.play)}
         >
           Play
         </button>
@@ -39,7 +60,7 @@ export default function App() {
           type="button"
           data-agent-id="action:sim.pause"
           aria-label="Pause"
-          onClick={() => void api.pause()}
+          onClick={() => run("pause", api.pause)}
         >
           Pause
         </button>
@@ -47,7 +68,7 @@ export default function App() {
           type="button"
           data-agent-id="action:sim.reset"
           aria-label="Reset"
-          onClick={() => void api.reset()}
+          onClick={() => run("reset", api.reset)}
         >
           Reset
         </button>
@@ -64,7 +85,7 @@ export default function App() {
         </label>
         <button
           type="button"
-          data-agent-id="action:ctrl.set_target"
+          data-agent-id="action:ctrl.omega_ref.apply"
           aria-label="Apply target speed"
           onClick={applyTarget}
         >
@@ -74,15 +95,15 @@ export default function App() {
       <p>
         t ={" "}
         <span role="status" data-agent-id="signal:sim.t" aria-label="Sim time in seconds">
-          {state?.t.toFixed(3) ?? "–"}
+          {fmt(state?.["sim.t"], 3)}
         </span>{" "}
         s · ω ={" "}
         <span role="status" data-agent-id="signal:motor.omega" aria-label="Motor speed in rad/s">
-          {state?.omega.toFixed(2) ?? "–"}
+          {fmt(state?.["motor.omega"], 2)}
         </span>{" "}
         rad/s · i_q ={" "}
         <span role="status" data-agent-id="signal:motor.i_q" aria-label="q-axis current in A">
-          {state?.i_q.toFixed(3) ?? "–"}
+          {fmt(state?.["motor.i_q"], 3)}
         </span>{" "}
         A · sim/real ={" "}
         <span
@@ -90,7 +111,7 @@ export default function App() {
           data-agent-id="signal:sim.real_ratio"
           aria-label="Sim to real time ratio"
         >
-          {state?.sim_real_ratio.toFixed(2) ?? "–"}
+          {fmt(state?.["sim.real_ratio"], 2)}
         </span>
       </p>
       <RotorView />

@@ -19,4 +19,21 @@ describe("RingBuffer", () => {
     expect(b.length).toBe(1);
     expect(b.toArrays()).toEqual([[0], [5], [6]]);
   });
+
+  it("ignores repeated frames with the same time (paused sim keeps history)", () => {
+    const b = new RingBuffer(3, 1);
+    b.push(1, [1]);
+    b.push(2, [2]);
+    for (let i = 0; i < 10; i++) b.push(2, [2]);
+    expect(b.toArrays()).toEqual([
+      [1, 2],
+      [1, 2],
+    ]);
+  });
+
+  it("windows by sim time", () => {
+    const b = new RingBuffer(10, 1);
+    for (let t = 0; t <= 5; t++) b.push(t, [t]);
+    expect(b.toArrays(2)[0]).toEqual([3, 4, 5]);
+  });
 });
