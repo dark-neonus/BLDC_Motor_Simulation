@@ -9,9 +9,9 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::Response;
 use axum::routing::get;
 use serde::Serialize;
-use sim_core::skeleton::runner::StateSnapshot;
 
 use crate::AppState;
+use crate::state::state_map;
 
 const FRAME_PERIOD: Duration = Duration::from_millis(33);
 
@@ -22,7 +22,7 @@ struct StateFrame {
     /// Protocol version.
     v: u32,
     #[serde(flatten)]
-    state: StateSnapshot,
+    state: serde_json::Map<String, serde_json::Value>,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -41,7 +41,7 @@ async fn stream(mut socket: WebSocket, s: AppState) {
         let frame = StateFrame {
             kind: "state",
             v: 1,
-            state: s.sim.state(),
+            state: state_map(&s.sim, &s.sim.status()),
         };
         let Ok(bytes) = rmp_serde::to_vec_named(&frame) else {
             tracing::error!("failed to encode state frame");

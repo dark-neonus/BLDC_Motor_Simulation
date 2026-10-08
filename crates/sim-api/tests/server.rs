@@ -4,15 +4,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::StreamExt;
+use sim_api::default_runner;
 use sim_api::{AppState, serve};
-use sim_core::skeleton::runner::SimHandle;
 use tokio::net::TcpListener;
 
 async fn start() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let state = AppState {
-        sim: Arc::new(SimHandle::spawn().unwrap()),
+        sim: Arc::new(default_runner().unwrap()),
     };
     tokio::spawn(serve(listener, state));
     format!("127.0.0.1:{}", addr.port())

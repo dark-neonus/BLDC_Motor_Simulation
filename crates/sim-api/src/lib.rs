@@ -3,6 +3,7 @@
 
 pub mod mcp;
 pub mod routes;
+pub mod state;
 pub mod static_files;
 pub mod ws;
 
@@ -11,7 +12,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
-use sim_core::skeleton::runner::SimHandle;
+use sim_core::engine::runner::{RunnerCommand, RunnerHandle, RunnerStatus};
+use sim_core::skeleton::adapter::{SkeletonOptions, build_engine};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
@@ -19,12 +21,28 @@ use tower_http::trace::TraceLayer;
 /// Shared server state: the one live simulation.
 #[derive(Clone)]
 pub struct AppState {
-    pub sim: Arc<SimHandle>,
+    pub sim: Arc<RunnerHandle>,
+}
+
+impl AppState {
+    /// Run a command on the engine thread and return the status right after it.
+    pub async fn command(&self, cmd: RunnerCommand) -> Option<RunnerStatus> {
+        let sim = Arc::clone(&self.sim);
+        tokio::task::spawn_blocking(move || sim.request(cmd))
+            .await
+            .ok()
+            .flatten()
+    }
+}
+
+/// Spawn the default live simulation (skeleton scene until P04 scenes land).
+pub fn default_runner() -> std::io::Result<RunnerHandle> {
+    RunnerHandle::spawn(Box::new(|| build_engine(SkeletonOptions::default())), None)
 }
 
 /// Build the full router (MCP + REST + WebSocket + static assets).
 pub fn router(state: AppState, shutdown: CancellationToken) -> Router {
-    let mcp = mcp::service(Arc::clone(&state.sim), shutdown);
+    let mcp = mcp::service(state.clone(), shutdown);
     Router::new()
         .nest_service("/mcp", mcp)
         .merge(routes::api())
@@ -34,8 +52,7 @@ pub fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .layer(TraceLayer::new_for_http())
 }
 
-/// Serve on an already-bound listener until `stop` completes. Open MCP streams and
-/// WebSockets are closed via a cancellation token so shutdown never hangs.
+/// Serve until `stop` completes; open MCP streams are cancelled so shutdown never hangs.
 pub async fn serve_until(
     listener: TcpListener,
     state: AppState,
@@ -71,7 +88,7 @@ pub fn run_blocking(addr: SocketAddr, open_browser: bool) -> std::io::Result<()>
             tracing::warn!("could not open a browser: {e}");
         }
         let state = AppState {
-            sim: Arc::new(SimHandle::spawn()?),
+            sim: Arc::new(default_runner()?),
         };
         serve(listener, state).await
     })

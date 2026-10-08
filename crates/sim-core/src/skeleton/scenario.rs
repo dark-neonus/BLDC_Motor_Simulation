@@ -4,9 +4,6 @@
 
 use serde::Deserialize;
 
-use super::foc::{Foc, FocConfig, FocGains};
-use super::model::{Pmsm, PmsmParams};
-
 /// One timeline action.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -56,8 +53,12 @@ pub const COLUMNS: [&str; 6] = [
     "ctrl.omega_ref",
 ];
 
-/// Run the scenario; returns one row per record instant, matching [`COLUMNS`].
+/// Run the scenario on the production engine; one row per record instant, matching [`COLUMNS`].
 pub fn simulate(sc: &SkeletonScenario) -> Result<Vec<[f64; 6]>, String> {
+    use super::adapter::{SkeletonOptions, build_engine};
+    use crate::engine::commands::{ChangeSource, EngineCommand};
+    use crate::engine::time::SimTime;
+
     let steps_per_record = (sc.record_every / sc.dt).round();
     if sc.dt <= 0.0 || sc.duration <= 0.0 || steps_per_record < 1.0 {
         return Err("dt, duration must be > 0 and record_every >= dt".into());
@@ -68,50 +69,53 @@ pub fn simulate(sc: &SkeletonScenario) -> Result<Vec<[f64; 6]>, String> {
             sc.record_every, sc.dt
         ));
     }
-    let mp = PmsmParams::skeleton_6020();
-    let cfg = FocConfig::skeleton();
-    let ratio = cfg.dt / sc.dt;
+    let ctrl_dt = super::foc::FocConfig::skeleton().dt;
+    let ratio = ctrl_dt / sc.dt;
     if ratio < 1.0 - 1e-9 || (ratio - ratio.round()).abs() > 1e-9 {
         return Err(format!(
-            "dt ({}) must divide the controller period ({} s)",
-            sc.dt, cfg.dt
+            "dt ({}) must divide the controller period ({ctrl_dt} s)",
+            sc.dt
         ));
     }
-    let steps_per_ctrl = ratio.round() as u64;
-    let mut motor = Pmsm::new(mp);
-    motor.locked = sc.lock_rotor;
-    let mut foc = Foc::new(cfg, FocGains::design(&mp, &cfg));
+    let mut e = build_engine(SkeletonOptions {
+        locked: sc.lock_rotor,
+        open_loop_vq: sc.vq_open_loop,
+        dt_max: sc.dt,
+    });
+    let ids: Vec<_> = COLUMNS[1..]
+        .iter()
+        .map(|c| e.bus.id(c))
+        .collect::<Result<_, _>>()
+        .map_err(|err| err.to_string())?;
     let mut actions = sc.actions.clone();
     actions.sort_by(|a, b| a.t.total_cmp(&b.t));
+    let n = (sc.duration / sc.record_every).round() as usize;
+    let mut rows = Vec::with_capacity(n + 1);
     let mut next_action = 0;
-
-    let total_steps = (sc.duration / sc.dt).round() as u64;
-    let steps_per_record = steps_per_record as u64;
-    let mut rows = Vec::with_capacity((total_steps / steps_per_record + 1) as usize);
-    let (mut vd, mut vq) = (0.0, 0.0);
-    let record = |rows: &mut Vec<[f64; 6]>, t: f64, m: &Pmsm, w_ref: f64| {
-        let s = m.state;
-        rows.push([t, s.omega, s.theta, s.id, s.iq, w_ref]);
-    };
-    record(&mut rows, 0.0, &motor, foc.omega_ref);
-    for k in 0..total_steps {
-        let t = k as f64 * sc.dt;
+    for k in 0..=n {
+        let t = k as f64 * sc.record_every;
+        // Apply actions due up to this record instant, at their own times.
         while next_action < actions.len() && actions[next_action].t <= t + 0.5 * sc.dt {
-            if let Some(w) = actions[next_action].set_target_speed {
-                foc.omega_ref = w;
+            let a = &actions[next_action];
+            e.step_until(SimTime::from_secs_f64(a.t))
+                .map_err(|err| err.to_string())?;
+            if let Some(w) = a.set_target_speed {
+                e.queue(EngineCommand::SetSignal {
+                    path: "ctrl.omega_ref".into(),
+                    value: w,
+                    source: ChangeSource::Scenario,
+                });
+                e.apply_pending();
             }
             next_action += 1;
         }
-        if let Some(v) = sc.vq_open_loop {
-            (vd, vq) = (0.0, v);
-        } else if k % steps_per_ctrl == 0 {
-            let s = motor.state;
-            (vd, vq) = foc.update(s.id, s.iq, s.omega);
+        e.step_until(SimTime::from_secs_f64(t))
+            .map_err(|err| err.to_string())?;
+        let mut row = [t, 0.0, 0.0, 0.0, 0.0, 0.0];
+        for (j, &id) in ids.iter().enumerate() {
+            row[j + 1] = e.bus.get(id);
         }
-        motor.step(vd, vq, sc.dt);
-        if (k + 1) % steps_per_record == 0 {
-            record(&mut rows, (k + 1) as f64 * sc.dt, &motor, foc.omega_ref);
-        }
+        rows.push(row);
     }
     Ok(rows)
 }

@@ -2,8 +2,6 @@
 //! Tools operate on the same live simulation as the REST API (D-006) and return
 //! the state both as text and as structured content (dotted signal names).
 
-use std::sync::Arc;
-
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ServerCapabilities, ServerConfig};
@@ -11,7 +9,11 @@ use rmcp::transport::streamable_http_server::session::local::LocalSessionManager
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use rmcp::{ErrorData, ServerHandler, schemars, tool, tool_handler, tool_router};
 use serde::Deserialize;
-use sim_core::skeleton::runner::{Command, SimHandle};
+use sim_core::engine::commands::{ChangeSource, EngineCommand};
+use sim_core::engine::runner::RunnerCommand;
+
+use crate::AppState;
+use crate::state::state_map;
 use tokio_util::sync::CancellationToken;
 
 /// Clock action for `sim_control`.
@@ -41,35 +43,33 @@ pub struct TargetSpeedArgs {
 /// MCP tool server bound to the live simulation.
 #[derive(Clone)]
 pub struct BldcMcp {
-    sim: Arc<SimHandle>,
+    app: AppState,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
 impl BldcMcp {
-    pub fn new(sim: Arc<SimHandle>) -> Self {
+    pub fn new(app: AppState) -> Self {
         Self {
-            sim,
+            app,
             tool_router: Self::tool_router(),
         }
     }
 
     /// Run a command on the runner and return the state right after it was applied.
-    async fn command(&self, cmd: Command) -> Result<CallToolResult, ErrorData> {
-        let sim = Arc::clone(&self.sim);
-        let state = tokio::task::spawn_blocking(move || sim.request(cmd))
-            .await
-            .ok()
-            .flatten()
-            .ok_or_else(|| ErrorData::internal_error("simulation runner did not respond", None))?;
-        structured(&state)
+    async fn command(&self, cmd: RunnerCommand) -> Result<CallToolResult, ErrorData> {
+        let st =
+            self.app.command(cmd).await.ok_or_else(|| {
+                ErrorData::internal_error("simulation runner did not respond", None)
+            })?;
+        structured(&state_map(&self.app.sim, &st))
     }
 
     #[tool(
         description = "Get the live simulation state. Keys are signal paths: sim.t [s], motor.omega [rad/s], motor.theta [rad], motor.i_d/i_q/i_a/i_b/i_c [A], ctrl.omega_ref [rad/s], sim.running, sim.time_scale, sim.real_ratio."
     )]
     async fn get_state(&self) -> Result<CallToolResult, ErrorData> {
-        structured(&self.sim.state())
+        structured(&state_map(&self.app.sim, &self.app.sim.status()))
     }
 
     #[tool(
@@ -80,9 +80,9 @@ impl BldcMcp {
         Parameters(SimControlArgs { action }): Parameters<SimControlArgs>,
     ) -> Result<CallToolResult, ErrorData> {
         let cmd = match action {
-            ClockAction::Play => Command::Play,
-            ClockAction::Pause => Command::Pause,
-            ClockAction::Reset => Command::Reset,
+            ClockAction::Play => RunnerCommand::Play,
+            ClockAction::Pause => RunnerCommand::Pause,
+            ClockAction::Reset => RunnerCommand::Reset,
         };
         self.command(cmd).await
     }
@@ -100,7 +100,12 @@ impl BldcMcp {
                 None,
             ));
         }
-        self.command(Command::SetTargetSpeed(rad_per_s)).await
+        let cmd = EngineCommand::SetSignal {
+            path: "ctrl.omega_ref".into(),
+            value: rad_per_s,
+            source: ChangeSource::Mcp,
+        };
+        self.command(RunnerCommand::Engine(cmd)).await
     }
 }
 
@@ -120,11 +125,11 @@ impl ServerHandler for BldcMcp {
 /// The tower service to mount at `/mcp`. Cancelling `shutdown` closes open MCP
 /// streams so graceful server shutdown can complete.
 pub fn service(
-    sim: Arc<SimHandle>,
+    app: AppState,
     shutdown: CancellationToken,
 ) -> StreamableHttpService<BldcMcp, LocalSessionManager> {
     StreamableHttpService::new(
-        move || Ok(BldcMcp::new(Arc::clone(&sim))),
+        move || Ok(BldcMcp::new(app.clone())),
         Default::default(),
         StreamableHttpServerConfig::default().with_cancellation_token(shutdown),
     )

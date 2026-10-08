@@ -8,8 +8,8 @@ use rmcp::ServiceExt;
 use rmcp::model::{CallToolRequestParams, ClientConfig};
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
+use sim_api::default_runner;
 use sim_api::{AppState, serve_until};
-use sim_core::skeleton::runner::SimHandle;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
@@ -21,7 +21,7 @@ async fn start() -> (
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let state = AppState {
-        sim: Arc::new(SimHandle::spawn().unwrap()),
+        sim: Arc::new(default_runner().unwrap()),
     };
     let (stop_tx, stop_rx) = oneshot::channel::<()>();
     let server = tokio::spawn(serve_until(listener, state, async {

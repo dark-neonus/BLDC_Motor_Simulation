@@ -1,0 +1,285 @@
+//! Skeleton motor + FOC on the production engine (P03.T12). The dq plant stays a
+//! temporary model (replaced by the stationary-frame motor in P05; kept as a
+//! test fixture), but it already runs on the engine with energy accounting.
+
+use super::foc::{Foc, FocConfig, FocGains};
+use super::model::PmsmParams;
+use crate::energy::PowerKind;
+use crate::engine::block::{DiscreteBlock, SimError, StepCtx, priority};
+use crate::engine::engine::Engine;
+use crate::engine::plant::{Plant, PlantModule};
+use crate::engine::signals::{SignalBus, SignalId, SignalKind};
+use crate::engine::time::{SimTime, period_from_hz};
+
+#[derive(Debug, Clone, Copy)]
+struct MotorSignals {
+    v_d: SignalId,
+    v_q: SignalId,
+    i_d: SignalId,
+    i_q: SignalId,
+    omega: SignalId,
+    theta: SignalId,
+    i_a: SignalId,
+    i_b: SignalId,
+    i_c: SignalId,
+}
+
+/// dq PMSM plant module: states (i_d, i_q, ω, θ); reads ctrl.v_d/v_q from the bus.
+struct DqMotor {
+    p: PmsmParams,
+    locked: bool,
+    s: MotorSignals,
+}
+
+impl PlantModule for DqMotor {
+    fn name(&self) -> &str {
+        "motor"
+    }
+    fn n_states(&self) -> usize {
+        4
+    }
+    fn state_names(&self) -> Vec<(String, String)> {
+        [
+            ("i_d", "A"),
+            ("i_q", "A"),
+            ("omega", "rad/s"),
+            ("theta", "rad"),
+        ]
+        .iter()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect()
+    }
+    fn init(&self, x: &mut [f64]) {
+        x.fill(0.0);
+    }
+    fn outputs(&mut self, _: f64, x: &[f64], o: usize, bus: &mut SignalBus) {
+        let (id, iq, w, th) = (x[o], x[o + 1], x[o + 2], x[o + 3]);
+        bus.set(self.s.i_d, id);
+        bus.set(self.s.i_q, iq);
+        bus.set(self.s.omega, w);
+        bus.set(self.s.theta, th);
+        // Inverse Park + inverse Clarke (EQ-CONV-02/04).
+        let (sn, cs) = (self.p.p * th).sin_cos();
+        let (ia, ib) = (id * cs - iq * sn, id * sn + iq * cs);
+        let k = 3f64.sqrt() / 2.0;
+        bus.set(self.s.i_a, ia);
+        bus.set(self.s.i_b, -0.5 * ia + k * ib);
+        bus.set(self.s.i_c, -0.5 * ia - k * ib);
+    }
+    fn derivatives(&self, _: f64, x: &[f64], o: usize, bus: &SignalBus, dx: &mut [f64]) {
+        let p = &self.p;
+        let (id, iq, w) = (x[o], x[o + 1], x[o + 2]);
+        let (vd, vq) = (bus.get(self.s.v_d), bus.get(self.s.v_q));
+        let we = p.p * w;
+        dx[0] = (vd - p.r * id + we * p.lq * iq) / p.ld;
+        dx[1] = (vq - p.r * iq - we * p.ld * id - we * p.lambda) / p.lq;
+        let torque = 1.5 * p.p * (p.lambda * iq + (p.ld - p.lq) * id * iq);
+        if self.locked {
+            dx[2] = 0.0;
+            dx[3] = 0.0;
+        } else {
+            dx[2] = (torque - p.b * w) / p.j;
+            dx[3] = w;
+        }
+    }
+    fn params(&self) -> Vec<(String, String)> {
+        vec![("locked".into(), "-".into())]
+    }
+    fn get_param(&self, name: &str) -> Option<f64> {
+        (name == "locked").then_some(if self.locked { 1.0 } else { 0.0 })
+    }
+    fn set_param(&mut self, name: &str, v: f64, _: &mut [f64]) -> Result<f64, String> {
+        match name {
+            "locked" => {
+                let old = if self.locked { 1.0 } else { 0.0 };
+                self.locked = v != 0.0;
+                Ok(old)
+            }
+            _ => Err(format!("unknown parameter `{name}`")),
+        }
+    }
+    fn power_terms(&self) -> Vec<(String, PowerKind)> {
+        vec![
+            ("electrical_in".into(), PowerKind::Input),
+            ("copper".into(), PowerKind::Loss),
+            ("viscous".into(), PowerKind::Loss),
+            // Work done *on* the motor by the lock constraint (locked rotor only).
+            ("lock_reaction".into(), PowerKind::External),
+        ]
+    }
+    fn powers(&self, _: f64, x: &[f64], o: usize, bus: &SignalBus, pw: &mut [f64]) {
+        let p = &self.p;
+        let (id, iq, w) = (x[o], x[o + 1], x[o + 2]);
+        // Amplitude-invariant dq power has the 3/2 factor (EQ-CONV-07).
+        pw[0] = 1.5 * (bus.get(self.s.v_d) * id + bus.get(self.s.v_q) * iq);
+        pw[1] = 1.5 * p.r * (id * id + iq * iq);
+        pw[2] = if self.locked { 0.0 } else { p.b * w * w };
+        let torque = 1.5 * p.p * (p.lambda * iq + (p.ld - p.lq) * id * iq);
+        pw[3] = if self.locked { -torque * w } else { 0.0 };
+    }
+    fn stored_energy(&self, x: &[f64], o: usize, _: &SignalBus) -> f64 {
+        let p = &self.p;
+        let (id, iq, w) = (x[o], x[o + 1], x[o + 2]);
+        0.5 * p.j * w * w + 1.5 * 0.5 * (p.ld * id * id + p.lq * iq * iq)
+    }
+}
+
+/// FOC at 20 kHz on the bus. With `open_loop_vq` it outputs v_d = 0, v_q = const.
+struct FocBlock {
+    foc: Foc,
+    period: SimTime,
+    open_loop_vq: Option<f64>,
+    s: MotorSignals,
+    omega_ref: SignalId,
+    iq_ref: SignalId,
+}
+
+impl DiscreteBlock for FocBlock {
+    fn id(&self) -> &str {
+        "ctrl"
+    }
+    fn period(&self) -> Option<SimTime> {
+        Some(self.period)
+    }
+    fn priority(&self) -> u8 {
+        priority::CONTROLLER
+    }
+    fn step(&mut self, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
+        let (vd, vq) = match self.open_loop_vq {
+            Some(v) => (0.0, v),
+            None => {
+                self.foc.omega_ref = ctx.bus.get(self.omega_ref);
+                self.foc.update(
+                    ctx.bus.get(self.s.i_d),
+                    ctx.bus.get(self.s.i_q),
+                    ctx.bus.get(self.s.omega),
+                )
+            }
+        };
+        ctx.bus.set(self.s.v_d, vd);
+        ctx.bus.set(self.s.v_q, vq);
+        ctx.bus.set(self.iq_ref, self.foc.iq_ref);
+        Ok(())
+    }
+    fn reset(&mut self) {
+        self.foc.reset();
+    }
+}
+
+/// Options for the skeleton engine.
+#[derive(Debug, Clone, Copy)]
+pub struct SkeletonOptions {
+    pub locked: bool,
+    pub open_loop_vq: Option<f64>,
+    /// Integration step limit [s].
+    pub dt_max: f64,
+}
+
+impl Default for SkeletonOptions {
+    fn default() -> Self {
+        Self {
+            locked: false,
+            open_loop_vq: None,
+            dt_max: 5e-6,
+        }
+    }
+}
+
+/// Build the skeleton engine (6020-class motor + 20 kHz FOC).
+pub fn build_engine(opts: SkeletonOptions) -> Engine {
+    let mp = PmsmParams::skeleton_6020();
+    let cfg = FocConfig::skeleton();
+    let mut bus = SignalBus::new();
+    let mut reg = |p: &str, u: &str, d: &str, k: SignalKind| {
+        bus.register(p, u, d, k).expect("unique skeleton signal")
+    };
+    let s = MotorSignals {
+        v_d: reg(
+            "ctrl.foc.v_d",
+            "V",
+            "d-axis voltage command",
+            SignalKind::Output,
+        ),
+        v_q: reg(
+            "ctrl.foc.v_q",
+            "V",
+            "q-axis voltage command",
+            SignalKind::Output,
+        ),
+        i_d: reg("motor.i_d", "A", "d-axis current", SignalKind::State),
+        i_q: reg("motor.i_q", "A", "q-axis current", SignalKind::State),
+        omega: reg(
+            "motor.omega",
+            "rad/s",
+            "mechanical speed",
+            SignalKind::State,
+        ),
+        theta: reg("motor.theta", "rad", "mechanical angle", SignalKind::State),
+        i_a: reg("motor.i_a", "A", "phase a current", SignalKind::Output),
+        i_b: reg("motor.i_b", "A", "phase b current", SignalKind::Output),
+        i_c: reg("motor.i_c", "A", "phase c current", SignalKind::Output),
+    };
+    let omega_ref = reg(
+        "ctrl.omega_ref",
+        "rad/s",
+        "speed setpoint",
+        SignalKind::Input,
+    );
+    let iq_ref = reg(
+        "ctrl.foc.iq_ref",
+        "A",
+        "q-axis current reference",
+        SignalKind::Output,
+    );
+    let mut plant = Plant::new();
+    plant.add(Box::new(DqMotor {
+        p: mp,
+        locked: opts.locked,
+        s,
+    }));
+    let period = period_from_hz(1.0 / cfg.dt)
+        .map(|p| p.period)
+        .unwrap_or(SimTime(50_000));
+    let blocks: Vec<Box<dyn DiscreteBlock>> = vec![Box::new(FocBlock {
+        foc: Foc::new(cfg, FocGains::design(&mp, &cfg)),
+        period,
+        open_loop_vq: opts.open_loop_vq,
+        s,
+        omega_ref,
+        iq_ref,
+    })];
+    Engine::new(plant, bus, blocks, opts.dt_max)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::commands::{ChangeSource, EngineCommand};
+
+    #[test]
+    fn engine_skeleton_reaches_speed_with_closed_energy_balance() {
+        let mut e = build_engine(SkeletonOptions::default());
+        e.queue(EngineCommand::SetSignal {
+            path: "ctrl.omega_ref".into(),
+            value: 20.0,
+            source: ChangeSource::Internal,
+        });
+        e.step_until(SimTime::from_secs_f64(0.3)).unwrap();
+        let w = e.bus.get(e.bus.id("motor.omega").unwrap());
+        assert!((w - 20.0).abs() < 0.02 * 20.0, "omega {w}");
+        let r = e.bus.get(e.bus.id("energy.residual").unwrap());
+        assert!(r.abs() < 1e-3, "energy residual {r}");
+    }
+
+    #[test]
+    fn locked_rotor_energy_balance_closes() {
+        let mut e = build_engine(SkeletonOptions {
+            locked: true,
+            open_loop_vq: Some(1.0),
+            dt_max: 2.5e-7,
+        });
+        e.step_until(SimTime::from_secs_f64(0.01)).unwrap();
+        let r = e.bus.get(e.bus.id("energy.residual").unwrap());
+        assert!(r.abs() < 1e-6, "energy residual {r}");
+    }
+}
