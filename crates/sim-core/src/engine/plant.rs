@@ -24,6 +24,18 @@ pub trait PlantModule: Send {
     fn outputs(&mut self, t: f64, x: &[f64], off: usize, bus: &mut SignalBus);
     /// Pass 2: write d(own states)/dt into `dx` (this module's slice only).
     fn derivatives(&self, t: f64, x: &[f64], off: usize, bus: &SignalBus, dx: &mut [f64]);
+    /// Live-settable parameters: `(name, unit)`; full path is `<module name>.<name>`.
+    fn params(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+    fn get_param(&self, _name: &str) -> Option<f64> {
+        None
+    }
+    /// Set a parameter; returns the old value. May adjust own states in `x_own`
+    /// (e.g. the D-007 rule when inertia changes).
+    fn set_param(&mut self, name: &str, _value: f64, _x_own: &mut [f64]) -> Result<f64, String> {
+        Err(format!("unknown parameter `{name}`"))
+    }
 }
 
 /// Composition of plant modules with a global state layout.
@@ -50,6 +62,21 @@ impl Plant {
 
     pub fn n_states(&self) -> usize {
         self.n
+    }
+
+    pub fn modules(&self) -> &[Box<dyn PlantModule>] {
+        &self.modules
+    }
+
+    /// Mutable module `i` and its state slice.
+    pub fn module_mut<'a>(
+        &'a mut self,
+        i: usize,
+        x: &'a mut [f64],
+    ) -> (&'a mut dyn PlantModule, &'a mut [f64]) {
+        let off = self.offsets[i];
+        let n = self.modules[i].n_states();
+        (self.modules[i].as_mut(), &mut x[off..off + n])
     }
 
     /// Initial global state vector.

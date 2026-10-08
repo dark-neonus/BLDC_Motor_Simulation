@@ -85,7 +85,7 @@
   - **Verify:** Unit tests for the dt rules.
   - **Done when:** Presets match POLISHED_IDEA §3.2.
 
-- [~] **P03.T07** — Command queue and live parameter changes
+- [x] **P03.T07** — Command queue and live parameter changes
   - **Depends:** P03.T05
   - **Do:**
     - `Command` enum: SetParam(path, value), SetTarget, Fault on/off, Load scene, Play/Pause/Step/Reset, TimeScale, Snapshot save/restore, Subscribe/Unsubscribe signals.
@@ -126,7 +126,7 @@
   - **Verify:** Test: a 20 kHz square ripple decimated to 100 buckets/s keeps the correct min/max envelope.
   - **Done when:** Passing.
 
-- [ ] **P03.T11** — Deterministic RNG service
+- [~] **P03.T11** — Deterministic RNG service
   - **Depends:** P03.T02
   - **Do:** `RngService` with a scene seed. Each block gets a `ChaCha8Rng` seeded by `hash(scene_seed, block_id)`. Normal distribution via `rand_distr`. RNG state is included in snapshots.
   - **Files:** `crates/sim-core/src/engine/rng.rs`

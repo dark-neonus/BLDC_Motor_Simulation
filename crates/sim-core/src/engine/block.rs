@@ -43,6 +43,17 @@ pub trait DiscreteBlock: Send {
     fn step(&mut self, ctx: &mut StepCtx<'_>) -> Result<(), SimError>;
     /// Return to the initial state.
     fn reset(&mut self);
+    /// Live-settable parameters `(name, unit)`; full path is `<id>.<name>`.
+    fn params(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+    fn get_param(&self, _name: &str) -> Option<f64> {
+        None
+    }
+    /// Set a parameter; returns the old value.
+    fn set_param(&mut self, name: &str, _value: f64) -> Result<f64, String> {
+        Err(format!("unknown parameter `{name}`"))
+    }
 }
 
 /// Standard priorities (D-004 event ordering).

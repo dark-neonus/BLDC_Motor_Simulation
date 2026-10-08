@@ -3,6 +3,7 @@
 //! Spec: `docs/docs/physics/numerics.md` (EQ-NUM-*).
 
 pub mod block;
+pub mod commands;
 #[allow(clippy::module_inception)]
 pub mod engine;
 pub mod fidelity;

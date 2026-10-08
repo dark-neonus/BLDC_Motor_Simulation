@@ -5,6 +5,7 @@
 //! (or the target) with ≤ `dt_max` substeps, holding discrete outputs constant (ZOH).
 
 use super::block::{DiscreteBlock, SimError, StepCtx};
+use super::commands::{EngineCommand, EngineEvent};
 use super::integrate::Rk4;
 use super::plant::Plant;
 use super::signals::SignalBus;
@@ -26,6 +27,10 @@ pub struct Engine {
     pub dt_max: f64,
     /// Scratch: indices of blocks due now (no allocation per event).
     due: Vec<usize>,
+    /// Commands waiting for the next event boundary.
+    pending: Vec<EngineCommand>,
+    /// Events produced since the last `drain_events`.
+    events: Vec<EngineEvent>,
 }
 
 impl Engine {
@@ -50,6 +55,8 @@ impl Engine {
             next_fire,
             integrator: Rk4::new(n),
             dt_max,
+            pending: Vec::new(),
+            events: Vec::new(),
         };
         // Make the bus consistent with the initial state.
         e.plant.outputs(0.0, &e.x, &mut e.bus);
@@ -97,6 +104,7 @@ impl Engine {
     /// `target` fire at the start of the next call.
     pub fn step_until(&mut self, target: SimTime) -> Result<(), SimError> {
         while self.time < target {
+            self.apply_pending();
             self.fire_due()?;
             let t_next = self.next_event_time().map_or(target, |t| t.min(target));
             let (t0, t1) = (self.time.as_secs_f64(), t_next.as_secs_f64());
@@ -138,6 +146,106 @@ impl Engine {
 
     pub fn blocks(&self) -> &[Box<dyn DiscreteBlock>] {
         &self.blocks
+    }
+
+    /// Queue a command; it is applied at the next event boundary.
+    pub fn queue(&mut self, cmd: EngineCommand) {
+        self.pending.push(cmd);
+    }
+
+    /// Apply queued commands now (also called automatically by `step_until`).
+    pub fn apply_pending(&mut self) {
+        if self.pending.is_empty() {
+            return;
+        }
+        let cmds = std::mem::take(&mut self.pending);
+        for cmd in cmds {
+            let ev = self.apply(cmd);
+            self.events.push(ev);
+        }
+        // Keep the bus consistent with possibly changed plant parameters/states.
+        self.plant
+            .outputs(self.time.as_secs_f64(), &self.x, &mut self.bus);
+    }
+
+    fn apply(&mut self, cmd: EngineCommand) -> EngineEvent {
+        let t = self.time;
+        let reject = |reason: String| EngineEvent::CommandRejected { t, reason };
+        match cmd {
+            EngineCommand::SetSignal {
+                path,
+                value,
+                source,
+            } => match self.bus.id(&path) {
+                Ok(id) => {
+                    let old = self.bus.get(id);
+                    self.bus.set(id, value);
+                    EngineEvent::SignalSet {
+                        t,
+                        path,
+                        old,
+                        new: value,
+                        source,
+                    }
+                }
+                Err(e) => reject(e.to_string()),
+            },
+            EngineCommand::SetParam {
+                path,
+                value,
+                source,
+            } => {
+                let Some((owner, name)) = path.rsplit_once('.') else {
+                    return reject(format!("invalid parameter path `{path}`"));
+                };
+                if !value.is_finite() {
+                    return reject(format!("`{path}`: value must be finite"));
+                }
+                if let Some(i) = self.plant.modules().iter().position(|m| m.name() == owner) {
+                    let (m, xs) = self.plant.module_mut(i, &mut self.x);
+                    return match m.set_param(name, value, xs) {
+                        Ok(old) => EngineEvent::ParamChanged {
+                            t,
+                            path,
+                            old,
+                            new: value,
+                            source,
+                        },
+                        Err(e) => reject(format!("`{path}`: {e}")),
+                    };
+                }
+                if let Some(b) = self.blocks.iter_mut().find(|b| b.id() == owner) {
+                    return match b.set_param(name, value) {
+                        Ok(old) => EngineEvent::ParamChanged {
+                            t,
+                            path,
+                            old,
+                            new: value,
+                            source,
+                        },
+                        Err(e) => reject(format!("`{path}`: {e}")),
+                    };
+                }
+                reject(format!("no module or block `{owner}` for `{path}`"))
+            }
+        }
+    }
+
+    /// Take the events produced so far.
+    pub fn drain_events(&mut self) -> Vec<EngineEvent> {
+        std::mem::take(&mut self.events)
+    }
+
+    /// Read a live parameter by path.
+    pub fn get_param(&self, path: &str) -> Option<f64> {
+        let (owner, name) = path.rsplit_once('.')?;
+        if let Some(m) = self.plant.modules().iter().find(|m| m.name() == owner) {
+            return m.get_param(name);
+        }
+        self.blocks
+            .iter()
+            .find(|b| b.id() == owner)?
+            .get_param(name)
     }
 }
 
@@ -263,6 +371,82 @@ mod tests {
         let mut e = Engine::new(Plant::new(), bus, blocks, 1e-4);
         e.step_until(SimTime::from_secs_f64(1e-3)).unwrap();
         assert_eq!(e.bus.get(seq), 21.0);
+    }
+
+    /// First-order decay x' = −x/τ with a live parameter τ.
+    struct Decay {
+        tau: f64,
+    }
+    impl crate::engine::plant::PlantModule for Decay {
+        fn name(&self) -> &str {
+            "decay"
+        }
+        fn n_states(&self) -> usize {
+            1
+        }
+        fn state_names(&self) -> Vec<(String, String)> {
+            vec![("x".into(), "-".into())]
+        }
+        fn init(&self, x: &mut [f64]) {
+            x[0] = 1.0;
+        }
+        fn outputs(&mut self, _: f64, _: &[f64], _: usize, _: &mut SignalBus) {}
+        fn derivatives(&self, _: f64, x: &[f64], o: usize, _: &SignalBus, dx: &mut [f64]) {
+            dx[0] = -x[o] / self.tau;
+        }
+        fn get_param(&self, name: &str) -> Option<f64> {
+            (name == "tau").then_some(self.tau)
+        }
+        fn set_param(&mut self, name: &str, v: f64, _: &mut [f64]) -> Result<f64, String> {
+            if name != "tau" {
+                return Err(format!("unknown parameter `{name}`"));
+            }
+            if v <= 0.0 {
+                return Err("tau must be > 0".into());
+            }
+            Ok(std::mem::replace(&mut self.tau, v))
+        }
+    }
+
+    #[test]
+    fn param_change_applies_at_boundary_and_emits_one_event() {
+        use crate::engine::commands::{ChangeSource, EngineCommand, EngineEvent};
+        let mut p = Plant::new();
+        p.add(Box::new(Decay { tau: 1.0 }));
+        let mut e = Engine::new(p, SignalBus::new(), vec![], 1e-3);
+        e.step_until(SimTime::from_secs_f64(0.5)).unwrap();
+        let x_half = e.x[0];
+        e.queue(EngineCommand::SetParam {
+            path: "decay.tau".into(),
+            value: 0.25,
+            source: ChangeSource::Mcp,
+        });
+        assert_eq!(
+            e.get_param("decay.tau"),
+            Some(1.0),
+            "not applied before the boundary"
+        );
+        e.step_until(SimTime::from_secs_f64(1.0)).unwrap();
+        let ev = e.drain_events();
+        assert_eq!(ev.len(), 1);
+        assert!(
+            matches!(&ev[0], EngineEvent::ParamChanged { old, new, source: ChangeSource::Mcp, .. } if *old == 1.0 && *new == 0.25)
+        );
+        // Second half decays with τ = 0.25: x(1) = x(0.5)·e^{−0.5/0.25}.
+        let expected = x_half * (-2.0f64).exp();
+        assert!((e.x[0] - expected).abs() <= 1e-9 + 1e-8 * expected);
+        // Invalid values are rejected without changing anything.
+        e.queue(EngineCommand::SetParam {
+            path: "decay.tau".into(),
+            value: -1.0,
+            source: ChangeSource::Ui,
+        });
+        e.apply_pending();
+        assert!(matches!(
+            e.drain_events()[0],
+            EngineEvent::CommandRejected { .. }
+        ));
+        assert_eq!(e.get_param("decay.tau"), Some(0.25));
     }
 
     #[test]
