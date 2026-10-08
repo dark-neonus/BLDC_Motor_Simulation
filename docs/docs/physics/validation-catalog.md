@@ -120,7 +120,7 @@ Every case has an ID, which is used verbatim in the test name (`test_v_mot_001_â
 | V-NUM-003 | rust | â€“ | bouncing ball event localisation | impact times within 1 ns | atol 1 ns |
 | V-DET-001 | both | all | every scenario run twice | byte-identical Parquet output | exact |
 
-Total: 62 cases.
+Total: 61 cases.
 
 ## Skeleton cases (P01, kept until replaced)
 

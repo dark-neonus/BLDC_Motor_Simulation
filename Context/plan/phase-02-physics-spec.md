@@ -210,7 +210,7 @@
   - **Verify:** `grep -rhoE '"(motor|load|bus|ctrl|sensors|thermal|energy|supply|inverter)\.[a-z0-9_.]+"' crates/ | sort -u` is a subset of the catalog.
   - **Done when:** The catalog is complete for every model in P02.
 
-- [ ] **P02.T13** — Phase gate (physics review is critical here)
+- [~] **P02.T13** — Phase gate (physics review is critical here)
   - **Depends:** P02.T01, P02.T02, P02.T03, P02.T04, P02.T05, P02.T06, P02.T07, P02.T08, P02.T09, P02.T10, P02.T11, P02.T12, P02.T14
   - **Do:** PLAN §8 checklist. In the reviewer prompt, add: "Focus on physics correctness, sign conventions, unit consistency, missing assumptions and whether an independent implementer could code every model from these pages alone without guessing."
   - **Verify:** All blocker/major findings are resolved.
