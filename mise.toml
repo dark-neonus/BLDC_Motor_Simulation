@@ -8,5 +8,6 @@ uv = "0.12.23"
 just = "1.58.0"
 lefthook = "2.2.0"
 gh = "2.102.0"
+cargo-binstall = "1.25.2"   # lets mise install cargo: tools as prebuilt binaries
 "cargo:cargo-nextest" = "0.9.146"
 "cargo:cargo-insta" = "1.49.0"

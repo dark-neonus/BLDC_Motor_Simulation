@@ -15,6 +15,7 @@ default:
 
 # Install toolchains and all dependencies
 setup:
+    mise trust --yes
     mise install
     cargo fetch
     pnpm install
@@ -27,7 +28,7 @@ setup:
 dev:
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! grep -q '"serve"' crates/bldc-sim/src/main.rs 2>/dev/null && [ ! -d crates/bldc-sim/src/cli ]; then
+    if ! cargo run -q -p bldc-sim -- serve --help >/dev/null 2>&1; then
         echo "SKIP dev server (until P01.T05); starting web only"; exec pnpm -C web dev
     fi
     trap 'kill 0' EXIT INT TERM

@@ -8,18 +8,18 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
+/build/
+/develop-eggs/
+/dist/
+/downloads/
+/eggs/
+/.eggs/
 /lib/
 /lib64/
-parts/
-sdist/
-var/
-wheels/
+/parts/
+/sdist/
+/var/
+/wheels/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
@@ -50,7 +50,7 @@ coverage.xml
 *.lcov
 .hypothesis/
 .pytest_cache/
-cover/
+/cover/
 
 # Translations
 *.mo
@@ -63,7 +63,7 @@ db.sqlite3
 db.sqlite3-journal
 
 # Flask stuff:
-instance/
+/instance/
 .webassets-cache
 
 # Scrapy stuff:
@@ -73,14 +73,14 @@ instance/
 docs/_build/
 
 # PyBuilder
-.pybuilder/
-target/
+/.pybuilder/
+/target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
 
 # IPython
-profile_default/
+/profile_default/
 ipython_config.py
 
 # pyenv
@@ -116,7 +116,7 @@ ipython_config.py
 # pdm.lock
 # pdm.toml
 .pdm-python
-.pdm-build/
+/.pdm-build/
 
 # pixi
 #   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
@@ -127,7 +127,7 @@ ipython_config.py
 !.pixi/config.toml
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
+/__pypackages__/
 
 # Celery stuff
 celerybeat-schedule*
@@ -139,12 +139,12 @@ celerybeat.pid
 *.pid
 
 # RabbitMQ
-mnesia/
-rabbitmq/
-rabbitmq-data/
+/mnesia/
+/rabbitmq/
+/rabbitmq-data/
 
 # ActiveMQ
-activemq-data/
+/activemq-data/
 
 # SageMath parsed files
 *.sage.py
@@ -153,11 +153,11 @@ activemq-data/
 .env
 .envrc
 .venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+/env/
+/venv/
+/ENV/
+/env.bak/
+/venv.bak/
 
 # Spyder project settings
 .spyderproject
@@ -175,13 +175,13 @@ venv.bak/
 dmypy.json
 
 # Pyre type checker
-.pyre/
+/.pyre/
 
 # pytype static type analyzer
-.pytype/
+/.pytype/
 
 # Cython debug symbols
-cython_debug/
+/cython_debug/
 
 # PyCharm
 #   JetBrains specific template is maintained in a separate JetBrains.gitignore that can
@@ -194,7 +194,7 @@ cython_debug/
 #   Abstra is an AI-powered process automation framework.
 #   Ignore directories containing user credentials, local state, and settings.
 #   Learn more at https://abstra.io/docs
-.abstra/
+/.abstra/
 
 # Visual Studio Code
 #   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore that
@@ -214,13 +214,13 @@ tempCodeRunnerFile.py
 # Marimo
 marimo/_static/
 marimo/_lsp/
-__marimo__/
+/__marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
 
 # graphify knowledge graph (regenerable)
-graphify-out/
+/graphify-out/
 
 # --- BLDC simulator project ---
 # Rust
@@ -242,3 +242,5 @@ blob-report/
 # Editors / OS
 .DS_Store
 .idea/
+web/dist/
+docs/build/

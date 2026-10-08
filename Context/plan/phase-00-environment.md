@@ -149,7 +149,7 @@
   - **Verify:** Lint the YAML (`pnpm dlx @action-validator/cli .github/workflows/ci.yml`).
   - **Done when:** The file is valid. It runs once a remote exists (T13).
 
-- [ ] **P00.T13** — 👤 USER: GitHub remote (optional, non-blocking)
+- [x] **P00.T13** — 👤 USER: GitHub remote (optional, non-blocking)
   - **Depends:** P00.T12
   - **Do:** Ask the user whether to create a GitHub repo now.
     - If yes: the user runs `gh auth login` (interactive). After **confirming the name and visibility** with the user, run `gh repo create <name> --private --source . --push`.
@@ -157,7 +157,7 @@
   - **Verify:** `git remote -v`; the first CI run is green (or the task is skipped).
   - **Done when:** A remote exists with CI green, or the task is skipped by the user.
 
-- [ ] **P00.T14** — Phase gate
+- [~] **P00.T14** — Phase gate
   - **Depends:** P00.T01, P00.T02, P00.T03, P00.T04, P00.T05, P00.T06, P00.T07, P00.T08, P00.T09, P00.T10, P00.T11, P00.T12, P00.T13
   - **Do:**
     1. Run the PLAN.md §8 checklist.
