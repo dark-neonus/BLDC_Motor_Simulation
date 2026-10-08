@@ -34,6 +34,10 @@ pub struct Engine {
     events: Vec<EngineEvent>,
     /// Optional recorder, sampled after every accepted substep.
     pub recorder: Option<Recorder>,
+    // Scratch for state-event handling.
+    x_save: Vec<f64>,
+    g_prev: Vec<f64>,
+    g_new: Vec<f64>,
 }
 
 impl Engine {
@@ -61,6 +65,9 @@ impl Engine {
             pending: Vec::new(),
             events: Vec::new(),
             recorder: None,
+            x_save: Vec::with_capacity(n),
+            g_prev: Vec::new(),
+            g_new: Vec::new(),
         };
         // Make the bus consistent with the initial state.
         e.plant.outputs(0.0, &e.x, &mut e.bus);
@@ -112,28 +119,98 @@ impl Engine {
             self.fire_due()?;
             let t_next = self.next_event_time().map_or(target, |t| t.min(target));
             let (t0, t1) = (self.time.as_secs_f64(), t_next.as_secs_f64());
-            if let Some(rec) = &mut self.recorder {
-                // Substep manually so the recorder sees every accepted state.
-                let n = ((t1 - t0) / self.dt_max).ceil().max(1.0) as usize;
-                let h = (t1 - t0) / n as f64;
-                for k in 0..n {
-                    let tk = t0 + k as f64 * h;
-                    self.integrator
-                        .step(&mut self.plant, &mut self.bus, tk, &mut self.x, h);
-                    self.plant.outputs(tk + h, &self.x, &mut self.bus);
-                    rec.sample(tk + h, &self.bus);
-                }
-            } else {
-                self.integrator.integrate(
-                    &mut self.plant,
-                    &mut self.bus,
-                    &mut self.x,
-                    t0,
-                    t1,
-                    self.dt_max,
-                );
-            }
+            self.advance(t0, t1)?;
             self.time = t_next;
+        }
+        Ok(())
+    }
+
+    /// Integrate the plant from `t0` to `t1` (no discrete events in between) in ≤ dt_max
+    /// substeps, locating state events by bisection to 1 ns (EQ-NUM-05).
+    fn advance(&mut self, t0: f64, t1: f64) -> Result<(), SimError> {
+        // 0.1 ns: impact timing errors propagate through resets, so bisect 10× finer than the 1 ns spec.
+        const T_TOL: f64 = 1e-10;
+        const ZENO_EVENTS: usize = 100;
+        let ne = self.plant.n_events();
+        let mut t = t0;
+        if ne > 0 {
+            self.g_prev.resize(ne, 0.0);
+            self.g_new.resize(ne, 0.0);
+            self.plant
+                .event_functions(t, &self.x, &self.bus, &mut self.g_prev);
+        }
+        let mut burst = (t0, 0usize); // Zeno guard: events within 1 µs of sim time
+        while t < t1 {
+            let remaining = t1 - t;
+            let n = (remaining / self.dt_max).ceil().max(1.0);
+            let h = remaining / n;
+            self.x_save.clone_from(&self.x);
+            self.integrator
+                .step(&mut self.plant, &mut self.bus, t, &mut self.x, h);
+            self.plant.outputs(t + h, &self.x, &mut self.bus);
+            if ne > 0 {
+                self.plant
+                    .event_functions(t + h, &self.x, &self.bus, &mut self.g_new);
+                let crossed = (0..ne).find(|&i| (self.g_prev[i] < 0.0) != (self.g_new[i] < 0.0));
+                if let Some(_first) = crossed {
+                    // Bisect the step size for the earliest crossing of any function.
+                    let (mut lo, mut hi) = (0.0, h);
+                    while hi - lo > T_TOL {
+                        let mid = 0.5 * (lo + hi);
+                        self.x.clone_from(&self.x_save);
+                        self.integrator
+                            .step(&mut self.plant, &mut self.bus, t, &mut self.x, mid);
+                        self.plant.outputs(t + mid, &self.x, &mut self.bus);
+                        self.plant
+                            .event_functions(t + mid, &self.x, &self.bus, &mut self.g_new);
+                        if (0..ne).any(|i| (self.g_prev[i] < 0.0) != (self.g_new[i] < 0.0)) {
+                            hi = mid;
+                        } else {
+                            lo = mid;
+                        }
+                    }
+                    // Land just after the crossing.
+                    self.x.clone_from(&self.x_save);
+                    self.integrator
+                        .step(&mut self.plant, &mut self.bus, t, &mut self.x, hi);
+                    self.plant.outputs(t + hi, &self.x, &mut self.bus);
+                    self.plant
+                        .event_functions(t + hi, &self.x, &self.bus, &mut self.g_new);
+                    t += hi;
+                    for i in 0..ne {
+                        if (self.g_prev[i] < 0.0) != (self.g_new[i] < 0.0) {
+                            let rising = self.g_new[i] >= 0.0;
+                            self.plant
+                                .handle_event(i, rising, t, &mut self.x, &mut self.bus);
+                        }
+                    }
+                    // Zeno guard.
+                    if t - burst.0 > 1e-6 {
+                        burst = (t, 0);
+                    }
+                    burst.1 += 1;
+                    if burst.1 > ZENO_EVENTS {
+                        return Err(SimError::Numerical {
+                            t: SimTime::from_secs_f64(t),
+                            msg: format!(
+                                "more than {ZENO_EVENTS} state events within 1 µs (Zeno behaviour)"
+                            ),
+                        });
+                    }
+                    self.plant.outputs(t, &self.x, &mut self.bus);
+                    self.plant
+                        .event_functions(t, &self.x, &self.bus, &mut self.g_prev);
+                    if let Some(rec) = &mut self.recorder {
+                        rec.sample(t, &self.bus);
+                    }
+                    continue;
+                }
+                std::mem::swap(&mut self.g_prev, &mut self.g_new);
+            }
+            t += h;
+            if let Some(rec) = &mut self.recorder {
+                rec.sample(t, &self.bus);
+            }
         }
         Ok(())
     }

@@ -36,6 +36,24 @@ pub trait PlantModule: Send {
     fn set_param(&mut self, name: &str, _value: f64, _x_own: &mut [f64]) -> Result<f64, String> {
         Err(format!("unknown parameter `{name}`"))
     }
+    /// Number of zero-crossing (state-event) functions (EQ-NUM-05).
+    fn n_events(&self) -> usize {
+        0
+    }
+    /// Evaluate the event functions g into `g` (len == n_events) from the full state.
+    fn event_functions(&self, _t: f64, _x: &[f64], _off: usize, _bus: &SignalBus, _g: &mut [f64]) {}
+    /// Handle event `idx` (its g changed sign; `rising` = from < 0 to ≥ 0). May modify
+    /// own states (resets, mode switches).
+    fn on_event(
+        &mut self,
+        _idx: usize,
+        _rising: bool,
+        _t: f64,
+        _x_own: &mut [f64],
+        _bus: &mut SignalBus,
+    ) {
+    }
+
     /// Internal (non-state) data for snapshots, e.g. RNG streams, integrators, modes.
     fn save(&self) -> serde_json::Value {
         serde_json::Value::Null
@@ -117,6 +135,44 @@ impl Plant {
                     .map(move |(s, u)| (name.clone(), s, u))
             })
             .collect()
+    }
+
+    /// Total number of event functions over all modules.
+    pub fn n_events(&self) -> usize {
+        self.modules.iter().map(|m| m.n_events()).sum()
+    }
+
+    /// Evaluate all event functions (module order) into `g`.
+    pub fn event_functions(&self, t: f64, x: &[f64], bus: &SignalBus, g: &mut [f64]) {
+        let mut k = 0;
+        for (m, &off) in self.modules.iter().zip(&self.offsets) {
+            let n = m.n_events();
+            m.event_functions(t, x, off, bus, &mut g[k..k + n]);
+            k += n;
+        }
+    }
+
+    /// Dispatch global event `gi` to its module. Returns the module index.
+    pub fn handle_event(
+        &mut self,
+        gi: usize,
+        rising: bool,
+        t: f64,
+        x: &mut [f64],
+        bus: &mut SignalBus,
+    ) -> usize {
+        let mut k = 0;
+        for (mi, m) in self.modules.iter_mut().enumerate() {
+            let n = m.n_events();
+            if gi < k + n {
+                let off = self.offsets[mi];
+                let ns = m.n_states();
+                m.on_event(gi - k, rising, t, &mut x[off..off + ns], bus);
+                return mi;
+            }
+            k += n;
+        }
+        usize::MAX
     }
 
     /// Pass 1 only (used after an accepted step so the bus matches the state).
