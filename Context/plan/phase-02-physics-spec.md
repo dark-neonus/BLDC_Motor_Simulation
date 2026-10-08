@@ -101,7 +101,7 @@
   - **Verify:** The steady-state formula is solvable in closed form (show it, including the R(T) feedback).
   - **Done when:** Complete.
 
-- [~] **P02.T06** — Inverter & modulation (EQ-INV-*)
+- [x] **P02.T06** — Inverter & modulation (EQ-INV-*)
   - **Depends:** P02.T03
   - **Do:** Write `inverter.md`:
     - Three-leg two-level inverter. Per-leg states: high, low, off (both off → diode conduction set by current sign; floating when current = 0).
@@ -115,7 +115,7 @@
   - **Verify:** A worked example of SVPWM duties for one vector.
   - **Done when:** Complete.
 
-- [ ] **P02.T07** — Power supply & DC bus (EQ-SUP-*)
+- [~] **P02.T07** — Power supply & DC bus (EQ-SUP-*)
   - **Depends:** P02.T06
   - **Do:** Write `supply.md`:
     - Bus capacitor C·dV/dt = i_src − i_dc − i_chopper.
