@@ -31,7 +31,7 @@
   - **Verify:** Unit tests: 20 kHz → 50 000 ns exactly; 30 kHz → 33 333 ns with an actual-frequency report; duplicate registration error; lookup by path.
   - **Done when:** Tests pass. Paths follow CONVENTIONS §3.
 
-- [~] **P03.T02** — Block and plant interfaces
+- [x] **P03.T02** — Block and plant interfaces
   - **Depends:** P03.T01
   - **Do:**
     - Trait `DiscreteBlock { fn id(&self)->&str; fn period(&self)->SimTime; fn phase(&self)->SimTime; fn priority(&self)->u8; fn step(&mut self, ctx: &mut StepCtx) -> Result<(), SimError>; fn reset(&mut self); fn snapshot/restore }`. `StepCtx` gives bus read/write, time and RNG.
