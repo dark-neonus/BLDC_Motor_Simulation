@@ -1,0 +1,13 @@
+[package]
+name = "bldc-sim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+sim-api.workspace = true
+clap.workspace = true
+
+[lints]
+workspace = true

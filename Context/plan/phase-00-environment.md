@@ -51,7 +51,7 @@
   - **Verify:** `git status` shows only intended files.
   - **Done when:** The layout matches CONVENTIONS §1 (minus web/docs).
 
-- [ ] **P00.T05** — Cargo workspace with four crates
+- [x] **P00.T05** — Cargo workspace with four crates
   - **Depends:** P00.T04
   - **Do:**
     1. Root `Cargo.toml`: `[workspace]` with `resolver = "3"` and members `crates/*`.
