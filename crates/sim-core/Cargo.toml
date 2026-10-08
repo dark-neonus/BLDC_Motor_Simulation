@@ -12,3 +12,6 @@ sim-model.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+diffsol = "0.17.1"

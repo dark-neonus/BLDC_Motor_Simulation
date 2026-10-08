@@ -56,7 +56,7 @@
     - RL exponential step exact for constant input
   - **Done when:** All pass.
 
-- [~] **P03.T04** — diffsol cross-check harness (dev-dependency)
+- [x] **P03.T04** — diffsol cross-check harness (dev-dependency)
   - **Depends:** P03.T03
   - **Do:** Add `diffsol` as a dev-dependency (or a test-only crate `crates/sim-core-xcheck` if it pulls heavy deps). Solve the same test ODEs (decay, oscillator, a nonlinear Van der Pol, and the skeleton PMSM open-loop) with diffsol at tolerance 1e-10 and compare with RK4 at a fine dt.
   - **Files:** `crates/sim-core/tests/xcheck_diffsol.rs`
