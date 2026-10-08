@@ -64,7 +64,24 @@ jobs:
           uv run ruff format --check .
           uv run pytest -q
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          install_args: "cargo-binstall rust node pnpm just"
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C web exec playwright install --with-deps chromium
+      - run: just e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-results
+          path: web/test-results/
+          retention-days: 7
+
   # Enabled in later phases:
-  # e2e:       (P01.T11) just build && pnpm -C web exec playwright install --with-deps chromium && just e2e
   # validate:  (P11.T09) just validate && just validate-report
   # docs:      (P18)     pnpm -C docs build + help/eq-id/docs-gen no-diff checks

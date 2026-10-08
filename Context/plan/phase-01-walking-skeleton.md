@@ -140,7 +140,7 @@
   - **Verify:** `just build && ./target/release/bldc-sim serve` → `localhost:8787` shows the UI and works without Vite; `localhost:8787/docs/llms.txt` is served.
   - **Done when:** The single binary works.
 
-- [ ] **P01.T11** — Playwright smoke E2E
+- [x] **P01.T11** — Playwright smoke E2E
   - **Depends:** P01.T10
   - **Do:**
     1. Add Playwright to `web/`. The config starts the release binary as `webServer` on port 8787.

@@ -69,8 +69,8 @@ validate *ARGS:
     cd validation && uv run pytest -q {{ARGS}}
 
 # Playwright end-to-end tests; extra args go to playwright
-e2e *ARGS:
-    @if [ -f web/playwright.config.ts ]; then pnpm -C web exec playwright test {{ARGS}}; else echo "SKIP e2e (until P01.T11)"; fi
+e2e *ARGS: build
+    pnpm -C web exec playwright test {{ARGS}}
 
 # Criterion benchmarks
 bench:
