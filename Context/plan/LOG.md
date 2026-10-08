@@ -95,3 +95,7 @@
 - pnpm 12 blocks dependency build scripts: `allowBuilds` in pnpm-workspace.yaml (@swc/core allowed, core-js denied).
 - Verified: `just check` green (11 Rust, 5 vitest, 4 pytest, 1 e2e, web + docs builds).
 - Next: P02.T01
+
+## 2026-10-09 — CI note (agent: Claude)
+- The CI run for the phase-01 push (37847777743) failed: rust (`cargo fmt --all --check`) and python (`uv sync --frozen`). Both pass locally and in a fresh clone, and the previous run (37841687048) was green with the same config. The logs need GitHub auth (gh not logged in).
+- Added `scripts/ci-run.sh`, which publishes the failing step's output as a public `::error` annotation. Verify it at the next push (P02 gate): `curl …/check-runs/<job-id>/annotations`. Also consider bumping the Node-20 actions (deprecation warning).
