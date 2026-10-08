@@ -103,7 +103,7 @@ $$
 V_2 = \sqrt{V_1^2 + \frac{2E}{C_{bus}}} = \sqrt{24^2 + \frac{0.225}{470\cdot10^{-6}}} = 32.48\ \mathrm V
 $$
 
-With losses the real value is lower. The validation case checks $V_{24\to2} \le 32.48$ V and the energy balance.
+With losses the real value is lower. The validation case checks that the final bus voltage stays at or below 32.48 V and that the energy balance closes.
 
 ## Voltage limits
 

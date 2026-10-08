@@ -128,7 +128,7 @@
   - **Verify:** Regen energy example: a flywheel spinning down into the bus capacitor gives the final V by energy balance.
   - **Done when:** Complete.
 
-- [~] **P02.T08** — Sensors (EQ-SENS-*)
+- [x] **P02.T08** — Sensors (EQ-SENS-*)
   - **Depends:** P02.T03
   - **Do:** Write `sensors.md`:
     - Common sensor pipeline: true value → error model → quantization → noise (Gaussian, seeded) → latency (pure delay) → sample-and-hold at the update rate.
