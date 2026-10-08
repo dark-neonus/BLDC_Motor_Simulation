@@ -101,7 +101,7 @@
   - **Verify:** `just --list`; `just check-fast`; `just progress` updates the PLAN.md dashboard.
   - **Done when:** All recipes run.
 
-- [ ] **P00.T09** — lefthook pre-commit hooks
+- [x] **P00.T09** — lefthook pre-commit hooks
   - **Depends:** P00.T08
   - **Do:** `lefthook.yml` pre-commit jobs, run on staged files where possible:
     - `cargo fmt --check`

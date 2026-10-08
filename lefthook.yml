@@ -1,0 +1,17 @@
+# Git hooks (install: lefthook install). Keep pre-commit fast (< ~10 s).
+pre-commit:
+  parallel: true
+  jobs:
+    - name: rust-fmt
+      glob: "*.rs"
+      run: cargo fmt --all --check
+    - name: biome
+      glob: "*.{ts,tsx,js,jsx,json,jsonc,css}"
+      run: pnpm biome check --staged --no-errors-on-unmatched --files-ignore-unknown=true
+    - name: ruff-format
+      root: "validation/"
+      glob: "*.py"
+      run: uv run ruff format --check {staged_files}
+    - name: plan-check
+      glob: "Context/**"
+      run: python3 Context/plan/progress.py --check
