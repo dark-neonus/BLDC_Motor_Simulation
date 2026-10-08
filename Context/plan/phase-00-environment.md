@@ -89,7 +89,7 @@
   - **Verify:** `cd validation && uv sync && uv run python --version` (3.13.x) `&& uv run pytest -q && uv run ruff check .`
   - **Done when:** The smoke test passes on Python 3.13.
 
-- [ ] **P00.T08** — `justfile` task runner
+- [x] **P00.T08** — `justfile` task runner
   - **Depends:** P00.T05, P00.T06, P00.T07
   - **Do:** Create recipes `setup`, `dev`, `build`, `test`, `test-rust`, `test-web`, `validate`, `e2e`, `fmt`, `lint`, `check-fast`, `check`, `progress`, `next`, `plan-check`, `gen-api` (placeholder until P12), `docs-dev` (placeholder until P01).
     - Set `set shell := ["bash", "-c"]` and export the mise shims on PATH at the top, so recipes work from any shell.
