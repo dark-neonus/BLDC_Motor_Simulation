@@ -130,7 +130,7 @@
   - **Verify:** Read it cold: could a new agent start P00.T11 from it alone?
   - **Done when:** It exists and is concise.
 
-- [ ] **P00.T11** — graphify: first graph and post-commit hook
+- [x] **P00.T11** — graphify: first graph and post-commit hook
   - **Depends:** P00.T10
   - **Do:**
     1. `command -v graphify`. It is already installed via pipx; upgrade with `pipx upgrade graphifyy`. Install with `uv tool install graphifyy` **only** if it is missing.
