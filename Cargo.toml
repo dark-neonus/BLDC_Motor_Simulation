@@ -16,14 +16,9 @@ sim-core = { path = "crates/sim-core" }
 sim-api = { path = "crates/sim-api" }
 # shared external crates
 serde = { version = "1", features = ["derive"] }
-thiserror = "2"
 anyhow = "1"
 tracing = "0.1"
 clap = { version = "4", features = ["derive"] }
-# test-only
-approx = "0.5"
-proptest = "1"
-insta = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

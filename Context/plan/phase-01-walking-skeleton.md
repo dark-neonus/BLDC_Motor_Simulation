@@ -77,7 +77,7 @@
   - **Verify:** `cargo run -p bldc-sim -- serve &` then `curl -s localhost:8787/api/health` and `curl -X POST localhost:8787/api/sim/play`. Add an integration test using `reqwest` + `tokio-tungstenite` that receives ≥ 5 frames.
   - **Done when:** The integration test passes.
 
-- [ ] **P01.T06** — Minimal MCP server (rmcp, streamable HTTP at `/mcp`)
+- [x] **P01.T06** — Minimal MCP server (rmcp, streamable HTTP at `/mcp`)
   - **Depends:** P01.T05
   - **Do:**
     1. Mount the rmcp streamable-HTTP service at `/mcp` in the same axum router.

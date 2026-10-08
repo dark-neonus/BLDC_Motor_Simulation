@@ -1,6 +1,7 @@
 //! sim-api: the local HTTP/WebSocket server and MCP endpoint that expose the
 //! single live simulation (D-006) to the web UI and to AI agents.
 
+pub mod mcp;
 pub mod routes;
 pub mod ws;
 
@@ -20,7 +21,9 @@ pub struct AppState {
 
 /// Build the full router (REST + WebSocket) around a simulation handle.
 pub fn router(state: AppState) -> Router {
+    let mcp = mcp::service(std::sync::Arc::clone(&state.sim));
     Router::new()
+        .nest_service("/mcp", mcp)
         .merge(routes::api())
         .merge(ws::routes())
         .with_state(state)
