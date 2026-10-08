@@ -107,7 +107,7 @@
   - **Verify:** `just dev`, open the browser: Play → the plot rises and the rotor spins. `pnpm -C web test --run` passes.
   - **Done when:** It works manually. Note a screenshot path in LOG (Playwright in T11).
 
-- [ ] **P01.T08** — Docs skeleton: Docusaurus + KaTeX + Mermaid + llms.txt
+- [x] **P01.T08** — Docs skeleton: Docusaurus + KaTeX + Mermaid + llms.txt
   - **Depends:** P00
   - **Do:**
     1. Scaffold non-interactively into the not-yet-existing dir: `timeout 600 pnpm create docusaurus@latest docs classic --typescript --skip-install < /dev/null`, then `pnpm install` at the root (it is a pnpm workspace member).

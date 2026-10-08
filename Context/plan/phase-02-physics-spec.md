@@ -4,7 +4,7 @@
 > The spec is the single source of truth for the Rust core (P03–P10), the independent Python reference model (P11.T01) and the user-facing docs (P18).
 > **Depends on:** P01.
 > **Read first:** [CONVENTIONS §5](CONVENTIONS.md), [DECISIONS D-002, D-004, D-007](DECISIONS.md), POLISHED_IDEA §3, §5, §10.
-> **Output location:** `docs/docs/physics/*.md`. Each equation gets an ID and an anchor, `### EQ-<AREA>-<NN> — Title {#eq-area-nn}`.
+> **Output location:** `docs/docs/physics/*.md`. Each equation gets an ID and an anchor, `### EQ-<AREA>-<NN> — Title {/* #eq-area-nn */}` (MDX comment form, CONVENTIONS §8).
 > Areas: `CONV`, `MOT`, `MECH`, `THERM`, `INV`, `SUP`, `SENS`, `CTRL`, `NUM`, `ENER`. Validation cases use `V-<AREA>-<NNN>`.
 > **Exit criteria:**
 > - Every model in POLISHED_IDEA §3, §5.2 and §5.4 has equations with symbols, units, assumptions and ≥ 1 reference.

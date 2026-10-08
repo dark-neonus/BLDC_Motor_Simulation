@@ -107,7 +107,7 @@ Rules:
 
 ## 8. Docs & help
 
-- Physics spec pages give each equation an ID anchor: `### EQ-MOT-04 — Electromagnetic torque (dq) {#eq-mot-04}`.
+- Physics spec pages give each equation an ID anchor, using the **MDX comment form** (Docusaurus 3 parses `{#id}` as a JS expression and fails): `### EQ-MOT-04 — Electromagnetic torque (dq) {/* #eq-mot-04 */}` → anchor `#eq-mot-04`.
 - Help registry entry:
   ```yaml
   param:motor.electrical.kv:
