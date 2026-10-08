@@ -158,7 +158,7 @@
   - **Verify:** Closed-loop bandwidth formula for the current loop with the pole-zero-cancellation design is stated (used by V-CTRL tests).
   - **Done when:** Complete.
 
-- [ ] **P02.T10** — Energy balance (EQ-ENER-*)
+- [x] **P02.T10** — Energy balance (EQ-ENER-*)
   - **Depends:** P02.T03, P02.T04, P02.T05, P02.T06, P02.T07
   - **Do:** Write `energy.md`:
     - Every power term: source/battery output; chopper; inverter conduction, switching and diode losses; copper; iron; friction; gearbox loss; load work (gravity potential, external).
@@ -168,7 +168,7 @@
   - **Verify:** Every power term maps to exactly one block that reports it.
   - **Done when:** Complete.
 
-- [ ] **P02.T11** — Numerical methods (EQ-NUM-*)
+- [x] **P02.T11** — Numerical methods (EQ-NUM-*)
   - **Depends:** P02.T03
   - **Do:** Write `numerics.md`:
     - Time base (D-004).
