@@ -77,7 +77,7 @@
   - **Done when:** All four pass.
   - **If stuck:** TROUBLESHOOTING §1 (scaffolder hangs).
 
-- [ ] **P00.T07** — Python validation project (uv)
+- [x] **P00.T07** — Python validation project (uv)
   - **Depends:** P00.T04
   - **Do:**
     1. `uv init validation --python 3.13 --no-workspace` (if `validation/` already exists from T04, use `uv init --python 3.13` inside it).
