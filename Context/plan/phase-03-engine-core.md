@@ -22,7 +22,7 @@
 > ```
 > Discrete inputs (switch states, duties, setpoints, external torques) are held constant between events (ZOH). **Continuous coupling between modules (θ/ω → motor, V_bus → inverter, T → R(T), the two backlash inertias) must go through the per-stage outputs pass, never through values stale since the last event.**
 
-- [ ] **P03.T01** — Core types: `SimTime`, `SignalId`, `SignalBus` + registry
+- [x] **P03.T01** — Core types: `SimTime`, `SignalId`, `SignalBus` + registry
   - **Depends:** P02
   - **Do:**
     - `SimTime(i64 ns)` with helpers (`from_secs_f64`, `as_secs_f64`, `period_from_hz`, which **rounds** to the nearest ns per D-010 and reports the actual frequency).
@@ -31,7 +31,7 @@
   - **Verify:** Unit tests: 20 kHz → 50 000 ns exactly; 30 kHz → 33 333 ns with an actual-frequency report; duplicate registration error; lookup by path.
   - **Done when:** Tests pass. Paths follow CONVENTIONS §3.
 
-- [ ] **P03.T02** — Block and plant interfaces
+- [~] **P03.T02** — Block and plant interfaces
   - **Depends:** P03.T01
   - **Do:**
     - Trait `DiscreteBlock { fn id(&self)->&str; fn period(&self)->SimTime; fn phase(&self)->SimTime; fn priority(&self)->u8; fn step(&mut self, ctx: &mut StepCtx) -> Result<(), SimError>; fn reset(&mut self); fn snapshot/restore }`. `StepCtx` gives bus read/write, time and RNG.
