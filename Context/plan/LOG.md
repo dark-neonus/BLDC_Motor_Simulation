@@ -124,3 +124,9 @@
 - `just check` currently fails only on `ruff format` of `validation/refmodel/` (written by the P11.T01 subagent, still running in the background).
 - Stopped at ~93.5 % plan usage (user limit 97 %).
 - Next: P03.T17
+
+## 2026-10-09 — P11.T01 reference model delivered (subagent)
+- `validation/refmodel/`: 47 self-tests green (~32 s), ruff clean. Isolation confirmed: the agent's file list contains only the physics docs, CONVENTIONS §5/§6 and pyproject; grep of the refmodel finds no reference to the crates.
+- Scope: rigid drivetrain, linear magnetics, averaged inverter, ideal sensors. Not covered: saturation, backlash, switching inverter, phase-open fault, all-off rectification, sensors/observer/auto-tune.
+- 20 spec questions are in `validation/refmodel/SPEC_QUESTIONS.md` (Q-01…Q-20). **P11.T01 stays [~] until they are answered in the spec** (task "Done when").
+- Next: P03.T17, then resolve the SPEC_QUESTIONS.
