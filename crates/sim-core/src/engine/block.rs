@@ -54,6 +54,13 @@ pub trait DiscreteBlock: Send {
     fn set_param(&mut self, name: &str, _value: f64) -> Result<f64, String> {
         Err(format!("unknown parameter `{name}`"))
     }
+    /// Internal (non-state) data for snapshots, e.g. RNG streams, integrators, modes.
+    fn save(&self) -> serde_json::Value {
+        serde_json::Value::Null
+    }
+    fn restore(&mut self, _state: &serde_json::Value) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 /// Standard priorities (D-004 event ordering).

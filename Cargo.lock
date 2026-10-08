@@ -2698,7 +2698,9 @@ dependencies = [
  "diffsol",
  "rand_chacha 0.10.0",
  "rand_core 0.10.1",
+ "rmp-serde",
  "serde",
+ "serde_json",
  "sim-model",
  "thiserror 2.0.21",
 ]

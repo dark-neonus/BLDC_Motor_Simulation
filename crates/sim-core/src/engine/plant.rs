@@ -36,6 +36,13 @@ pub trait PlantModule: Send {
     fn set_param(&mut self, name: &str, _value: f64, _x_own: &mut [f64]) -> Result<f64, String> {
         Err(format!("unknown parameter `{name}`"))
     }
+    /// Internal (non-state) data for snapshots, e.g. RNG streams, integrators, modes.
+    fn save(&self) -> serde_json::Value {
+        serde_json::Value::Null
+    }
+    fn restore(&mut self, _state: &serde_json::Value) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 /// Composition of plant modules with a global state layout.
@@ -66,6 +73,17 @@ impl Plant {
 
     pub fn modules(&self) -> &[Box<dyn PlantModule>] {
         &self.modules
+    }
+
+    pub(crate) fn module_restore(
+        &mut self,
+        i: usize,
+        data: &serde_json::Value,
+    ) -> Result<(), String> {
+        self.modules
+            .get_mut(i)
+            .ok_or_else(|| format!("no module {i}"))?
+            .restore(data)
     }
 
     /// Mutable module `i` and its state slice.

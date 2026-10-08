@@ -12,4 +12,5 @@ pub mod plant;
 pub mod rng;
 pub mod runner;
 pub mod signals;
+pub mod snapshot;
 pub mod time;

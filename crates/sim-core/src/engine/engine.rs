@@ -236,6 +236,18 @@ impl Engine {
         std::mem::take(&mut self.events)
     }
 
+    pub(crate) fn next_fire_times(&self) -> &[SimTime] {
+        &self.next_fire
+    }
+
+    pub(crate) fn set_next_fire_times(&mut self, t: &[SimTime]) {
+        self.next_fire.copy_from_slice(t);
+    }
+
+    pub(crate) fn block_mut(&mut self, i: usize) -> &mut dyn DiscreteBlock {
+        self.blocks[i].as_mut()
+    }
+
     /// Read a live parameter by path.
     pub fn get_param(&self, path: &str) -> Option<f64> {
         let (owner, name) = path.rsplit_once('.')?;
@@ -447,6 +459,67 @@ mod tests {
             EngineEvent::CommandRejected { .. }
         ));
         assert_eq!(e.get_param("decay.tau"), Some(0.25));
+    }
+
+    /// Noisy sampler: writes a Gaussian sample at 1 kHz (exercises RNG snapshotting).
+    struct Noisy {
+        rng: crate::engine::rng::BlockRng,
+        out: SignalId,
+    }
+    impl DiscreteBlock for Noisy {
+        fn id(&self) -> &str {
+            "noisy"
+        }
+        fn period(&self) -> Option<SimTime> {
+            Some(SimTime(1_000_000))
+        }
+        fn priority(&self) -> u8 {
+            10
+        }
+        fn step(&mut self, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
+            let v = ctx.bus.get(self.out) + self.rng.normal();
+            ctx.bus.set(self.out, v);
+            Ok(())
+        }
+        fn reset(&mut self) {}
+        fn save(&self) -> serde_json::Value {
+            serde_json::to_value(self.rng.save()).unwrap_or_default()
+        }
+        fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
+            let st = serde_json::from_value(v.clone()).map_err(|e| e.to_string())?;
+            self.rng = crate::engine::rng::BlockRng::restore(&st);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn snapshot_restore_continues_bit_identically() {
+        use crate::engine::rng::RngService;
+        use crate::engine::snapshot::Snapshot;
+        let build = || {
+            let mut bus = SignalBus::new();
+            let out = bus
+                .register("test.noise", "-", "", SignalKind::Diagnostic)
+                .unwrap();
+            let mut p = Plant::new();
+            p.add(Box::new(Decay { tau: 0.3 }));
+            let blocks: Vec<Box<dyn DiscreteBlock>> = vec![Box::new(Noisy {
+                rng: RngService::new(9).stream("noisy"),
+                out,
+            })];
+            Engine::new(p, bus, blocks, 1e-4)
+        };
+        let mut e = build();
+        e.step_until(SimTime::from_secs_f64(0.1)).unwrap();
+        let snap = Snapshot::from_bytes(&e.snapshot().to_bytes().unwrap()).unwrap();
+        e.step_until(SimTime::from_secs_f64(0.2)).unwrap();
+        let (xa, ba) = (e.x.clone(), e.bus.values().to_vec());
+
+        let mut f = build();
+        f.restore(&snap).unwrap();
+        f.step_until(SimTime::from_secs_f64(0.2)).unwrap();
+        assert_eq!(xa, f.x);
+        assert_eq!(ba, f.bus.values());
     }
 
     #[test]

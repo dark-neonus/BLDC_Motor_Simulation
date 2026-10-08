@@ -108,14 +108,14 @@
   - **Verify:** Tests: scale 0.1 → sim ≈ 0.1× wall time; `max` → ratio ≫ 1; paused CPU ~0 (measure the loop iteration count while paused).
   - **Done when:** Passing.
 
-- [~] **P03.T09** — Snapshots (save/restore full state)
+- [x] **P03.T09** — Snapshots (save/restore full state)
   - **Depends:** P03.T08, P03.T11
   - **Do:** Serialize the engine state with serde + MessagePack: time, plant state, every block's internal state (`snapshot()/restore()`), RNG states, event queue, fidelity config and scene parameters. Snapshots are kept in memory (named) and can be exported to a file.
   - **Files:** `crates/sim-core/src/engine/snapshot.rs`
   - **Verify:** Test: run 0.1 s (with a noisy block using the RNG) → snapshot → run 0.1 s (A); restore → run 0.1 s (B); A == B bit-identical.
   - **Done when:** Passing.
 
-- [ ] **P03.T10** — Recorder & stream decimation
+- [~] **P03.T10** — Recorder & stream decimation
   - **Depends:** P03.T05
   - **Do:**
     - Per-subscription ring buffers.
