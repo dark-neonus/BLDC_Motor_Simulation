@@ -63,6 +63,15 @@
 | UI stutters | Check that the render loop isn't driven by React state; batch WS frames; use the decimated stream |
 | Tailwind classes not applied | Check the Tailwind v4 config/`@import "tailwindcss"` and that the shadcn CSS variables file is imported once in `main.tsx` |
 
+## 3b. Docs (Docusaurus / MDX) problems
+
+| Symptom | Fix |
+|---|---|
+| `MDX compilation failed … Could not parse expression with acorn` | Braces in Markdown are JS in MDX. Heading IDs must be `{/* #id */}`, not `{#id}`. Escape literal braces outside math (`\{`). Math inside `$…$`/`$$…$$` is fine (remark-math) |
+| MDX fails on a line with `<https://…>` | MDX has no autolinks: write `[https://…](https://…)` |
+| `Can't resolve '…/docs/katex/…'` in clientModules | Paths there resolve relative to the site; use `require.resolve()` via `createRequire(import.meta.url)` |
+| Broken link/anchor errors at build | `onBrokenLinks`/`onBrokenAnchors` are `throw` on purpose: fix the link, don't relax the setting |
+
 ## 4. Python / validation problems
 
 | Symptom | Fix |

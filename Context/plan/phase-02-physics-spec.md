@@ -23,7 +23,7 @@
 >
 > Do NOT invent physics. If something is a modeling approximation (e.g. encoder noise vs air gap), label it **Approximation** and explain why it is good enough for learning.
 
-- [ ] **P02.T01** — References page
+- [x] **P02.T01** — References page
   - **Depends:** P01
   - **Do:** Create `docs/docs/physics/references.md`. Collect and verify (title, authors, year, ISBN/DOI/URL) at minimum:
     - Krishnan, *Permanent Magnet Synchronous and Brushless DC Motor Drives* (CRC 2010)
