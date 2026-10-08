@@ -42,3 +42,18 @@
   - The pnpm store is at `/mnt/D/.pnpm-store` (separate filesystem from home).
 - Verified: `just check` green; `graphify query` returns nodes; `graphify hook status` shows installed.
 - Next: P00.T12
+
+## 2026-10-09 — P00.T12–T14, Phase 00 gate (agent: Claude)
+- Did:
+  - T12: CI workflow (rust/web/python).
+  - T13: the remote already existed (`origin` = github.com/dark-neonus/BLDC_Motor_Simulation). The user approved pushing at phase gates.
+  - T14 gate: the fresh-clone test (`mise install && just setup && just check-fast`) passed.
+- Phase-end review (subagent) found 3 majors + 10 minors. Fixed:
+  - unanchored Python-template `.gitignore` dir rules (`env/`, `build/`, `var/`, `parts/` …) that ignored plausible source paths
+  - CI installing every tool / compiling cargo tools (now per-job `install_args` + cargo-binstall 1.25.2 pinned + pnpm/uv caches + plan-check in CI)
+  - `just setup` now runs `mise trust`; `just dev` server detection; first Rust test (`crates/bldc-sim/tests/cli.rs`)
+  - explicit `#![forbid(unsafe_code)]`; `web/.gitignore` `logs` anchored; dead graphify `.gitattributes` rule removed
+- Left to the user (agent config): `.claude/settings.json` hard-codes the graphify path; the CLAUDE.md graphify wording.
+- Verified: CI run 37841687048 green (rust, web, python); local `just check-fast` green.
+- Usage guard: `~/.local/share/claude-usage-guard/usage_guard.py` (calibrated 65% / 40 min).
+- Next: P01.T01
