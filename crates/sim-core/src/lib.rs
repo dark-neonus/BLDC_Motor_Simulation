@@ -2,5 +2,6 @@
 //! scheduler) and all physics and control blocks. Performs no IO.
 
 #![forbid(unsafe_code)]
+pub mod energy;
 pub mod engine;
 pub mod skeleton;

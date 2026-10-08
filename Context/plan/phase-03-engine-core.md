@@ -133,7 +133,7 @@
   - **Verify:** Test: the same seed gives the same sequences; different blocks give independent streams; RNG state serialize → deserialize continues identically. (Full-engine snapshot continuity is tested in T09.)
   - **Done when:** Passing.
 
-- [ ] **P03.T12** — Port the skeleton onto the engine
+- [~] **P03.T12** — Port the skeleton onto the engine
   - **Depends:** P03.T06, P03.T08, P03.T09, P03.T10, P03.T11
   - **Do:** Re-express the skeleton dq motor as a `PlantModule` and the FOC as `DiscreteBlock`s on the bus. Switch the CLI and server to the new engine. Delete `skeleton/runner.rs`. **Keep** the skeleton dq model as a test fixture under `crates/sim-core/src/fixtures/dq_pmsm.rs` (`#[cfg(any(test, feature = "fixtures"))]`), because P05.T03 needs it for the abc ≡ dq equivalence test. Keep the skeleton FOC block (it becomes the interim drive in P05.T11).
   - **Verify:** `just test && just validate && just e2e` — all P01 tests green.
@@ -156,7 +156,7 @@
     - a Zeno case triggers the guard, not a hang
   - **Done when:** Passing.
 
-- [~] **P03.T16** — Energy accounting framework (accumulator + residual)
+- [x] **P03.T16** — Energy accounting framework (accumulator + residual)
   - **Depends:** P03.T02, P03.T05
   - **Do:** Implement the engine side of EQ-ENER now, so every physics phase can test conservation:
     - Each module reports `PowerTerm {path, kind: Input|Output|Loss|External, watts}` and `stored_energy()`.

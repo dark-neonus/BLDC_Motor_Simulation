@@ -36,6 +36,21 @@ pub trait PlantModule: Send {
     fn set_param(&mut self, name: &str, _value: f64, _x_own: &mut [f64]) -> Result<f64, String> {
         Err(format!("unknown parameter `{name}`"))
     }
+    /// Power terms reported to the energy balance (EQ-ENER-01): `(name, kind)`.
+    fn power_terms(&self) -> Vec<(String, crate::energy::PowerKind)> {
+        Vec::new()
+    }
+    /// Current value of each power term [W] (len == power_terms().len()); losses ≥ 0.
+    fn powers(&self, _t: f64, _x: &[f64], _off: usize, _bus: &SignalBus, _p: &mut [f64]) {}
+    /// Energy stored in this module [J] (kinetic, magnetic, potential …).
+    fn stored_energy(&self, _x: &[f64], _off: usize, _bus: &SignalBus) -> f64 {
+        0.0
+    }
+    /// Energy injected by discrete jumps since the last call (param changes, resets) [J].
+    fn take_external_energy(&mut self) -> f64 {
+        0.0
+    }
+
     /// Number of zero-crossing (state-event) functions (EQ-NUM-05).
     fn n_events(&self) -> usize {
         0
@@ -69,6 +84,11 @@ pub struct Plant {
     modules: Vec<Box<dyn PlantModule>>,
     offsets: Vec<usize>,
     n: usize,
+    /// Energy accounting (P03.T16): `(module index, kind)` per power term, and the
+    /// offset of the energy states (one per term, then one for throughput) in x.
+    energy_terms: Vec<(usize, crate::energy::PowerKind)>,
+    energy_off: usize,
+    p_scratch: Vec<f64>,
 }
 
 impl Plant {
@@ -77,6 +97,7 @@ impl Plant {
     }
 
     /// Append a module; returns its state offset. Order = evaluation order.
+    /// Must be called before `finalize_energy` (done by `Engine::new`).
     pub fn add(&mut self, m: Box<dyn PlantModule>) -> usize {
         let off = self.n;
         self.n += m.n_states();
@@ -85,8 +106,52 @@ impl Plant {
         off
     }
 
+    /// Append the energy-integral states (one per power term + throughput). Idempotent.
+    pub fn finalize_energy(&mut self) {
+        if !self.energy_terms.is_empty() || self.energy_off != 0 {
+            return;
+        }
+        self.energy_off = self.n;
+        for (mi, m) in self.modules.iter().enumerate() {
+            for (_, kind) in m.power_terms() {
+                self.energy_terms.push((mi, kind));
+            }
+        }
+        if !self.energy_terms.is_empty() {
+            self.n += self.energy_terms.len() + 1;
+            self.p_scratch = vec![0.0; self.energy_terms.len()];
+        }
+    }
+
     pub fn n_states(&self) -> usize {
         self.n
+    }
+
+    /// Kinds of the energy terms, in state order.
+    pub fn energy_terms(&self) -> &[(usize, crate::energy::PowerKind)] {
+        &self.energy_terms
+    }
+
+    /// Offset of the energy states (valid when `energy_terms` is non-empty).
+    pub fn energy_offset(&self) -> usize {
+        self.energy_off
+    }
+
+    /// Sum of stored energies of all modules.
+    pub fn stored_energy(&self, x: &[f64], bus: &SignalBus) -> f64 {
+        self.modules
+            .iter()
+            .zip(&self.offsets)
+            .map(|(m, &off)| m.stored_energy(x, off, bus))
+            .sum()
+    }
+
+    /// Collect discrete-jump energy from all modules.
+    pub fn take_external_energy(&mut self) -> f64 {
+        self.modules
+            .iter_mut()
+            .map(|m| m.take_external_energy())
+            .sum()
     }
 
     pub fn modules(&self) -> &[Box<dyn PlantModule>] {
@@ -188,6 +253,24 @@ impl Plant {
         for (m, &off) in self.modules.iter().zip(&self.offsets) {
             let n = m.n_states();
             m.derivatives(t, x, off, bus, &mut dx[off..off + n]);
+        }
+        if !self.energy_terms.is_empty() {
+            // d(energy integral)/dt = power; last state = throughput Σ|P|.
+            let mut k = 0;
+            for (mi, (m, &off)) in self.modules.iter().zip(&self.offsets).enumerate() {
+                let nt = self.energy_terms.iter().filter(|(i, _)| *i == mi).count();
+                if nt > 0 {
+                    m.powers(t, x, off, bus, &mut self.p_scratch[k..k + nt]);
+                    k += nt;
+                }
+            }
+            let eo = self.energy_off;
+            let mut thr = 0.0;
+            for (j, &pw) in self.p_scratch.iter().enumerate() {
+                dx[eo + j] = pw;
+                thr += pw.abs();
+            }
+            dx[eo + self.energy_terms.len()] = thr;
         }
     }
 }

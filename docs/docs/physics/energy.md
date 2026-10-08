@@ -42,10 +42,10 @@ $W_{mag}$ is from EQ-MOT-10 (it reduces to $\tfrac12 L_s\sum i^2$ when linear). 
 ## EQ-ENER-03 — Residual {/* #eq-ener-03 */}
 
 $$
-r(t) = \frac{E_{in} + E_{ext} - E_{loss} - \big(E_{st}(t) - E_{st}(0)\big)}{\max\big(E_{thr}(t),\ E_{floor}\big)}
+r(t) = \frac{E_{in} + E_{ext} - E_{loss} - \big(E_{st}(t) - E_{st}(0)\big)}{\max\big(E_{thr}(t),\ |E_{st}(0)|,\ |E_{st}(t)|,\ E_{floor}\big)}
 $$
 
-- $E_{thr} = \int \sum |P_k|\,dt$ is the total energy throughput.
+- $E_{thr} = \int \sum |P_k|\,dt$ is the total energy throughput. The stored-energy magnitudes are also in the denominator, so a lossless system with no flows (e.g. an unpowered pendulum) is still normalised sensibly.
 - $E_{floor} = 10^{-6}$ J avoids dividing by zero at start.
 - Signals: `energy.residual`, and `energy.ok` = $|r| < r_{tol}$.
 

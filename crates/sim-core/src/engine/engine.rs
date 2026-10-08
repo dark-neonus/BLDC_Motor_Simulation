@@ -11,6 +11,7 @@ use super::plant::Plant;
 use super::recorder::Recorder;
 use super::signals::SignalBus;
 use super::time::SimTime;
+use crate::energy::{EnergyBook, EnergySignals, R_TOL_STANDARD};
 
 /// "Never" for blocks with no upcoming event.
 const NEVER: SimTime = SimTime(i64::MAX);
@@ -34,6 +35,8 @@ pub struct Engine {
     events: Vec<EngineEvent>,
     /// Optional recorder, sampled after every accepted substep.
     pub recorder: Option<Recorder>,
+    /// Energy accounting (present when the plant has modules).
+    energy: Option<(EnergySignals, EnergyBook)>,
     // Scratch for state-event handling.
     x_save: Vec<f64>,
     g_prev: Vec<f64>,
@@ -43,11 +46,17 @@ pub struct Engine {
 impl Engine {
     /// Build an engine. The bus is frozen here; blocks first fire at their phase.
     pub fn new(
-        plant: Plant,
+        mut plant: Plant,
         mut bus: SignalBus,
         blocks: Vec<Box<dyn DiscreteBlock>>,
         dt_max: f64,
     ) -> Self {
+        plant.finalize_energy();
+        let energy_sig = if plant.modules().is_empty() {
+            None
+        } else {
+            EnergySignals::register(&mut bus).ok()
+        };
         bus.freeze();
         let x = plant.initial_state();
         let n = x.len();
@@ -65,13 +74,41 @@ impl Engine {
             pending: Vec::new(),
             events: Vec::new(),
             recorder: None,
+            energy: energy_sig.map(|s| {
+                (
+                    s,
+                    EnergyBook {
+                        tol: R_TOL_STANDARD,
+                        ..Default::default()
+                    },
+                )
+            }),
             x_save: Vec::with_capacity(n),
             g_prev: Vec::new(),
             g_new: Vec::new(),
         };
         // Make the bus consistent with the initial state.
         e.plant.outputs(0.0, &e.x, &mut e.bus);
+        if let Some((_, book)) = &mut e.energy {
+            book.e_st0 = e.plant.stored_energy(&e.x, &e.bus);
+            let _ = e.plant.take_external_energy();
+        }
+        e.update_energy();
         e
+    }
+
+    /// Recompute the energy signals (EQ-ENER-03).
+    pub fn update_energy(&mut self) {
+        if let Some((sig, book)) = &mut self.energy {
+            book.update(&mut self.plant, &self.x, &mut self.bus, sig);
+        }
+    }
+
+    /// Set the energy-residual tolerance (per tier).
+    pub fn set_energy_tolerance(&mut self, tol: f64) {
+        if let Some((_, book)) = &mut self.energy {
+            book.tol = tol;
+        }
     }
 
     /// Time of the next scheduled block event (or `None`).
@@ -120,6 +157,7 @@ impl Engine {
             let t_next = self.next_event_time().map_or(target, |t| t.min(target));
             let (t0, t1) = (self.time.as_secs_f64(), t_next.as_secs_f64());
             self.advance(t0, t1)?;
+            self.update_energy();
             self.time = t_next;
         }
         Ok(())
@@ -260,6 +298,7 @@ impl Engine {
         // Keep the bus consistent with possibly changed plant parameters/states.
         self.plant
             .outputs(self.time.as_secs_f64(), &self.x, &mut self.bus);
+        self.update_energy();
     }
 
     fn apply(&mut self, cmd: EngineCommand) -> EngineEvent {
