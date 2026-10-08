@@ -252,7 +252,7 @@ Configurable limits: current limit, velocity limit, voltage limit, ramp rates.
 
 - Use established numerical libraries/solvers. Do not hand-roll an ODE integrator without validating it.
 - **Unit tests for every formula**, with documented references.
-- **Analytic-solution tests**, e.g. locked-rotor current step = RL time constant; no-load speed = Kv·V; stall torque = Kt·V/R.
+- **Analytic-solution tests**, e.g. locked-rotor current step = RL time constant; no-load speed = Kv·V_LL,peak; stall torque = Kt·i_q. Each formula states its voltage/current convention (see the validation catalog, P02.T12).
 - **Energy-conservation checks**: electrical in = mechanical out + copper/iron/switching/friction losses + stored energy. Shown **live in the UI** as an energy-balance indicator.
 - **Cross-check** against an independent reference implementation of the core equations.
 - **Datasheet regression tests**: generic presets must reproduce typical published curves within tolerance.

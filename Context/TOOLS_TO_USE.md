@@ -62,7 +62,7 @@
 | **uPlot** | Live plots | Fastest web time-series plotter, made for streaming. |
 | **React Flow (@xyflow/react)** † | Control-loop block diagram | The leading node/diagram editor library for React. |
 | **Zustand** † + **TanStack Query** † | Client state + REST data | Minimal global state; cached, typed server calls. |
-| **openapi-typescript** † + **@msgpack/msgpack** † | Typed API client, stream decoding | TS types generated from the Rust OpenAPI spec, so front and back can't drift. |
+| **openapi-typescript** † + **openapi-fetch** † + **@msgpack/msgpack** † | Typed API client, stream decoding | TS types generated from the Rust OpenAPI spec, so front and back can't drift. |
 | **math.js (units)** | Unit-aware input (`300rpm`, `2 kgf*cm`) | Mature unit parser/converter. |
 | **CodeMirror 6** † | Luau editor in the custom block | Much lighter than Monaco, has Lua syntax highlighting. |
 | **KaTeX** † | Math inside `?` tooltips | Fast LaTeX rendering, same engine as the docs. |
@@ -79,6 +79,7 @@
 | **remark-math + rehype-katex** † | LaTeX equations | Standard math pipeline. |
 | **Mermaid** (Docusaurus theme) † | Diagrams in Markdown | Text-based diagrams that agents can read and write. |
 | **llms.txt plugin** † | AI-agent index of docs | Agents find the right page without crawling. |
+| **Local search plugin** † (e.g. `@easyops-cn/docusaurus-search-local`) | Offline full-text docs search | Classic Docusaurus has no built-in local search; works without an external service. |
 | **Help registry (YAML)** † | Single source for `?` tooltips | Each id holds short text + doc anchor. Consumed by both app and docs, so they can't diverge. |
 
 ---
