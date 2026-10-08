@@ -13,7 +13,7 @@
 - [ ] **P05.T01** — abc electrical plant module
   - **Depends:** P05.T10
   - **Do:** `MotorElectrical: PlantModule`:
-    - States i_a, i_b (i_c = −i_a − i_b).
+    - States ψ_α, ψ_β (stationary-frame flux linkages, D-013). Currents come from the flux–current relation (EQ-MOT-02, closed form in the linear case); i_c = −i_a − i_b.
     - Inputs: terminal voltages v_a, v_b, v_c from the bus, θe and ω from the mechanical states.
     - Neutral voltage per EQ-MOT; di/dt with Ls = L − M.
     - Outputs: phase currents, back-EMFs, line voltages, i_d/i_q (computed per CONVENTIONS), electrical power.

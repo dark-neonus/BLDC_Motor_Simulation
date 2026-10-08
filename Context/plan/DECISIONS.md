@@ -57,3 +57,8 @@
 - **Context:** The P01 review found the skeleton JSON/msgpack keys were bare (`omega`, `running`) and that REST/MCP returned state after a 5 ms sleep (racy).
 - **Decision:** REST, WS (msgpack frames `{type, v, ...}`) and MCP (`structured_content`) all serialize state with the CONVENTIONS §3 paths (`sim.t`, `motor.omega`, `ctrl.omega_ref`, `sim.running` …). Commands go to the runner with a reply channel, and the response is the state right after the command was applied (`SimHandle::request`).
 - **Consequences:** These interfaces are stable from P01 on (P12 extends them). UI and tests index by dotted keys.
+
+## D-013 — Electrical states are stationary-frame flux linkages (ψα, ψβ) · 2026-10-09 · accepted (refines D-002)
+- **Context:** The spec needs saliency (Ld ≠ Lq), magnetic saturation and back-EMF harmonics in one energy-consistent model. With current states this needs position/current-dependent inductance matrices and their derivatives.
+- **Decision:** The motor plant integrates **ψα, ψβ** with dψ/dt = v − R·i (EQ-MOT-01). Currents follow by inverting the flux–current relation: closed form when linear, 2-D Newton with saturation (EQ-MOT-02/10). With an isolated neutral this is equivalent to integrating (ia, ib). It is still one stationary-frame model, as D-002 requires; dq quantities are only computed, never integrated. Open-phase mode integrates the line flux ψ_ab (EQ-MOT-11).
+- **Consequences:** Saliency and saturation need no dL/dθ terms. Energy accounting is exact by construction (verified numerically: the residual scales with the integrator order). P05.T01/T06 implement flux states.

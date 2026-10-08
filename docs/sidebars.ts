@@ -6,7 +6,21 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "Physics & math",
-      items: ["physics/conventions", "physics/references"],
+      items: [
+        "physics/conventions",
+        "physics/motor",
+        "physics/mechanical",
+        "physics/thermal",
+        "physics/inverter",
+        "physics/supply",
+        "physics/sensors",
+        "physics/control",
+        "physics/energy",
+        "physics/numerics",
+        "physics/signals",
+        "physics/validation-catalog",
+        "physics/references",
+      ],
     },
   ],
 };

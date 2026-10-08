@@ -57,7 +57,7 @@
   - **Verify:** A numeric worked example: Kv = 100 rpm/V, p = 14 → λ, Kt, Ke. Recompute by hand in the page.
   - **Done when:** Conventions match CONVENTIONS.md §5 exactly. If you find an error there, fix both and add a decision.
 
-- [ ] **P02.T03** — Motor electromagnetic model (EQ-MOT-*)
+- [x] **P02.T03** — Motor electromagnetic model (EQ-MOT-*)
   - **Depends:** P02.T02
   - **Do:** Write `motor.md`:
     1. abc voltage equations with self L and mutual M, isolated star neutral (neutral voltage expression, i_a + i_b + i_c = 0, two independent states).
