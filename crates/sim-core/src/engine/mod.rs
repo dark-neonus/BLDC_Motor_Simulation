@@ -3,6 +3,7 @@
 //! Spec: `docs/docs/physics/numerics.md` (EQ-NUM-*).
 
 pub mod block;
+pub mod integrate;
 pub mod plant;
 pub mod signals;
 pub mod time;

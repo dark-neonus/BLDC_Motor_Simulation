@@ -42,7 +42,7 @@
   - **Verify:** Compile + toy tests: a counter block at 1 kHz plus an exponential-decay module; **two coupled modules** (a mass-spring split across two modules, the spring force passed via `outputs`) reproduce the single-module solution to 1e-12, proving per-stage coupling.
   - **Done when:** The interfaces are documented with rustdoc examples.
 
-- [ ] **P03.T03** — Integrators: RK4 and exponential/semi-implicit RL step
+- [x] **P03.T03** — Integrators: RK4 and exponential/semi-implicit RL step
   - **Depends:** P03.T02
   - **Do:**
     - RK4 over the plant state vector (no allocation per step: scratch buffers in the integrator).
@@ -56,7 +56,7 @@
     - RL exponential step exact for constant input
   - **Done when:** All pass.
 
-- [ ] **P03.T04** — diffsol cross-check harness (dev-dependency)
+- [~] **P03.T04** — diffsol cross-check harness (dev-dependency)
   - **Depends:** P03.T03
   - **Do:** Add `diffsol` as a dev-dependency (or a test-only crate `crates/sim-core-xcheck` if it pulls heavy deps). Solve the same test ODEs (decay, oscillator, a nonlinear Van der Pol, and the skeleton PMSM open-loop) with diffsol at tolerance 1e-10 and compare with RK4 at a fine dt.
   - **Files:** `crates/sim-core/tests/xcheck_diffsol.rs`

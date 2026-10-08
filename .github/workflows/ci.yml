@@ -18,6 +18,7 @@ jobs:
         with:
           # cargo-binstall first so the cargo: tools install as prebuilt binaries
           install_args: "cargo-binstall rust cargo:cargo-nextest"
+      - run: scripts/ci-run.sh "rustup components" rustup component add rustfmt clippy
       - uses: Swatinem/rust-cache@v2
       - run: scripts/ci-run.sh "cargo fmt" cargo fmt --all --check
       - run: scripts/ci-run.sh "cargo clippy" cargo clippy --workspace --all-targets -- -D warnings
@@ -64,7 +65,17 @@ jobs:
       - working-directory: validation
         run: ../scripts/ci-run.sh "ruff format" uv run ruff format --check .
       - working-directory: validation
-        run: ../scripts/ci-run.sh "pytest" uv run pytest -q
+        run: ../scripts/ci-run.sh "pytest" uv run pytest -q -m "not needs_binary"
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          install_args: "cargo-binstall rust python uv just"
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/ci-run.sh "just validate" just validate
 
   e2e:
     runs-on: ubuntu-latest
@@ -85,5 +96,4 @@ jobs:
           retention-days: 7
 
   # Enabled in later phases:
-  # validate:  (P11.T09) just validate && just validate-report
   # docs:      (P18)     pnpm -C docs build + help/eq-id/docs-gen no-diff checks

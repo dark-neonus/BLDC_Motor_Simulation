@@ -21,6 +21,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = ["needs_binary: runs the bldc-sim release binary (validate job)"]
 
 [tool.ruff]
 line-length = 100

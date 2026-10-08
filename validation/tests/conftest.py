@@ -41,3 +41,12 @@ def run_scenario(bldc_sim: Path, tmp_path: Path):
         return pl.read_parquet(out / "signals.parquet")
 
     return _run
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Tests that run the bldc-sim CLI are marked `needs_binary` (CI python job skips them)."""
+    for item in items:
+        if "bldc_sim" in getattr(item, "fixturenames", ()) or "run_scenario" in getattr(
+            item, "fixturenames", ()
+        ):
+            item.add_marker(pytest.mark.needs_binary)
