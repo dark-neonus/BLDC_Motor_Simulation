@@ -9,5 +9,6 @@ pub mod engine;
 pub mod fidelity;
 pub mod integrate;
 pub mod plant;
+pub mod rng;
 pub mod signals;
 pub mod time;

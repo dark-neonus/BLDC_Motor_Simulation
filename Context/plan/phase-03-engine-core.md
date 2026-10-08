@@ -97,7 +97,7 @@
   - **Verify:** Test: changing a param mid-run takes effect at the next event boundary and emits exactly one event.
   - **Done when:** Passing.
 
-- [ ] **P03.T08** — Runner: pacing, time scale, step, sim/real ratio
+- [~] **P03.T08** — Runner: pacing, time scale, step, sim/real ratio
   - **Depends:** P03.T07
   - **Do:**
     - Replace the skeleton runner. A dedicated thread runs chunks; time scale ranges from 1e-4 (slow motion) to `max` (unpaced).
@@ -126,7 +126,7 @@
   - **Verify:** Test: a 20 kHz square ripple decimated to 100 buckets/s keeps the correct min/max envelope.
   - **Done when:** Passing.
 
-- [~] **P03.T11** — Deterministic RNG service
+- [x] **P03.T11** — Deterministic RNG service
   - **Depends:** P03.T02
   - **Do:** `RngService` with a scene seed. Each block gets a `ChaCha8Rng` seeded by `hash(scene_seed, block_id)`. Normal distribution via `rand_distr`. RNG state is included in snapshots.
   - **Files:** `crates/sim-core/src/engine/rng.rs`
