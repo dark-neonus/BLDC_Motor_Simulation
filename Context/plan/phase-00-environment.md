@@ -63,7 +63,7 @@
   - **Verify:** `cargo build --workspace && cargo clippy --workspace --all-targets -- -D warnings && cargo run -p bldc-sim -- --version && cargo nextest run --workspace --no-tests=pass`
   - **Done when:** Everything builds clean.
 
-- [ ] **P00.T06** — pnpm workspace with `web/` (Vite React TS) and Biome
+- [x] **P00.T06** — pnpm workspace with `web/` (Vite React TS) and Biome
   - **Depends:** P00.T04
   - **Do:**
     1. Root `package.json` (private, `packageManager` pinned to the pnpm version) and `pnpm-workspace.yaml` (`web`, `docs`).
