@@ -125,7 +125,7 @@
   - **Depends:** P09.T04, P09.T07
   - **Do:** Run in a **separate engine instance** (D-006) copied from the current scene:
     1. Measure R (DC voltage injection), L (voltage step response or HF injection), and J + friction (torque step / speed ramp), per EQ-CTRL.
-    2. Compute gains: current loop (pole-zero cancellation, bandwidth = f_ctrl/10 by default, user-adjustable), velocity loop (from J, bandwidth separation ≥ 5×), position loop, and MIT Kp/Kd suggestions.
+    2. Compute gains: current loop (pole-zero cancellation, ω_c = 2π·f_ctrl/20 by default per EQ-CTRL-12, user-adjustable), velocity loop (from J, bandwidth separation ≥ 5×), position loop, and MIT Kp/Kd suggestions.
     3. Return the measured values + gains + predicted bandwidths. Apply only on user confirmation (`apply: true`).
   - **Files:** `crates/sim-core/src/control/autotune.rs`
   - **Verify:** Tests:

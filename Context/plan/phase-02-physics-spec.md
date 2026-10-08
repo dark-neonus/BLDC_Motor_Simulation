@@ -140,7 +140,7 @@
   - **Verify:** Chip parameters are cited to datasheets.
   - **Done when:** Complete.
 
-- [ ] **P02.T09** — Control algorithms & estimators (EQ-CTRL-*)
+- [x] **P02.T09** — Control algorithms & estimators (EQ-CTRL-*)
   - **Depends:** P02.T06, P02.T08
   - **Do:** Write `control.md`:
     - Discrete PI/PID (form, discretization, anti-windup by clamping and by back-calculation, derivative filter).
