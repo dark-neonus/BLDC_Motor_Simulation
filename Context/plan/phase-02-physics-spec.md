@@ -184,7 +184,7 @@
   - **Verify:** A stability-limit derivation for RK4 on di/dt = −(R/L)·i is included (|λ·dt| ≤ 2.785).
   - **Done when:** Complete.
 
-- [ ] **P02.T12** — Validation catalog (V-*)
+- [x] **P02.T12** — Validation catalog (V-*)
   - **Depends:** P02.T03, P02.T04, P02.T05, P02.T06, P02.T07, P02.T08, P02.T09, P02.T10, P02.T11
   - **Do:** Write `validation-catalog.md`. Each case gets: ID, purpose, **side** (`rust` = Rust unit test, `python` = CLI-level pytest, `both`), scenario description (params, inputs, duration), expected result (formula/value), tolerance with justification, and fidelity tier. At least 40 cases covering:
     - Locked-rotor RL; no-load speed; stall torque; back-EMF amplitude vs speed; abc ≡ dq for sinusoidal.
@@ -203,7 +203,7 @@
   - **Verify:** `just plan-check` still passes; the docs build is clean.
   - **Done when:** ≥ 40 cases, each traceable to EQ IDs.
 
-- [ ] **P02.T14** — Signal & parameter name catalog
+- [x] **P02.T14** — Signal & parameter name catalog
   - **Depends:** P02.T03, P02.T04, P02.T05, P02.T06, P02.T07, P02.T08, P02.T09, P02.T10
   - **Do:** Write `docs/docs/physics/signals.md`: the **canonical list** of every signal path (CONVENTIONS §3) produced by each model (e.g. `motor.i_a`, `motor.omega`, `motor.theta_e`, `load.theta`, `bus.v`, `thermal.t_winding`, `ctrl.foc.iq_ref`, `energy.residual`) with unit, meaning, producing block and EQ ID, plus the top-level parameter paths per component. The Rust code, the refmodel (P11.T01), the help registry and the UI all use these names. Rename any skeleton (P01) names that differ, in code and in this file, in the same task.
   - **Files:** `docs/docs/physics/signals.md`
