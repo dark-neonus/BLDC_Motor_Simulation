@@ -60,7 +60,7 @@
   - **Verify:** `cargo run -p bldc-sim -- run-scenario validation/scenarios/skeleton_locked_rotor.yaml --out /tmp/claude-1000/out && ls /tmp/claude-1000/out`
   - **Done when:** Files are produced and the column names follow CONVENTIONS §3.
 
-- [ ] **P01.T05** — Server: REST + WebSocket stream (axum)
+- [x] **P01.T05** — Server: REST + WebSocket stream (axum)
   - **Depends:** P01.T03
   - **Do:**
     1. `bldc-sim serve [--port 8787]`.
