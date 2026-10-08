@@ -10,7 +10,7 @@
 > - `uv` is only on PATH via the VS Code snap (`~/snap/code/...`). `graphify` is already installed via **pipx**.
 > - **Not installed:** node, rust, just, `gh`.
 
-- [ ] **P00.T01** — Verify system prerequisites & commit the plan
+- [x] **P00.T01** — Verify system prerequisites & commit the plan
   - **Depends:** none
   - **Do:**
     1. Run `for c in git curl gcc g++ make cmake pkg-config; do command -v $c >/dev/null || echo MISSING $c; done`.
@@ -19,7 +19,7 @@
   - **Done when:** All prerequisites are present, or 👤 the user installed the missing ones (`sudo apt install build-essential cmake pkg-config git curl`).
   - **If stuck:** Never run `sudo` yourself. Ask the user.
 
-- [ ] **P00.T02** — Install mise and make it visible to fish (user) and bash (agent)
+- [x] **P00.T02** — Install mise and make it visible to fish (user) and bash (agent)
   - **Depends:** P00.T01
   - **Do:**
     1. `curl https://mise.run | sh` (installs `~/.local/bin/mise`).
@@ -29,7 +29,7 @@
   - **Verify:** `bash -lc 'command -v mise && mise --version'`; `fish -c 'mise doctor'` reports activated.
   - **Done when:** mise is reachable from both shells.
 
-- [ ] **P00.T03** — Pin toolchains in `mise.toml` and `rust-toolchain.toml`
+- [x] **P00.T03** — Pin toolchains in `mise.toml` and `rust-toolchain.toml`
   - **Depends:** P00.T02
   - **Do:**
     1. Create `mise.toml` with `[tools]`: `rust` (latest stable at this date), `node` (current LTS), `pnpm` (latest), `python = "3.13"`, `uv` (latest), `just`, `lefthook`, `gh`, `"cargo:cargo-nextest"`, `"cargo:cargo-insta"`.

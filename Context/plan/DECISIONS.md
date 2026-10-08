@@ -47,3 +47,8 @@
 ## D-010 — Frequencies become integer-ns periods by rounding · 2026-10-08 · accepted
 - **Context:** Many real rates (30 kHz = 33 333.3 ns) don't have an exact integer-ns period (D-004).
 - **Decision:** Round to the nearest ns. Expose the **actual** frequency as a diagnostic signal and warn when the relative error is > 1e-6. Don't reject.
+
+## D-011 — Pinned toolchain versions · 2026-10-08 · accepted
+- **Context:** P00.T03 needs reproducible toolchains.
+- **Decision:** `mise.toml` pins rust 1.99.0 (with `rust-toolchain.toml`: rustfmt, clippy), node 24.21.0 (LTS), pnpm 12.10.1, python 3.13.16, uv 0.12.23, just 1.58.0, lefthook 2.2.0, gh 2.102.0, cargo-nextest 0.9.146, cargo-insta 1.49.0. These were the latest at this date.
+- **Consequences:** `mise install` reproduces the environment. Bump versions deliberately, with a new decision entry.

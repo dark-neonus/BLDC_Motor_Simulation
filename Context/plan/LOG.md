@@ -16,3 +16,12 @@
   - signal catalog (new P02.T14); URL deep links (new P13.T12); docs search; library-folder API/UI; assert exit codes; dependency-order fixes
   - decisions D-009 (docs embedded) and D-010 (ns rounding)
 - Next: P00.T01
+
+## 2026-10-08 — P00.T01–T03 (agent: Claude)
+- Did:
+  - T01: all prerequisites present; the plan was committed in 92df09c.
+  - T02: mise 2026.10.4 installed. With the user's approval, added mise to `~/.config/fish/config.fish` (activate) and to `~/.bashrc` + `~/.profile` (shims on PATH).
+  - T03: pinned the toolchain in `mise.toml` + `rust-toolchain.toml` (D-011); `mise install` took ~220 s.
+- Verified: `bash -lc` resolves cargo/node/pnpm/just/uv/gh/lefthook/nextest/insta through the mise shims, with the expected versions.
+- Notes: the system `tail` is not GNU (rejects `-3`); use `tail -n 3`. Inside the repo, `python` resolves to the mise 3.13.
+- Next: P00.T04
