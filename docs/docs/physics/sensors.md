@@ -52,7 +52,7 @@ With $\delta = h = 0$ the codes change exactly at the six-step boundaries of EQ-
 | 210°…270° | 0 1 0 | 2 | A+ B− |
 | 270°…330° | 0 1 1 | 3 | A+ C− |
 
-Codes 0 and 7 never occur in a healthy sensor set; the controller treats them as a fault. Resolution is 60° electrical, i.e. $60°/p$ mechanical (4.3° for $p = 14$).
+The code is $4h_a + 2h_b + h_c$. Codes 0 and 7 never occur in a healthy sensor set; the controller treats them as a fault. Resolution is 60° electrical, i.e. $60°/p$ mechanical (4.3° for $p = 14$).
 
 ## Magnetic angle encoders
 

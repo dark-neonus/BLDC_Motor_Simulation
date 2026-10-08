@@ -14,7 +14,8 @@ Each block reports its terms, and the engine integrates each one as an extra sta
 
 | Term | Kind | Source |
 |---|---|---|
-| source power $V_{bus}\,i_{src}$ (PSU or battery terminals) | input (negative when the battery is charging) | EQ-SUP-03/04 |
+| source power $V_{bus}\,i_{src}$, **PSU / ideal source only** | input | EQ-SUP-02/03 |
+| battery: **no input term**; its energy is the stored $E_{chem}$ (below) | – | EQ-SUP-04 |
 | battery internal losses $R_0 i^2 + v_1^2/R_1$ | loss | EQ-SUP-04 |
 | brake chopper $V_{bus}^2/R_b$ | loss | EQ-SUP-05 |
 | inverter conduction + diode + switching | loss | EQ-INV-09 |
@@ -33,6 +34,10 @@ E_{st} = \tfrac12 C_{bus}V_{bus}^2 + W_{mag} + \sum \tfrac12 J\omega^2 + U_{cog}
 $$
 
 $W_{mag}$ is from EQ-MOT-10 (it reduces to $\tfrac12 L_s\sum i^2$ when linear). With an ideal source, $E_{chem}$ and $\tfrac12 C_{bus}V_{bus}^2$ are omitted.
+
+**Battery bookkeeping.** For a battery the chemical energy $E_{chem}(SoC)$, $\tfrac12 C_1 v_1^2$ and the $R_0$/$R_1$ losses are inside the system, so $V_{bus}i_{src}$ is an internal flow and is **not** booked as input. Otherwise it would be counted twice.
+
+**Temperature-dependent magnets.** A change of $\lambda_m(T)$ at fixed $\psi$ moves a small amount of energy that no term books. It is neglected: thermal time constants are seconds to minutes, and the effect is far below $r_{tol}$.
 
 ## EQ-ENER-03 — Residual {/* #eq-ener-03 */}
 

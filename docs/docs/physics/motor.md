@@ -158,13 +158,13 @@ $$
 **Approximation** (Steinmetz-type, at nominal flux):
 
 $$
-P_{fe} = k_h\,|\omega_e| + k_e\,\omega_e^2,\qquad
-T_{fe} = -\left(k_h\,p\,\tanh\!\frac{\omega_m}{\omega_\epsilon} + k_e\,p^2\,\omega_m\right)
+P_{fe} = k_{hy}\,|\omega_e| + k_{ed}\,\omega_e^2,\qquad
+T_{fe} = -\left(k_{hy}\,p\,\tanh\!\frac{\omega_m}{\omega_\epsilon} + k_{ed}\,p^2\,\omega_m\right)
 $$
 
 - Hysteresis loss grows ∝ $|\omega_e|$ and eddy-current loss ∝ $\omega_e^2$ (both at nominal flux). $\tanh(\omega_m/\omega_\epsilon)$ with $\omega_\epsilon \approx 0.01$ rad/s replaces $\mathrm{sign}(\omega_m)$, so the torque is smooth and still always dissipative ($T_{fe}\,\omega_m \le 0$).
 - The loss power reported to the energy balance is exactly $-T_{fe}\,\omega_m$. Its heat goes to the stator node (see [Thermal](./thermal.md)).
-- $k_h$ and $k_e$ are fitted to the no-load spin-down or no-load current; presets mark them as estimated.
+- $k_{hy}$ and $k_{ed}$ are fitted to the no-load spin-down or no-load current; presets mark them as estimated.
 
 ## Magnetic saturation (Detailed tier)
 
@@ -208,7 +208,9 @@ $$
 \frac{d\psi_{ab}}{dt} = v_{aT} - v_{bT} - 2R\,i
 $$
 
-$i$ follows from $\psi_{ab}(i,\theta_e)$, built with EQ-MOT-02 along that current direction (a 1-D Newton solve). In the linear non-salient case this is $\psi_{ab} = 2L_s i + \lambda_m(\Phi_a - \Phi_b)$. The other phase pairs follow by symmetry. With two terminals open the current is zero.
+$i$ follows from $\psi_{ab}(i,\theta_e)$, built with EQ-MOT-02 along that current direction (a 1-D Newton solve). In the linear non-salient case this is $\psi_{ab} = 2L_s i + \lambda_m(\Phi_a - \Phi_b)$. The other phase pairs follow by symmetry.
+
+**All-off / two-off (zero-current mode).** With two or three legs Off and no current, the motor still generates. The model monitors the line-to-line EMFs: when $|e_x - e_y|$ exceeds $V_{bus} + 2V_f$ for some pair, that pair enters single-path mode with both terminals diode-clamped (high side of the more positive terminal, low side of the other). This is how a spinning motor charges the bus after an over-voltage trip disables PWM (state event).
 
 ### EQ-MOT-12 — Floating-terminal voltage and reconnection {/* #eq-mot-12 */}
 
@@ -221,6 +223,7 @@ $$
 - **Inverter leg off** (not a physical cut): if $v_{cT}$ would rise above $V_{bus} + V_f$ or fall below $-V_f$, a free-wheeling diode starts conducting. That is a **state event** (EQ-NUM): the model returns to the two-state mode with the same $\psi_{\alpha\beta}$ (continuous) and the inverter clamps the terminal (EQ-INV).
 - **Physical disconnect fault:** the phase never reconnects.
 - Entering open-phase mode is also a state event: the leg is off **and** $i_c$ crosses zero.
+- **Leaving open-phase mode:** $\psi_{\alpha\beta}$ is rebuilt from $(i, \theta_e)$ with EQ-MOT-02 (it is continuous), and the clamp side is set by which bound $v_{cT}$ crossed: above $V_{bus} + V_f$ means the high-side diode, below $-V_f$ means the low side. It is not taken from $\mathrm{sgn}(i_c)$, which is 0 at that instant.
 
 ## Power and energy
 

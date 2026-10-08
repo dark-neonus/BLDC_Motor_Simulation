@@ -41,7 +41,7 @@ Every case has an ID, which is used verbatim in the test name (`test_v_mot_001_�
 
 | ID | Side | Tier | Scenario | Expected | Tolerance |
 |---|---|---|---|---|---|
-| V-MECH-001 | both | Ideal | unpowered arm, 0.01 rad release, $N$ = 1 | period $T_0 = 2\pi\sqrt{J_{tot}/(gM_{eff})}$ | rtol 5e-4 |
+| V-MECH-001 | both | Ideal | unpowered arm, 0.01 rad release, $N$ = 1, $g$ = 9.80665 | period $T_0 = 2\pi\sqrt{J_{tot}/(gM_{eff})}$ | rtol 5e-4 |
 | V-MECH-002 | rust | Ideal | large-angle swing, no friction | energy residual < 1e-6 over 10 periods | – |
 | V-MECH-003 | rust | Ideal | torque step $T$ through a rigid gearbox $N$ | $\dot\omega_m = T/J_{eq}$ (EQ-MECH-02) | rtol 1e-9 |
 | V-MECH-004 | rust | Standard | gearbox $\eta$ = 0.8, drive vs back-drive | loss $= (1-\eta)\lvert\tau_{in}\omega_m\rvert$ in both directions | rtol 1e-6 |
@@ -67,9 +67,9 @@ Every case has an ID, which is used verbatim in the test name (`test_v_mot_001_�
 | V-INV-001 | rust | Detailed | switching vs averaged, FOC steady state | period-averaged $i_x$ agree | atol 1 % of rated current |
 | V-INV-002 | rust | – | SVPWM duties vs sector-based reference, 36 angles | equal | atol 1e-12 |
 | V-INV-003 | rust | – | max linear amplitude | SVPWM $V_{bus}/\sqrt3$, SPWM $V_{bus}/2$ | rtol 1e-12 |
-| V-INV-004 | both | Detailed | dead time, $i > 0$ vs $i < 0$ | average terminal voltage error $\mp(t_d/T)(V_{bus} + V_f)$ | rtol 2 % |
+| V-INV-004 | both | Detailed | dead time, $i > 0$ vs $i < 0$ | average terminal voltage error $\mp(t_d/T)(V_{bus} + 2V_f - 2R_{on}\lvert i\rvert)$ | rtol 2 % |
 | V-INV-005 | rust | Detailed | leg Off, current $\pm$ | terminal clamps to $-V_f$ / $V_{bus} + V_f$ | atol 1e-9 V |
-| V-INV-006 | rust | Detailed | locked rotor, single leg pair at duty $D$ | ripple $\Delta i = V_{bus}D(1-D)T/(2L_s)$ for the a–b path | rtol 5 % |
+| V-INV-006 | rust | Detailed | locked rotor, leg a at duty $D$, leg b held Low, leg c Off, $t_d = 0$ | ripple $\Delta i = V_{bus}D(1-D)T/(2L_s)$ for the a–b path | rtol 5 % |
 | V-INV-007 | rust | Standard | power check in both modes | $V_{bus}(i_{dc} + i_{sw}) = \sum v_{xT}i_x + P_{inv}$ | rtol 1e-6 |
 | V-INV-008 | rust | – | switching loss vs $f_{pwm}$ | linear in $f_{pwm}$ | rtol 1e-9 |
 
@@ -92,14 +92,14 @@ Every case has an ID, which is used verbatim in the test name (`test_v_mot_001_�
 | V-SENS-003 | rust | – | noise $\sigma$, 1e4 seeded samples | sample std within ±5 % of $\sigma$; same seed gives the same sequence | statistical |
 | V-SENS-004 | rust | – | Halls over one electrical turn | transitions at 30° + 60°k, code table of EQ-SENS-02 | exact |
 | V-SENS-005 | rust | Detailed | ADC sampled at `pwm.center` | reading ≈ period-average current | atol 1 % of rated |
-| V-SENS-006 | both | Standard | ADC offset on phase a | $i_d, i_q$ ripple at $\omega_e$ with amplitude $\propto$ offset | rtol 5 % |
+| V-SENS-006 | both | Standard | ADC offset $i_{off}$ on phase a (two-shunt) | $i_d, i_q$ ripple at $\omega_e$ with amplitude $2i_{off}/\sqrt3$ | rtol 5 % |
 | V-SENS-007 | rust | Standard | quadrature 1000 CPR | 4000 counts/rev; index once per rev | exact |
 
 ## Control and estimation (EQ-CTRL)
 
 | ID | Side | Tier | Scenario | Expected | Tolerance |
 |---|---|---|---|---|---|
-| V-CTRL-001 | both | Standard | FOC current-loop step | closed-loop bandwidth ≈ $\omega_c$ | rtol 15 % |
+| V-CTRL-001 | both | Standard | FOC current-loop step | step time constant $\tau_{63} \approx 1/\omega_c$ | rtol 15 % |
 | V-CTRL-002 | both | Standard | velocity step, PI design EQ-CTRL-04 | overshoot 13.5 % (no prefilter), ≈ 0 with prefilter | atol 2 % |
 | V-CTRL-003 | both | Standard | MIT hold under load $\tau_L$ | static deflection $\tau_L/K_p$ | rtol 2 % |
 | V-CTRL-004 | rust | Standard | PLL, $\zeta$ = 1 | −3 dB bandwidth $2.48\,\omega_n$ | rtol 5 % |

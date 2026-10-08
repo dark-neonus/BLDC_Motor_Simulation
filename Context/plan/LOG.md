@@ -99,3 +99,13 @@
 ## 2026-10-09 — CI note (agent: Claude)
 - The CI run for the phase-01 push (37847777743) failed: rust (`cargo fmt --all --check`) and python (`uv sync --frozen`). Both pass locally and in a fresh clone, and the previous run (37841687048) was green with the same config. The logs need GitHub auth (gh not logged in).
 - Added `scripts/ci-run.sh`, which publishes the failing step's output as a public `::error` annotation. Verify it at the next push (P02 gate): `curl …/check-runs/<job-id>/annotations`. Also consider bumping the Node-20 actions (deprecation warning).
+
+## 2026-10-09 — P02 physics spec + gate (agent: Claude)
+- Did: wrote every page in `docs/docs/physics/` (references, conventions, motor, mechanical, thermal, inverter, supply, sensors, control, energy, numerics, signals, 61-case validation catalog). Key formulas were checked numerically before publishing (scratch scripts). D-013: flux-linkage states.
+- Phase review (subagent): 2 blockers, 7 majors, 13 minors — all fixed except none deferred:
+  - backlash contact sign; battery energy double-count; dead-time error with 2 diode intervals; τ63 as the current-loop metric
+  - bus RC step limit; all-off rectification mode; rigid-drivetrain lumped friction + paths
+  - MIT law without η; six-step H/O leg timing + averages; and the minors (symbols, g, N², Kt_dc, codes, names)
+- Verified: `just check` green; docs build clean.
+- Token budget: the docs graphify re-extraction is deferred and batched at the P04 gate (code graph is kept current by the post-commit hook).
+- Next: P03.T01

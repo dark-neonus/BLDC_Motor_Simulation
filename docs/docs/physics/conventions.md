@@ -21,7 +21,7 @@ A three-phase motor has three currents that keep changing. Two simple coordinate
 | $i_\alpha, i_\beta$ | stationary-frame currents | A | `motor.i_alpha`, `motor.i_beta` |
 | $i_d, i_q$ | rotor-frame currents | A | `motor.i_d`, `motor.i_q` |
 | $\lambda_m$ | peak phase flux linkage of the magnets | Wb (V·s) | `motor.electrical.lambda_m` |
-| $R$, $L_s$ | per-phase resistance, synchronous inductance (star-equivalent) | Ω, H | `motor.electrical.r_phase`, `…l_phase` |
+| $R$, $L_s$ | per-phase resistance, synchronous inductance (star-equivalent; $L_d = L_q = L_s$ when non-salient) | Ω, H | `motor.electrical.r_phase`, `motor.electrical.l_d`, `motor.electrical.l_q` |
 | $K_t$ | torque constant | N·m/A | `motor.electrical.kt` |
 | $K_{e}$ | back-EMF constant, line-to-line peak | V·s/rad | `motor.electrical.ke` |
 | $K_v$ | velocity constant | rpm/V | `motor.electrical.kv` |
@@ -187,7 +187,7 @@ A gimbal motor with $K_v = 100$ rpm/V and 28 magnets ($p = 14$):
 | $K_e$ [V/krpm], LL **RMS** (industrial servo) | volts RMS per 1000 rpm | $\lambda_m = \dfrac{\sqrt2\,K_e\,/\,(1000 \cdot 2\pi/60)}{\sqrt3\,p}$ |
 | $K_t$ [N·m/A], per **peak** phase A | this page | $\lambda_m = K_t / (1.5\,p)$ |
 | $K_t$ [N·m/A], per **RMS** phase A | torque per A RMS | $\lambda_m = K_t / (1.5\sqrt2\,p)$ |
-| $K_t$ per **DC bus** A, six-step on an ideal trapezoidal motor | two phases conduct the bus current | $K_{t,dc} = K_e$ (flat-top LL); see EQ-MOT for the shape-dependent conversion |
+| $K_t$ per **DC bus** A, six-step on an ideal trapezoidal motor (flat-top width $w$) | two phases conduct the bus current | $K_{t,dc} = 2p\lambda_m/b_1(w)$, so $\lambda_m = K_{t,dc}\,b_1(w)/(2p)$; at $w = 120°$, $K_{t,dc} = 1.645\,p\lambda_m$ ($b_1$: EQ-MOT-03) |
 
 When the convention is unclear, the [datasheet wizard](#datasheet-variants) **asks** instead of guessing (P04.T12).
 

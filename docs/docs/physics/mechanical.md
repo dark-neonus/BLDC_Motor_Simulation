@@ -15,7 +15,8 @@ Conventions: positive rotation is counter-clockwise from the output-shaft end. T
 1. Rigid bodies on fixed axes; shaft torsion is ignored except where the gearbox contact (backlash) model is enabled.
 2. The gearbox has a fixed ratio $N \ge 1$ (reduction). Load-side angle $\theta_L = \theta_m / N$ when rigid.
 3. Gravity acts downward in the plane of the arm ($g = 9.80665\ \mathrm{m/s^2}$).
-4. Friction is lumped per body (motor bearings, gearbox, load bearing).
+4. Friction is lumped per body (motor bearings, gearbox, load bearing). In the **rigid** drivetrain the bodies share one degree of freedom, so their friction is combined into one stick–slip element on $\omega_m$: $T_{s,eq} = T_{s,m} + T_{s,L}/N$, $T_{c,eq} = T_{c,m} + T_{c,L}/N$, $b_{eq} = b_m + b_L/N^2$. With backlash each side keeps its own element. Always $T_c \le T_s$.
+5. Angles are **unwrapped** (continuous, not reduced to $[0, 2\pi)$); wrapping is only for display and sensors.
 
 ## Symbols
 
@@ -26,7 +27,7 @@ Conventions: positive rotation is counter-clockwise from the output-shaft end. T
 | $N$, $\eta$ | gear ratio, efficiency | –, – | `gearbox.ratio`, `gearbox.efficiency` |
 | $b_{bl}$ | backlash (total, load side) | rad | `gearbox.backlash` |
 | $k_c, d_c$ | gear contact stiffness, damping | N·m/rad, N·m·s/rad | `gearbox.stiffness`, `gearbox.damping` |
-| $T_s, T_c, b$ | static, Coulomb, viscous friction | N·m, N·m, N·m·s/rad | `motor.mechanical.friction.*` |
+| $T_s, T_c, b$ | static, Coulomb, viscous friction | N·m, N·m, N·m·s/rad | `motor.mechanical.friction.*`, `gearbox.friction.*`, `load.friction.*` |
 | $m_a, L_a$ | arm mass, length | kg, m | `load.arm.mass`, `load.arm.length` |
 | $m, d$ | point mass and its distance from the shaft | kg, m | `load.mass`, `load.distance` |
 | $\theta_L, \omega_L$ | load angle and speed | rad, rad/s | `load.theta`, `load.omega` |
@@ -58,7 +59,7 @@ J_{eq} = J_m + J_{gi} + \frac{J_{go} + J_{load}}{N^2},\qquad \dot\theta_m = \ome
 $$
 
 - $T_L$ is the sum of external load-side torques (gravity, loads, disturbance, load friction).
-- $J_{load}$ comes from EQ-MECH-05.
+- $J_{load}$ comes from EQ-MECH-06. $J_{tot,L} = J_{load} + J_{go} + N^2(J_m + J_{gi})$ is the total inertia seen at the load shaft (rigid).
 - "Bypass gearbox" means $N = 1$, $\eta = 1$, $J_{gi} = J_{go} = 0$.
 
 ### EQ-MECH-03 — Gearbox efficiency loss {/* #eq-mech-03 */}
@@ -91,7 +92,7 @@ $$
 \tau_c =
 \begin{cases}
 0, & |\delta| \le b_{bl}/2 \\[4pt]
-\max\!\Big(0,\; \mathrm{sgn}(\delta)\big[k_c(|\delta| - b_{bl}/2) + d_c\,\mathrm{sgn}(\delta)\,\dot\delta\big]\Big)\,\mathrm{sgn}(\delta), & |\delta| > b_{bl}/2
+\mathrm{sgn}(\delta)\,\max\!\Big(0,\; k_c(|\delta| - b_{bl}/2) + d_c\,\mathrm{sgn}(\delta)\,\dot\delta\Big), & |\delta| > b_{bl}/2
 \end{cases}
 $$
 
@@ -135,7 +136,7 @@ Typical values: motor bearings $T_c \approx 0.1$–1 % of rated torque; gearboxe
 
 ### EQ-MECH-06 — Arm with a point mass under gravity {/* #eq-mech-06 */}
 
-A uniform rod (mass $m_a$, length $L_a$, pivoted at one end) carries a point mass $m$ at distance $d$. With arm angle $\varphi = \theta_L + \varphi_{mount}$ measured from straight down:
+A uniform rod (mass $m_a$, length $L_a$, pivoted at one end) carries a point mass $m$ at distance $d$. `load.theta` is the arm angle itself, measured from straight down ($\varphi = \theta_L$; a mounting offset is applied when the scene is built, by choosing the initial $\theta_L$):
 
 $$
 M_{eff} = \frac{m_a L_a}{2} + m\,d,\qquad
@@ -150,7 +151,7 @@ $$
 T_0 = 2\pi\sqrt{\frac{J_{load} + J_{go} + N^2 (J_m + J_{gi})}{g\,M_{eff}}}
 $$
 
-Checked numerically: for $m_a = 0.1$ kg, $L_a = 0.2$ m, $m = 0.5$ kg, $d = 0.15$ m, $J_m = 2.5\cdot10^{-4}$ kg·m² and $N = 1$, theory gives 0.77948 s and the simulation 0.77950 s at 0.01 rad amplitude.
+Checked numerically: for $m_a = 0.1$ kg, $L_a = 0.2$ m, $m = 0.5$ kg, $d = 0.15$ m, $J_m = 2.5\cdot10^{-4}$ kg·m² and $N = 1$, theory gives 0.77961 s (with $g$ = 9.80665 m/s²); the check simulation (run with $g$ = 9.81) matched its own theory value to 2·10⁻⁵ s.
 
 ### EQ-MECH-07 — Simple load torques {/* #eq-mech-07 */}
 
@@ -174,7 +175,7 @@ Checked numerically: for $m_a = 0.1$ kg, $L_a = 0.2$ m, $m = 0.5$ kg, $d = 0.15$
 Changing these changes $J_{load}$ and $M_{eff}$ instantly.
 
 - **Default `keep_speed`** (D-007): $\omega_L$ stays the same, as if the new mass were already moving with the arm.
-- **Option `conserve_momentum`:** $\omega_L^{+} = \omega_L^{-}\,J^{-}/J^{+}$ (the mass is added at rest relative to the ground).
+- **Option `conserve_momentum`:** $\omega_L^{+} = \omega_L^{-}\,J^{-}_{tot,L}/J^{+}_{tot,L}$, using the total load-side inertia of EQ-MECH-02 (rigid) or the load body's inertia (backlash).
 
 In both cases the jump in stored energy is booked as external energy so the balance stays exact:
 

@@ -47,7 +47,7 @@ $$
 K_p = \omega_c L,\qquad K_i = \omega_c R \;\Rightarrow\; \frac{i}{i^*} \approx \frac{\omega_c}{s + \omega_c}
 $$
 
-The default bandwidth is $\omega_c = 2\pi f_{ctrl}/20$. The 1.5-period delay then costs about 27° of phase margin.
+The default is $\omega_c = 2\pi f_{ctrl}/20$. The d axis uses $L_d$ and the q axis $L_q$. With the 1.5-period delay the loop keeps about 63° phase margin. **Measured quantity:** the step-response time constant $\tau_{63} \approx 1/\omega_c$ (the −3 dB bandwidth comes out at about $2.2\,\omega_c$ because of the delay, so it is not used as the metric).
 
 ### EQ-CTRL-04 — Velocity and position loops {/* #eq-ctrl-04 */}
 
@@ -64,7 +64,7 @@ $$
 
 - The output is converted to motor speed (×$N$) and clamped to the speed limit.
 - Loop semantics: a disabled outer loop passes its setpoint straight through, and each loop has its own rate and ramp limiter.
-- A P-only position loop under constant load torque holds a steady error of $\tau_L/(N\,K_t\,K_{p,v}\,K_{p,p})$ when the velocity loop is P-only, and zero error with a PI velocity loop.
+- A P-only position loop under constant load torque holds a steady error of $\tau_L/(N^2\,K_t\,K_{p,v}\,K_{p,p})$ when the velocity loop is P-only, and zero error with a PI velocity loop.
 
 ## Other controllers
 
@@ -89,12 +89,13 @@ There is no feedback. **Loss of synchronism** is flagged when $|\mathrm{wrap}(\t
 
 $$
 \tau^* = K_p(\theta^* - \theta_L) + K_d(\omega^* - \omega_L) + \tau_{ff},\qquad
-i_q^* = \mathrm{clamp}\!\Big(\frac{\tau^*}{N\,\eta\,K_t}\Big)
+i_q^* = \mathrm{clamp}\!\Big(\frac{\tau^*}{N\,K_t}\Big)
 $$
 
 - Validation (V-CTRL-mit): static deflection under load is $\tau_L/K_p$.
 - Damping ratio: $\zeta = K_d / (2\sqrt{K_p J_{L,tot}})$.
 - The law runs on top of the current loop at its own rate.
+- No efficiency factor is applied: gear loss is speed-dependent and zero at standstill (EQ-MECH-03), so holding torque transmits without loss.
 
 ## Estimators
 
@@ -167,7 +168,7 @@ Runs on a copy of the scene (D-006).
 | current | $\omega_c = 2\pi f_{ctrl}/20$ |
 | velocity | $\omega_v = \omega_c/10$ |
 | position | $\omega_p = \omega_v/5$ |
-| MIT | $K_p = J\,\omega_m^2$ with $\omega_m = \omega_v/5$; $K_d = 2 \cdot 0.7\sqrt{K_p J}$ |
+| MIT | $K_p = J\,\omega_{mit}^2$ with $\omega_{mit} = \omega_v/5$; $K_d = 2 \cdot 0.7\sqrt{K_p J}$ |
 
 The gains are applied only after the user confirms. Validation: the measured values are within 5 % of the true parameters, and the achieved bandwidth is within ±20 % of the target.
 

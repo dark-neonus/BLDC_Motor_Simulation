@@ -74,11 +74,11 @@ During that gap the leg follows the diode rule of EQ-INV-01. Duties are clamped 
 For fast simulation (`fidelity.inverter_mode = averaged`), the switching inside each period is replaced by its average:
 
 $$
-\bar v_{xT} = d_x\,V_{bus} - R_{on}\,i_x - \sigma(i_x)\,\frac{t_d}{T_{pwm}}\,\big(V_{bus} + V_f\big),
+\bar v_{xT} = d_x\,V_{bus} - R_{on}\,i_x - \sigma(i_x)\,\frac{t_d}{T_{pwm}}\,\big(V_{bus} + 2V_f - 2R_{on}|i_x|\big),
 \qquad \sigma(i) = \tanh(i/i_\epsilon)
 $$
 
-The last term is the **dead-time voltage error**:
+The last term is the **dead-time voltage error**. A diode conducts in **both** dead-time intervals of a period: after the High→Off edge and after the Low→Off edge.
 
 - $i_x > 0$: the high side loses $t_d$ of on-time per period;
 - $i_x < 0$: it gains $t_d$.
@@ -146,6 +146,8 @@ Six-step drives two phases: the phase with the most positive back-EMF goes High 
 - PWM is applied to the high-side switch. The low side stays on for the whole sector, and during the PWM off-time the current freewheels through the low-side diode of the High leg.
 - Reverse rotation swaps High and Low.
 - An optional advance angle shifts the table earlier.
+- **Leg timing in six-step:** the High leg alternates **H / O** (not H / L) with duty $d$, the Low leg is L for the whole sector, and the third leg is O. No dead time is needed between H and O.
+- **Averaged six-step**, High leg with $i > 0$: $\bar v_{xT} = d(V_{bus} - R_{on}i) + (1-d)(-V_f)$ and $\bar i_{dc} \mathrel{+}= d\,i$. With $i < 0$ the diode clamps to $V_{bus} + V_f$ during O, so $\bar v_{xT} = d(V_{bus} - R_{on}i) + (1-d)(V_{bus} + V_f)$ and $\bar i_{dc} \mathrel{+}= i$. Off legs follow EQ-INV-01.
 - Hall sensors give these sectors directly (EQ-SENS).
 
 ## Losses and DC-link current
@@ -169,7 +171,7 @@ $$
 | Loss | Formula | How it is accounted |
 |---|---|---|
 | MOSFET conduction | $R_{on}\,i_x^2$ for each conducting switch | implicit in the terminal voltages |
-| diode conduction | $V_f\,\lvert i_x\rvert$ while a diode conducts; averaged: $V_f\,\lvert i_x\rvert\,t_d/T_{pwm}$ | implicit in the terminal voltages |
+| diode conduction | $V_f\,\lvert i_x\rvert$ while a diode conducts; averaged: $2V_f\,\lvert i_x\rvert\,t_d/T_{pwm}$ | implicit in the terminal voltages |
 | switching | $\tfrac12 V_{bus}\lvert i_x\rvert(t_r + t_f)$ per leg per PWM period | an extra bus current $i_{sw} = f_{pwm}\sum_x \tfrac12\lvert i_x\rvert(t_r + t_f)$, the same in both modes |
 
 The conduction terms follow automatically: with EQ-INV-01/08, $V_{bus}\,i_{dc} - \sum_x v_{xT}\,i_x$ is exactly the conduction plus diode loss. This was checked case by case for every leg state.
