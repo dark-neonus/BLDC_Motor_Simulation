@@ -13,7 +13,7 @@
 >
 > **Note:** Skeleton internals (hardcoded params, dq model) are **temporary** and get replaced in P03–P09. Keep the *interfaces* (CLI contract, WS framing, REST paths, MCP tool names) close to the final ones in P12, because those survive.
 
-- [ ] **P01.T01** — Ideal PMSM dq model + RK4 (temporary)
+- [x] **P01.T01** — Ideal PMSM dq model + RK4 (temporary)
   - **Depends:** P00
   - **Do:**
     1. In `sim-core/src/skeleton/`, implement the dq model: `did/dt = (vd − R·id + ωe·Lq·iq)/Ld`, `diq/dt = (vq − R·iq − ωe·Ld·id − ωe·λ)/Lq`, `T = 1.5·p·λ·iq`, `J·dω/dt = T − B·ω`, `dθ/dt = ω`, with ωe = p·ω.
