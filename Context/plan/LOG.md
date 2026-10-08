@@ -57,3 +57,20 @@
 - Verified: CI run 37841687048 green (rust, web, python); local `just check-fast` green.
 - Usage guard: `~/.local/share/claude-usage-guard/usage_guard.py` (calibrated 65% / 40 min).
 - Next: P01.T01
+
+## 2026-10-09 — P01.T01–T07, T09 (agent: Claude)
+- Did:
+  - T01: skeleton dq PMSM + RK4 with analytic tests.
+  - T02: FOC (step 0→20 rad/s settles in 20 ms, 15.6 % overshoot, max i_q 3.9 A).
+  - T03: runner thread (±10 % pacing, 10/10 runs).
+  - T04: `run-scenario` CLI → parquet/csv/meta.
+  - T05: axum REST + MessagePack WS at 30 Hz (sim/real 1.00 in debug).
+  - T06: MCP via rmcp 3.5.1 streamable HTTP (`/mcp`) + `.mcp.json`.
+  - T07: web skeleton (uPlot, Pixi 8, msgpack WS, zustand).
+  - T09: Python V-SKEL-001/002 green.
+- Notes:
+  - sha2 0.11 digests lack `LowerHex` (manual hex).
+  - Biome a11y requires ARIA roles: readouts use `role="status"`, panels use `<section>`. Add this to the P13.T04 convention.
+  - The usage guard was recalibrated to the user's 80 % reading.
+- Verified: `cargo nextest` 9/9, vitest 3/3, `just validate` 4/4; Vite proxy smoke test (page, REST, WS frames).
+- Next: P01.T08 (docs), T10, T11, T12 gate.

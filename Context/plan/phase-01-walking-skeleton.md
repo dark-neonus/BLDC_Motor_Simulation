@@ -118,7 +118,7 @@
   - **Verify:** `pnpm -C docs build`; `build/llms.txt` exists; the equation renders in `pnpm -C docs serve`.
   - **Done when:** The build is clean with no broken links (`onBrokenLinks: 'throw'`, `onBrokenAnchors: 'throw'`).
 
-- [ ] **P01.T09** — First Python validation tests
+- [x] **P01.T09** — First Python validation tests
   - **Depends:** P01.T04
   - **Do:**
     1. `validation/tests/conftest.py`: locate the binary via env `BLDC_SIM_BIN` (default `target/release/bldc-sim`), a `run_scenario(path) -> polars.DataFrame` helper, and a tmp dir.
