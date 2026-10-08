@@ -67,6 +67,7 @@
 - [ ] **P07.T06** — DC bus capacitor
   - **Depends:** P07.T05
   - **Do:** Plant module: V_bus state, C·dV/dt = i_src − i_dc − i_chopper. Report the stored energy ½CV². Signal `bus.v`.
+    - **Performance:** with a stiff source (R_o·C_bus ≈ 10 µs) the explicit step limit `tau_bus/20` (EQ-NUM-04, P03.T06) forces sub-µs steps. Treat the bus node with an exact/semi-implicit update over each substep (it is linear in V_bus for PSU/battery) and drop `tau_bus` from `StepLimits` once the energy tests prove it accurate (record a decision).
   - **Files:** `crates/sim-core/src/physics/supply/bus.rs`
   - **Verify:** Test: a constant discharge current gives a linear voltage drop.
   - **Done when:** Passing.

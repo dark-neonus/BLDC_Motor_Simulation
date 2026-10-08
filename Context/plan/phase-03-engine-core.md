@@ -78,14 +78,14 @@
     - a variable-event block firing at irregular times is honored exactly
   - **Done when:** Tests pass.
 
-- [~] **P03.T06** — Fidelity configuration
+- [x] **P03.T06** — Fidelity configuration
   - **Depends:** P03.T05
   - **Do:** `FidelityConfig { tier: Ideal|Standard|Detailed, dt_max, inverter_mode: Averaged|Switching, enable_cogging, enable_iron_loss, enable_saturation, enable_thermal, enable_sensor_nonideal, … }` with tier presets that the user can override per flag. Default `dt_max` rules from EQ-NUM (e.g. min(τ_e/20, T_pwm/200) in switching mode). Expose the resulting values as signals `sim.dt_max`, `sim.tier`.
   - **Files:** `crates/sim-core/src/engine/fidelity.rs`
   - **Verify:** Unit tests for the dt rules.
   - **Done when:** Presets match POLISHED_IDEA §3.2.
 
-- [ ] **P03.T07** — Command queue and live parameter changes
+- [~] **P03.T07** — Command queue and live parameter changes
   - **Depends:** P03.T05
   - **Do:**
     - `Command` enum: SetParam(path, value), SetTarget, Fault on/off, Load scene, Play/Pause/Step/Reset, TimeScale, Snapshot save/restore, Subscribe/Unsubscribe signals.

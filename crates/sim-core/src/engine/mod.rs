@@ -5,6 +5,7 @@
 pub mod block;
 #[allow(clippy::module_inception)]
 pub mod engine;
+pub mod fidelity;
 pub mod integrate;
 pub mod plant;
 pub mod signals;
