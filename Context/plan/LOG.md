@@ -109,3 +109,18 @@
 - Verified: `just check` green; docs build clean.
 - Token budget: the docs graphify re-extraction is deferred and batched at the P04 gate (code graph is kept current by the post-commit hook).
 - Next: P03.T01
+
+## 2026-10-09 — P03.T01–T13, T15, T16 (agent: Claude)
+- Did: engine core:
+  - SimTime / SignalBus; DiscreteBlock / PlantModule with per-stage coupling
+  - RK4 + exact RL step; diffsol cross-check
+  - multi-rate scheduler; fidelity rules; command queue / live params / events
+  - runner; snapshots; recorder; RNG; state events (bisection 0.1 ns, Zeno guard); energy accounting
+  - skeleton ported onto the engine (energy-accounted); server, MCP and CLI on the engine runner
+- Baseline: 16× real time (skeleton FOC, dt 5 µs, release).
+- CI fixes: rustup components, `needs_binary` marker, validate job.
+- Spec: energy residual normalisation now includes stored-energy magnitude (lossless systems).
+- Phase-03 review: 7 majors + 12 minors, no blockers for the skeleton. Recorded as P03.T17–T20; the gate (T14) waits for them.
+- `just check` currently fails only on `ruff format` of `validation/refmodel/` (written by the P11.T01 subagent, still running in the background).
+- Stopped at ~93.5 % plan usage (user limit 97 %).
+- Next: P03.T17

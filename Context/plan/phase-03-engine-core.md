@@ -169,7 +169,42 @@
     - a damped one → loss integral = initial energy − final within 1e-9
   - **Done when:** Passing. P05–P09 use `energy.residual` in their tests; P10.T04 adds the engine-wide property test.
 
-- [~] **P03.T14** — Phase gate
-  - **Depends:** P03.T01, P03.T02, P03.T03, P03.T04, P03.T05, P03.T06, P03.T07, P03.T08, P03.T09, P03.T10, P03.T11, P03.T12, P03.T13, P03.T15, P03.T16
+- [ ] **P03.T17** — Review fixes: safety (NaN guard, input validation, panic-free restore)
+  - **Depends:** P03.T16
+  - **Do:** From the P03 review (LOG 2026-10-09):
+    - NaN/Inf check of `x` after each `advance` → `SimError::Numerical`.
+    - `SetSignal`: reject non-finite values; only `SignalKind::Input` signals are writable.
+    - Snapshot restore: validate all lengths/names (blocks, modules, next_fire) **before** mutating; no `copy_from_slice` panics; clear `pending`/`events` on restore.
+    - `SimTime` Add/AddAssign → `saturating_add`.
+    - `step_events`: `apply_pending()` before `fire_due()`.
+    - `// INVARIANT:` comment on the `expect` in `skeleton/adapter.rs`.
+  - **Verify:** new tests: NaN injection pauses with an error; corrupted snapshot returns `Err`, no panic; `cargo nextest run -p sim-core`.
+  - **Done when:** all pass.
+
+- [ ] **P03.T18** — Review fixes: snapshot completeness, variable-event re-polling, fidelity wiring
+  - **Depends:** P03.T17
+  - **Do:**
+    - Snapshot also stores `EnergyBook`, `dt_max`, `FidelityConfig`; document that module/block `save()` must include live params.
+    - Re-poll every variable-event block after each `fire_due` batch and after `apply_pending`; a `next_event <= now` emits a diagnostic instead of silently disabling the block.
+    - `Engine::new` takes `FidelityConfig`; registers `sim.dt_max`, `sim.tier`; energy tolerance per tier.
+    - Per-module `energy.loss.<module>` signals; propagate `EnergySignals::register` errors.
+    - Move the skeleton dq model to `src/fixtures/dq_pmsm.rs` (`cfg(any(test, feature = "fixtures"))`) for P05.T03.
+  - **Verify:** snapshot test on the skeleton engine with a `SetParam` before the snapshot + restore into the same engine + `energy.residual` check; PWM-style variable block reacting to a duty written by another block.
+  - **Done when:** all pass.
+
+- [ ] **P03.T19** — Review fixes: performance and minor gaps
+  - **Depends:** P03.T18
+  - **Do:** gate `x_save.clone_from` and per-substep `outputs` on (events ∨ recorder ∨ last substep); precompute per-module energy-term counts; optional event direction mask; per-module Zeno guard persisting across `advance` calls; runner: clamp TimeScale to [1e-4, ∞], rebase pacing when lagging, reset ratio/lagging on Reset, paused-CPU test; recorder flat preallocated capture buffer; RNG in `StepCtx`; exp-RL step as an integrator option.
+  - **Verify:** `just bench` (record the new sim/real ratio in LOG; target ≥ the 16× baseline); all tests.
+  - **Done when:** all pass and no regression.
+
+- [ ] **P03.T20** — Review fixes: missing tests and commands
+  - **Depends:** P03.T18
+  - **Do:** tests for simultaneous crossings in two modules, crossing at a substep end and at `t1`; tighten bouncing-ball tolerance to ≤ 1 ns per impact; oscillator 1e4 periods (release-only test or justified reduction); xcheck through `Engine::advance`; energy tests for `External` terms, jumps, `E_FLOOR` branch; benchmarks for plant steps/s and 3-rate events/s; `EngineCommand`/`RunnerCommand` gain Snapshot save/restore (Fault/LoadScene/Subscribe stay for P04/P10/P12 — note it).
+  - **Verify:** `cargo nextest run -p sim-core`; `just bench`.
+  - **Done when:** all pass.
+
+- [ ] **P03.T14** — Phase gate
+  - **Depends:** P03.T01, P03.T02, P03.T03, P03.T04, P03.T05, P03.T06, P03.T07, P03.T08, P03.T09, P03.T10, P03.T11, P03.T12, P03.T13, P03.T15, P03.T16, P03.T17, P03.T18, P03.T19, P03.T20
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-03-done`.
