@@ -142,7 +142,7 @@
   - **Done when:** The graph exists and both hooks run. Note in LOG how long the build took.
   - **If stuck:** The skill's extraction subagents are approved (PLAN §5). If lefthook overwrote graphify's `post-commit` (or vice versa), put graphify's command under `post-commit` in `lefthook.yml` and re-run `lefthook install`.
 
-- [ ] **P00.T12** — CI workflow file
+- [x] **P00.T12** — CI workflow file
   - **Depends:** P00.T08
   - **Do:** Create `.github/workflows/ci.yml` with jobs `rust` (fmt, clippy, nextest), `web` (biome, tsc, vitest, build), `python` (uv sync, ruff, pytest). Use `jdx/mise-action` for toolchains, plus cargo/pnpm/uv caching. Leave commented placeholders for the `e2e`, `validate` and `docs` jobs (enabled in P01/P11/P18).
   - **Files:** `.github/workflows/ci.yml`
