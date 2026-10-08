@@ -75,7 +75,7 @@
   - **Verify:** Each equation has units. A dimensional check table is included.
   - **Done when:** Complete, with references.
 
-- [ ] **P02.T04** — Mechanical model (EQ-MECH-*)
+- [x] **P02.T04** — Mechanical model (EQ-MECH-*)
   - **Depends:** P02.T02
   - **Do:** Write `mechanical.md`:
     - Rotor inertia (from geometry: rotor as a cylinder/shell, inner vs outer rotor formulas).
@@ -88,7 +88,7 @@
   - **Verify:** Small-angle pendulum period formula is included (used by V-MECH tests).
   - **Done when:** Complete, with references.
 
-- [ ] **P02.T05** — Thermal model (EQ-THERM-*)
+- [~] **P02.T05** — Thermal model (EQ-THERM-*)
   - **Depends:** P02.T02
   - **Do:** Write `thermal.md`:
     - 3-node RC network (winding → stator iron → housing → ambient) with heat inputs: copper loss → winding, iron loss → stator, friction → housing (state the assumption).

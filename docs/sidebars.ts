@@ -18,6 +18,7 @@ const sidebars: SidebarsConfig = {
         "physics/energy",
         "physics/numerics",
         "physics/signals",
+        "physics/estimation",
         "physics/validation-catalog",
         "physics/references",
       ],
