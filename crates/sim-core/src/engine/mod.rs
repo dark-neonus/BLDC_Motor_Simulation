@@ -9,6 +9,7 @@ pub mod engine;
 pub mod fidelity;
 pub mod integrate;
 pub mod plant;
+pub mod recorder;
 pub mod rng;
 pub mod runner;
 pub mod signals;

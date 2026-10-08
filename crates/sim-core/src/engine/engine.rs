@@ -8,6 +8,7 @@ use super::block::{DiscreteBlock, SimError, StepCtx};
 use super::commands::{EngineCommand, EngineEvent};
 use super::integrate::Rk4;
 use super::plant::Plant;
+use super::recorder::Recorder;
 use super::signals::SignalBus;
 use super::time::SimTime;
 
@@ -31,6 +32,8 @@ pub struct Engine {
     pending: Vec<EngineCommand>,
     /// Events produced since the last `drain_events`.
     events: Vec<EngineEvent>,
+    /// Optional recorder, sampled after every accepted substep.
+    pub recorder: Option<Recorder>,
 }
 
 impl Engine {
@@ -57,6 +60,7 @@ impl Engine {
             dt_max,
             pending: Vec::new(),
             events: Vec::new(),
+            recorder: None,
         };
         // Make the bus consistent with the initial state.
         e.plant.outputs(0.0, &e.x, &mut e.bus);
@@ -108,14 +112,27 @@ impl Engine {
             self.fire_due()?;
             let t_next = self.next_event_time().map_or(target, |t| t.min(target));
             let (t0, t1) = (self.time.as_secs_f64(), t_next.as_secs_f64());
-            self.integrator.integrate(
-                &mut self.plant,
-                &mut self.bus,
-                &mut self.x,
-                t0,
-                t1,
-                self.dt_max,
-            );
+            if let Some(rec) = &mut self.recorder {
+                // Substep manually so the recorder sees every accepted state.
+                let n = ((t1 - t0) / self.dt_max).ceil().max(1.0) as usize;
+                let h = (t1 - t0) / n as f64;
+                for k in 0..n {
+                    let tk = t0 + k as f64 * h;
+                    self.integrator
+                        .step(&mut self.plant, &mut self.bus, tk, &mut self.x, h);
+                    self.plant.outputs(tk + h, &self.x, &mut self.bus);
+                    rec.sample(tk + h, &self.bus);
+                }
+            } else {
+                self.integrator.integrate(
+                    &mut self.plant,
+                    &mut self.bus,
+                    &mut self.x,
+                    t0,
+                    t1,
+                    self.dt_max,
+                );
+            }
             self.time = t_next;
         }
         Ok(())

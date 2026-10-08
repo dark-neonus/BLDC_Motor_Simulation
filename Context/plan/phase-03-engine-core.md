@@ -115,7 +115,7 @@
   - **Verify:** Test: run 0.1 s (with a noisy block using the RNG) → snapshot → run 0.1 s (A); restore → run 0.1 s (B); A == B bit-identical.
   - **Done when:** Passing.
 
-- [~] **P03.T10** — Recorder & stream decimation
+- [x] **P03.T10** — Recorder & stream decimation
   - **Depends:** P03.T05
   - **Do:**
     - Per-subscription ring buffers.
@@ -146,7 +146,7 @@
   - **Verify:** `just bench` runs. Record the numbers in LOG.
   - **Done when:** The baseline is recorded.
 
-- [ ] **P03.T15** — State events (zero-crossing location)
+- [~] **P03.T15** — State events (zero-crossing location)
   - **Depends:** P03.T05
   - **Do:** Implement EQ-NUM state events. After each integration substep, evaluate every module's `state_events()` functions. On a sign change, locate the crossing by bisection (or Illinois/regula falsi) on the dense RK4 interpolant or by re-integration, to a time tolerance (default 1 ns, as in EQ-NUM). Integrate exactly to the crossing, call `on_state_event`, then continue. Guard against Zeno chatter (max events per µs → diagnostic event). Needed by diode conduction/floating phases (P05.T07, P07.T01), Karnopp stick/slip (P06.T03), backlash contact (P06.T02), the chopper hysteresis (P07.T09) and PSU CV/CC switching (P07.T07).
   - **Files:** `crates/sim-core/src/engine/state_events.rs`
