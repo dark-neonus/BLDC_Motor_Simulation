@@ -25,6 +25,13 @@ Every equation in the physics pages cites one of these sources by key, e.g. `[Kr
 | `[Karnopp1985]` | D. Karnopp, "Computer simulation of stick-slip friction in mechanical dynamic systems," *J. Dynamic Systems, Measurement, and Control*, vol. 107, no. 1, pp. 100–103, 1985. [doi:10.1115/1.3140698](https://doi.org/10.1115/1.3140698) | Stick–slip friction model with a velocity dead band |
 | `[Tremblay2009]` | O. Tremblay, L.-A. Dessaint, "Experimental validation of a battery dynamic model for EV applications," *World Electric Vehicle Journal*, vol. 3, 2009. [doi:10.3390/wevj3020289](https://doi.org/10.3390/wevj3020289) | Battery model parameterised from datasheet discharge curves |
 
+## Material data
+
+| Key | Reference | Used for |
+|---|---|---|
+| `[CDA-Copper]` | Copper Development Association, "Introduction to Copper: Fact Sheets" (Innovations, 2001). [copper.org](https://copper.org/publications/newsletters/innovations/2001/08/intro_fac.php) | $\alpha_{Cu} = 0.00393$/K at 20 °C (100 % IACS) |
+| `[ArnoldNeo]` | Arnold Magnetic Technologies, *Neodymium-Iron-Boron Magnet Catalog* (grade datasheets). [PDF](https://www.arnoldmagnetics.com/wp-content/uploads/2019/06/Arnold-Neo-Catalog.pdf) | Reversible $\alpha_{Br} = -0.12$ %/K; $\alpha_{Hcj} \approx -0.5\ldots-0.62$ %/K |
+
 ## Application notes and project documentation
 
 | Key | Reference | Used for |

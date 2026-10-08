@@ -88,7 +88,7 @@
   - **Verify:** Small-angle pendulum period formula is included (used by V-MECH tests).
   - **Done when:** Complete, with references.
 
-- [~] **P02.T05** — Thermal model (EQ-THERM-*)
+- [x] **P02.T05** — Thermal model (EQ-THERM-*)
   - **Depends:** P02.T02
   - **Do:** Write `thermal.md`:
     - 3-node RC network (winding → stator iron → housing → ambient) with heat inputs: copper loss → winding, iron loss → stator, friction → housing (state the assumption).
@@ -101,7 +101,7 @@
   - **Verify:** The steady-state formula is solvable in closed form (show it, including the R(T) feedback).
   - **Done when:** Complete.
 
-- [ ] **P02.T06** — Inverter & modulation (EQ-INV-*)
+- [~] **P02.T06** — Inverter & modulation (EQ-INV-*)
   - **Depends:** P02.T03
   - **Do:** Write `inverter.md`:
     - Three-leg two-level inverter. Per-leg states: high, low, off (both off → diode conduction set by current sign; floating when current = 0).
