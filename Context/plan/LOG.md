@@ -228,3 +228,7 @@
 - **Review:** 1 blocker, 8 major, 14 minor findings. All blocker/major fixed (commit e5fa0b1); minors fixed except field doc comments, quantity-valued asserts and live-server `apply_edit` routing → **P05.T12**; declarative rule ids → D-014 / P05.T12.
 - **graphify:** incremental update with doc re-extraction (35 docs, 2 agents): 2417 nodes, 4329 edges, 296 communities.
 - **Phase summary:** sim-model now holds units, provenance params, all component types, winding layout, constraint rules + apply_edit, YAML IO with schemas, the library (builtin/user/extra), 9 motor + 26 component presets with sources, scenes/scenarios, and the datasheet wizard; sim-core builds an engine from a scene and runs scenarios with asserts (CLI exit 0/1/2).
+
+## 2026-10-09 — P05.T10 Rigid rotor
+- `physics::mech::rotor::RotorRigid` (module `motor.mechanical`, so `motor.mechanical.j_rotor` routes to it): states θm, ωm; outputs motor.theta/omega/theta_e/omega_e; torque inputs split into internal (no power term) and external (`External` "load" term); viscous loss "friction"; D-007 inertia change keeps ω and books ½ΔJω² as an external jump; `locked` param.
+- Prep: `energy.loss.<term>` per loss-term name (signals.md); `SetParam` routes to the module/block with the longest dotted-name prefix.

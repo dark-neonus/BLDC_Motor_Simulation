@@ -10,7 +10,7 @@
 >
 > **Keeping the app green:** P05.T10 adds a minimal rigid rotor (the full mechanics come in P06). P05.T11 builds the **interim drive path**: the skeleton FOC (kept from P03.T12) → inverse Park → an "ideal voltage source" module writing phase voltages. This keeps the server, UI, E2E and V-SKEL validation working until P07 (real inverter) and P09 (real FOC) replace them.
 
-- [ ] **P05.T01** — abc electrical plant module
+- [~] **P05.T01** — abc electrical plant module
   - **Depends:** P05.T10
   - **Do:** `MotorElectrical: PlantModule`:
     - States ψ_α, ψ_β (stationary-frame flux linkages, D-013). Currents come from the flux–current relation (EQ-MOT-02, closed form in the linear case); i_c = −i_a − i_b.
@@ -80,7 +80,7 @@
   - **Verify:** `cargo nextest run -p sim-core v_mot` all green.
   - **Done when:** Every V-MOT ID has a test.
 
-- [~] **P05.T10** — Minimal rigid rotor module
+- [x] **P05.T10** — Minimal rigid rotor module
   - **Depends:** P04
   - **Do:** `RotorRigid: PlantModule` with states θm, ωm; J·dω/dt = T_em + T_cog − T_drag − B·ω + T_ext (EQ-MECH, rigid case only, no gearbox/load/Karnopp yet). Outputs θm, ωm, θe = p·θm via the per-stage outputs pass. Kinetic energy and viscous loss are reported to the energy framework (P03.T16). P06.T01 extends or replaces it.
   - **Files:** `crates/sim-core/src/physics/mech/rotor.rs`
