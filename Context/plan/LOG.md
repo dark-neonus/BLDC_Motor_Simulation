@@ -213,3 +213,6 @@
 - `sim_core::scenario_run::run`: sequential timeline → timed events; asserts at a time or over a window (checked at every sample); velocity targets with ramps (load side × N); `fault`/`disturbance` warn until P10/P05; position/torque targets error until P09.
 - CLI `run-scenario`: both formats (full = has `timeline:`), `asserts.json`, pass/fail table, exit 0/1/2, `--no-asserts`. New preset scenario `gimbal-spin` (runs, passes).
 - **Deferred:** the live server (sim-api) still runs the default skeleton engine without a scene, so live `SetParam` does not yet pass through `apply_edit`; wire `SceneModel::edit` in when the server loads scenes.
+
+## 2026-10-09 — Session stop before P04.T14 (usage limit 60 %)
+- `just check` (full gate) green after P04.T13. Remaining for the gate: phase-end review subagent (pre-approved), graphify doc re-extraction (deferred from P04 start), fix findings, tag `phase-04-done`, push.
