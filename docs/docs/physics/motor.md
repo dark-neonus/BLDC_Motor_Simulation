@@ -194,7 +194,7 @@ $$
 
 - **Linear limit:** $c = 0$ and $L_\infty = L_q$ give back the linear model exactly.
 - **Torque:** with $i_d = 0$, $T_e = \tfrac32 p\lambda_m(1 - h(i_q))\,i_q$. Torque per amp falls as current rises, which is what datasheet torque–current curves show.
-- **Inversion:** solve $\psi_{dq}(i_d,i_q) = \psi$ with 2-D Newton from the previous step's currents. The Jacobian is the Hessian of $W'$ (symmetric incremental-inductance matrix). Parameter validation rejects sets where it is not positive definite over $|i_d|, |i_q| \le 3\,i_k$. The binding term is $\lambda_m\,|i_d|\,h''$, so a strong magnet with a low knee needs a smaller $c$ or a larger $L_\infty$ than the defaults (e.g. $\lambda_m = 30$ mWb, $L_q = 2.5$ mH, $i_k = 10$ A, $c = 0.15$ fails at $i_d \approx 30$ A). The solver uses damped Newton from the linear solution, so it is stateless and restores bit-identically from snapshots.
+- **Inversion:** solve $\psi_{dq}(i_d,i_q) = \psi$ with damped 2-D Newton (backtracking line search) started from the linear solution. The Jacobian is the Hessian of $W'$ (symmetric incremental-inductance matrix). Parameter validation rejects sets where it is not positive definite over $|i_d|, |i_q| \le 3\,i_k$. The binding term is $\lambda_m\,|i_d|\,h''$, so a strong magnet with a low knee needs a smaller $c$ or a larger $L_\infty$ than the defaults (e.g. $\lambda_m = 30$ mWb, $L_q = 2.5$ mH, $i_k = 10$ A, $c = 0.15$ fails at $i_d \approx 30$ A). Starting from the linear solution keeps the solve stateless, so it restores bit-identically from snapshots.
 - **Stored magnetic energy** (amplitude-invariant scaling, EQ-CONV-07): $W_{mag} = \tfrac32\big(\psi_d i_d + \psi_q i_q - W'\big)$. The linear case gives $\tfrac12 L_s\sum_x i_x^2$.
 - **Approximation:** d-axis self-saturation is neglected. Surface-mount magnets give a large effective d-axis air gap. Verified numerically: the energy residual of this model halves when the step size halves, so any residual comes from the integrator, not the model.
 
@@ -211,6 +211,8 @@ $$
 $i$ follows from $\psi_{ab}(i,\theta_e)$, built with EQ-MOT-02 along that current direction (a 1-D Newton solve). In the linear non-salient case this is $\psi_{ab} = 2L_s i + \lambda_m(\Phi_a - \Phi_b)$. The other phase pairs follow by symmetry.
 
 **All-off / two-off (zero-current mode).** With two or three legs Off and no current, the motor still generates. The model monitors the line-to-line EMFs: when $|e_x - e_y|$ exceeds $V_{bus} + 2V_f$ for some pair, that pair enters single-path mode with both terminals diode-clamped (high side of the more positive terminal, low side of the other). This is how a spinning motor charges the bus after an over-voltage trip disables PWM (state event).
+
+**Implementation status (P05):** zero-current mode and the diode-clamp reconnection below need the switched inverter and arrive with it (P07). Until then a phase is opened through `motor.open_phase` (at its next current zero, or at once if the current is already zero) and reconnected only explicitly (`motor.open_phase = -1`).
 
 ### EQ-MOT-12 — Floating-terminal voltage and reconnection {/* #eq-mot-12 */}
 

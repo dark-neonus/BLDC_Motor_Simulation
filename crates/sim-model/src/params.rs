@@ -118,9 +118,9 @@ pub struct MotorMagnetic {
     /// Cogging harmonics: amplitude [N·m] and phase per harmonic of N_c (EQ-MOT-08).
     #[serde(default)]
     pub cogging: Vec<CoggingTerm>,
-    /// Iron loss coefficients k_hy [W·s/rad], k_ed [W·s²/rad²] (EQ-MOT-09).
+    /// Hysteresis iron-loss coefficient k_hy [W·s/rad] (EQ-MOT-09); a bare SI number.
     pub k_hy: Option<Param>,
-    /// Eddy-current iron-loss coefficient k_ed [W·s²/rad²] (EQ-MOT-09).
+    /// Eddy-current iron-loss coefficient k_ed [W·s²/rad²] (EQ-MOT-09); a bare SI number.
     pub k_ed: Option<Param>,
     /// Co-energy saturation curve (EQ-MOT-10, Detailed tier).
     pub saturation: Option<Saturation>,

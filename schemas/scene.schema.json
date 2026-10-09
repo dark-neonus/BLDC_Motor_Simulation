@@ -1635,7 +1635,7 @@
           "$ref": "#/$defs/EmfShape"
         },
         "k_ed": {
-          "description": "Eddy-current iron-loss coefficient k_ed [W·s²/rad²] (EQ-MOT-09).",
+          "description": "Eddy-current iron-loss coefficient k_ed [W·s²/rad²] (EQ-MOT-09); a bare SI number.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1646,7 +1646,7 @@
           ]
         },
         "k_hy": {
-          "description": "Iron loss coefficients k_hy [W·s/rad], k_ed [W·s²/rad²] (EQ-MOT-09).",
+          "description": "Hysteresis iron-loss coefficient k_hy [W·s/rad] (EQ-MOT-09); a bare SI number.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"

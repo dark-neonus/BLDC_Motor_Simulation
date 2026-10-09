@@ -83,7 +83,27 @@
   - **Verify:** `cargo nextest run -p sim-core v_mech v_therm`; the scenario passes its asserts via the CLI.
   - **Done when:** Green.
 
+- [ ] **P06.T10** — P05 review carry-overs
+  - **Depends:** P05
+  - **Do:**
+    1. Saturation and open-phase Newton solves report non-convergence (non-PD Jacobian, non-positive slope, iteration cap) as `SimError::Numerical` or an engine warning instead of returning unconverged currents silently (PLAN §4 rule 5). Use a step-size stop as in `solve_open`, so a 1e-15 residual floor does not cost ~2000 evaluations.
+    2. When the λ(T) hook is wired (P06.T06), check that `energy.residual` stays within r_tol over a heating run (energy.md: the unbooked magnet work is neglected); book it if it does not.
+    3. Strengthen the V-MOT tests:
+       - V-MOT-006 uses the production Kv → λ derivation.
+       - V-MOT-011 checks i_c ≈ 0 at the switch from the Clarke-derived currents and the a–b path time constant 2L/2R.
+       - V-MOT-007 gets the period and zero-mean checks (atol 1e-9).
+       - V-MOT-009 drives above 2·i_k and compares torque.
+       - V-MOT-008 passes through ω = 0.
+    4. Missing tests:
+       - a harmonic-shape EMF with a triplen (no torque with an isolated neutral), energy closing;
+       - a live `l_d`/`lambda_m` edit books ΔW_mag (residual within tolerance);
+       - saturation in open-phase mode;
+       - production `build_engine` with iron loss.
+  - **Files:** `crates/sim-core/src/physics/motor/electrical.rs`, `crates/sim-core/tests/{v_mot,motor_*}.rs`
+  - **Verify:** `cargo nextest run -p sim-core` green, with the new tests listed.
+  - **Done when:** Green.
+
 - [ ] **P06.T09** — Phase gate
-  - **Depends:** P06.T01, P06.T02, P06.T03, P06.T04, P06.T05, P06.T06, P06.T07, P06.T08
+  - **Depends:** P06.T01, P06.T02, P06.T03, P06.T04, P06.T05, P06.T06, P06.T07, P06.T08, P06.T10
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-06-done`.

@@ -42,6 +42,8 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `fault.<id>.active`, `protect.<id>.tripped` | – | fault / protection flags | faults | P10 |
 | `energy.in`, `energy.loss`, `energy.loss.<term>`, `energy.stored`, `energy.external`, `energy.residual`, `energy.ok` | J, J, J, J, J, –, – | energy accounting | engine | EQ-ENER |
 
+Two engine-only live parameters are not scene fields: `motor.open_phase` (−1 reconnect, 0/1/2 open a/b/c; the `fault.phase_open.<x>` actions set it once faults are wired) and `motor.mechanical.locked` (0/1, holds the rotor for locked-rotor tests).
+
 **Clarifications (spec Q&A, P11.T01):**
 - Parquet/CSV outputs use the column `t` [s] for time (the bus signal `sim.t` is the same value).
 - **All setpoints are load-side** (`ctrl.theta_ref`, `ctrl.omega_ref`, `ctrl.torque_ref`); controllers convert with the gear ratio $N$. Without a gearbox they equal motor-side values.
