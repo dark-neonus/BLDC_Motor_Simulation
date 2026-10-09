@@ -399,17 +399,38 @@ impl Engine {
                 value,
                 source,
             } => {
-                // `<owner>.<param>` where the param may itself be dotted
-                // (`motor.electrical.r_phase`, CONVENTIONS §3): the owner is the first segment.
-                let Some((owner, name)) = path.split_once('.') else {
-                    return reject(format!("invalid parameter path `{path}`"));
-                };
+                // `<owner>.<param>`: the owner is the module or block whose name is the
+                // longest dotted prefix of the path (`motor.mechanical.j_rotor` goes to a
+                // `motor.mechanical` module before a `motor` module), CONVENTIONS §3.
                 if !value.is_finite() {
                     return reject(format!("`{path}`: value must be finite"));
                 }
-                if let Some(i) = self.plant.modules().iter().position(|m| m.name() == owner) {
+                let under = |owner: &str| {
+                    path.strip_prefix(owner)
+                        .and_then(|r| r.strip_prefix('.'))
+                        .map(|r| (owner.len(), r.to_owned()))
+                };
+                let module = self
+                    .plant
+                    .modules()
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, m)| under(m.name()).map(|(l, r)| (l, i, r)))
+                    .max_by_key(|(l, _, _)| *l);
+                let block = self
+                    .blocks
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, b)| under(b.id()).map(|(l, r)| (l, i, r)))
+                    .max_by_key(|(l, _, _)| *l);
+                let use_block = match (&module, &block) {
+                    (Some(m), Some(b)) => b.0 > m.0,
+                    (None, Some(_)) => true,
+                    _ => false,
+                };
+                if let (false, Some((_, i, name))) = (use_block, module) {
                     let (m, xs) = self.plant.module_mut(i, &mut self.x);
-                    return match m.set_param(name, value, xs) {
+                    return match m.set_param(&name, value, xs) {
                         Ok(old) => EngineEvent::ParamChanged {
                             t,
                             path,
@@ -420,8 +441,8 @@ impl Engine {
                         Err(e) => reject(format!("`{path}`: {e}")),
                     };
                 }
-                if let Some(b) = self.blocks.iter_mut().find(|b| b.id() == owner) {
-                    return match b.set_param(name, value) {
+                if let Some((_, i, name)) = block {
+                    return match self.blocks[i].set_param(&name, value) {
                         Ok(old) => EngineEvent::ParamChanged {
                             t,
                             path,
@@ -432,7 +453,7 @@ impl Engine {
                         Err(e) => reject(format!("`{path}`: {e}")),
                     };
                 }
-                reject(format!("no module or block `{owner}` for `{path}`"))
+                reject(format!("no module or block owns `{path}`"))
             }
         }
     }

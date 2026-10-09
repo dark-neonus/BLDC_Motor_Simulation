@@ -118,5 +118,5 @@ fn fidelity_sets_dt_signals_and_tolerance() {
     assert_eq!(sig(&e, "sim.tier"), 2.0);
     assert!((sig(&e, "sim.dt_max") - 50e-6 / 200.0).abs() < 1e-15);
     assert!((e.dt_max - 2.5e-7).abs() < 1e-15);
-    assert!(e.bus.id("energy.loss.motor").is_ok());
+    assert!(e.bus.id("energy.loss.copper").is_ok());
 }

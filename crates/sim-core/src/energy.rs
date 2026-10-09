@@ -33,25 +33,33 @@ pub struct EnergySignals {
     pub e_stored: SignalId,
     pub residual: SignalId,
     pub ok: SignalId,
-    /// `energy.loss.<module>` per module with loss terms: (module index, signal).
-    pub per_module_loss: Vec<(usize, SignalId)>,
+    /// `energy.loss.<term>` (signals.md: copper, iron, friction, …), summed over the
+    /// modules that report a loss term of that name: (energy-term index, signal).
+    pub per_term_loss: Vec<(usize, SignalId)>,
 }
 
 impl EnergySignals {
     pub fn register(bus: &mut SignalBus, plant: &Plant) -> Result<Self, SignalError> {
-        let mut per_module_loss = Vec::new();
-        for (mi, m) in plant.modules().iter().enumerate() {
-            if m.power_terms().iter().any(|(_, k)| *k == PowerKind::Loss) {
-                let path = format!("energy.loss.{}", m.name());
-                per_module_loss.push((
-                    mi,
-                    bus.register(
-                        &path,
-                        "J",
-                        "energy dissipated in this module",
-                        SignalKind::Diagnostic,
-                    )?,
-                ));
+        // Term index j follows Plant::energy_terms: modules in order, each module's
+        // power_terms() in order.
+        let mut per_term_loss = Vec::new();
+        let mut j = 0;
+        for m in plant.modules() {
+            for (name, kind) in m.power_terms() {
+                if kind == PowerKind::Loss {
+                    let path = format!("energy.loss.{name}");
+                    let id = match bus.id(&path) {
+                        Ok(id) => id,
+                        Err(_) => bus.register(
+                            &path,
+                            "J",
+                            "energy dissipated by this loss term",
+                            SignalKind::Diagnostic,
+                        )?,
+                    };
+                    per_term_loss.push((j, id));
+                }
+                j += 1;
             }
         }
         let mut r = |p: &str, u: &str, d: &str| bus.register(p, u, d, SignalKind::Diagnostic);
@@ -66,7 +74,7 @@ impl EnergySignals {
             )?,
             residual: r("energy.residual", "-", "normalised energy-balance residual")?,
             ok: r("energy.ok", "-", "1 when |residual| < tolerance")?,
-            per_module_loss,
+            per_term_loss,
         })
     }
 }
@@ -93,16 +101,16 @@ impl EnergyBook {
         let (mut e_in, mut e_loss, mut e_ext) = (0.0, 0.0, self.e_jump);
         let eo = plant.energy_offset();
         let terms = plant.energy_terms();
-        for &(_, id) in &sig.per_module_loss {
+        for &(_, id) in &sig.per_term_loss {
             bus.set(id, 0.0);
         }
-        for (j, (mi, kind)) in terms.iter().enumerate() {
+        for (j, (_, kind)) in terms.iter().enumerate() {
             let e = x[eo + j];
             match kind {
                 PowerKind::Input => e_in += e,
                 PowerKind::Loss => {
                     e_loss += e;
-                    if let Some(&(_, id)) = sig.per_module_loss.iter().find(|(m, _)| m == mi) {
+                    if let Some(&(_, id)) = sig.per_term_loss.iter().find(|(k, _)| *k == j) {
                         bus.set(id, bus.get(id) + e);
                     }
                 }

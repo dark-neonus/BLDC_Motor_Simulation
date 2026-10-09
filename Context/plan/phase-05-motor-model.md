@@ -80,7 +80,7 @@
   - **Verify:** `cargo nextest run -p sim-core v_mot` all green.
   - **Done when:** Every V-MOT ID has a test.
 
-- [ ] **P05.T10** — Minimal rigid rotor module
+- [~] **P05.T10** — Minimal rigid rotor module
   - **Depends:** P04
   - **Do:** `RotorRigid: PlantModule` with states θm, ωm; J·dω/dt = T_em + T_cog − T_drag − B·ω + T_ext (EQ-MECH, rigid case only, no gearbox/load/Karnopp yet). Outputs θm, ωm, θe = p·θm via the per-stage outputs pass. Kinetic energy and viscous loss are reported to the energy framework (P03.T16). P06.T01 extends or replaces it.
   - **Files:** `crates/sim-core/src/physics/mech/rotor.rs`
