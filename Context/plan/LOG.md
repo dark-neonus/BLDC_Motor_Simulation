@@ -264,3 +264,7 @@
 - `MotorElectrical`: `motor.open_phase` param (−1 reconnect, 0/1/2 request) → state event on the phase current (g scaled by its sign at the request, so no false crossing) → single-path mode with state ψ_yz, dψ_yz/dt = v_yT − v_zT − 2R·i, i by 1-D Newton through the full magnetics (saturation/harmonics included); ΔW_mag at the switch booked as a jump; exact i_k = 0, i_z = −i_y outputs; v_n per EQ-MOT-12; reconnect rebuilds ψαβ from (i, θe). Snapshots carry open/pending.
 - Test: 30 Hz drive, open c mid-run (sinusoidal and trapezoidal): i_c ≡ 0, i_a = −i_b, no NaN, residual < 1e-6, continuous reconnect.
 - Not yet: diode-clamped zero-current mode and automatic reconnection when the floating terminal exceeds the rails (EQ-MOT-11/12 inverter part) — needs the real inverter (P07).
+
+## 2026-10-09 — P05.T08 Energy terms & V-MOT sweep
+- `tests/v_mot.rs`: V-MOT-001…013 each a named test with the catalog tolerances (005 = the P05.T03 equivalence test, moved to `tests/support/abc_dq.rs` and included). "Open circuit"/"unpowered" cases drive the terminals with the back-EMF so no current flows. Six-step ripple (012/013) uses ideal block currents through the new `MotorElectrical::from_currents` + `torque`.
+- Energy terms: copper (`energy.loss.copper`), iron (`energy.loss.iron`), magnetic W_mag and U_cog (stored), electrical input. Air-gap power T_e·ω is an internal transfer between motor and rotor, so it has no term of its own (the balance closes without it).

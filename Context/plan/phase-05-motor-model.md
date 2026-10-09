@@ -74,7 +74,7 @@
   - **Verify:** Test: open phase C during operation → i_c stays 0 and i_a = −i_b, with no NaN and energy within tolerance.
   - **Done when:** Passing.
 
-- [ ] **P05.T08** — Energy terms & V-MOT test sweep
+- [x] **P05.T08** — Energy terms & V-MOT test sweep
   - **Depends:** P05.T04, P05.T05, P05.T06, P05.T07
   - **Do:** Report copper loss, iron loss, magnetic stored energy, cogging potential and air-gap power through `energy_terms()`. Implement **all V-MOT catalog cases** as Rust tests (`crates/sim-core/tests/v_mot.rs`), named by ID.
   - **Verify:** `cargo nextest run -p sim-core v_mot` all green.

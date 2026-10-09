@@ -418,6 +418,22 @@ impl MotorElectrical {
         at(i).1
     }
 
+    /// The state quantities for imposed stationary-frame currents (for analyses with
+    /// ideal current sources, e.g. six-step torque ripple).
+    pub fn from_currents(&self, i_alpha: f64, i_beta: f64, th: f64, lambda: f64) -> Solved {
+        let (sn, cs) = th.sin_cos();
+        let (i_d, i_q) = (cs * i_alpha + sn * i_beta, -sn * i_alpha + cs * i_beta);
+        let (psi_d, psi_q) = self.magnetics(lambda).psi(i_d, i_q);
+        Solved {
+            i_alpha,
+            i_beta,
+            i_d,
+            i_q,
+            psi_d,
+            psi_q,
+        }
+    }
+
     /// Phase k current from a solved state.
     fn phase_current(s: &Solved, k: usize) -> f64 {
         inv_clarke(s.i_alpha, s.i_beta)[k]
