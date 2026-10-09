@@ -114,4 +114,44 @@ async fn live_param_edits_pass_the_constraint_rules() {
         .await
         .unwrap();
     assert_eq!(other.status(), 422);
+
+    // Build-time parts of the motor are refused live (the engine would not follow).
+    let cog = http
+        .post(format!("http://{addr}/api/param"))
+        .json(&serde_json::json!({ "path": "motor.magnetic.cogging", "value": [] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(cog.status(), 422);
+    let body: serde_json::Value = cog.json().await.unwrap();
+    assert!(body["error"].as_str().unwrap().contains("reset"), "{body}");
+}
+
+#[tokio::test]
+async fn an_engine_rejection_leaves_the_scene_unchanged() {
+    use sim_core::engine::commands::{ChangeSource, EngineCommand};
+    use sim_core::engine::runner::RunnerCommand;
+    let state = sim_api::default_app_state().unwrap();
+    let scene = state.scene.clone().unwrap();
+    let r0 = scene.lock().unwrap().motor.electrical.r_phase.clone();
+    // Open phase a (at rest: immediately); electrical edits are then refused by the engine.
+    let st = state
+        .command(RunnerCommand::ApplyNow(vec![EngineCommand::SetParam {
+            path: "motor.open_phase".into(),
+            value: 0.0,
+            source: ChangeSource::Internal,
+        }]))
+        .await
+        .unwrap();
+    assert_eq!(st.rejected, None);
+    let err = state
+        .apply_param(
+            "motor.electrical.r_phase",
+            serde_json::json!("6 ohm"),
+            ChangeSource::Ui,
+        )
+        .await
+        .unwrap_err();
+    assert!(err.contains("reconnect"), "{err}");
+    assert_eq!(scene.lock().unwrap().motor.electrical.r_phase, r0);
 }

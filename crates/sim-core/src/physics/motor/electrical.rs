@@ -471,13 +471,30 @@ impl MotorElectrical {
         }
         let k = v as usize;
         let s = self.solve(x_own[0], x_own[1], self.last_theta_e, self.last_lambda);
-        self.pending_sign = if Self::phase_current(&s, k) < 0.0 {
-            -1.0
-        } else {
-            1.0
-        };
+        let i_k = Self::phase_current(&s, k);
+        if i_k.abs() <= 1e-12 * (1.0 + s.i_alpha.hypot(s.i_beta)) {
+            // Already at a current zero (e.g. at rest): no crossing will come, open now.
+            self.enter_open(k, x_own);
+            return Ok(old);
+        }
+        self.pending_sign = if i_k < 0.0 { -1.0 } else { 1.0 };
         self.pending = Some(k);
         Ok(old)
+    }
+
+    /// Switch to the open-phase state (EQ-MOT-11) with phase k's current at zero.
+    fn enter_open(&mut self, k: usize, x_own: &mut [f64]) {
+        let (th, lam) = (self.last_theta_e, self.last_lambda);
+        let before = self.solve(x_own[0], x_own[1], th, lam);
+        // ψ_yz from the phase fluxes (zero sequence cancels in the difference).
+        let (y, z) = ((k + 1) % 3, (k + 2) % 3);
+        let f = inv_clarke(x_own[0], x_own[1]);
+        x_own[0] = f[y] - f[z];
+        x_own[1] = 0.0;
+        self.open = Some(k);
+        // i_k ≈ 0 at the event (bisection tolerance): book the tiny W_mag difference.
+        let after = self.solve_open(x_own[0], th, lam, k);
+        self.jump += self.w_mag(&after, lam) - self.w_mag(&before, lam);
     }
 
     fn v_alpha_beta(&self, bus: &SignalBus) -> (f64, f64) {
@@ -669,18 +686,9 @@ impl PlantModule for MotorElectrical {
         x_own: &mut [f64],
         _bus: &mut SignalBus,
     ) {
-        let Some(k) = self.pending.take() else { return };
-        let (th, lam) = (self.last_theta_e, self.last_lambda);
-        let before = self.solve(x_own[0], x_own[1], th, lam);
-        // ψ_yz from the phase fluxes (zero sequence cancels in the difference).
-        let (y, z) = ((k + 1) % 3, (k + 2) % 3);
-        let f = inv_clarke(x_own[0], x_own[1]);
-        x_own[0] = f[y] - f[z];
-        x_own[1] = 0.0;
-        self.open = Some(k);
-        // i_k ≈ 0 at the event (bisection tolerance): book the tiny W_mag difference.
-        let after = self.solve_open(x_own[0], th, lam, k);
-        self.jump += self.w_mag(&after, lam) - self.w_mag(&before, lam);
+        if let Some(k) = self.pending.take() {
+            self.enter_open(k, x_own);
+        }
     }
     fn save(&self) -> serde_json::Value {
         let p = &self.p;

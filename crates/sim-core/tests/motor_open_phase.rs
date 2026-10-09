@@ -176,3 +176,15 @@ fn snapshot_restore_mid_fault_continues_bit_identically() {
     assert_eq!(sa.bus, sb.bus);
     assert!(sig(&b, "energy.residual").abs() < 1e-6);
 }
+
+/// At rest every current is zero: no crossing will come, so the open takes effect at once.
+#[test]
+fn open_request_at_zero_current_takes_effect_immediately() {
+    let mut e = engine(Shape::Sinusoidal);
+    set(&mut e, 0.0);
+    e.apply_pending();
+    assert_eq!(sig(&e, "motor.open_phase"), 0.0);
+    e.step_until(SimTime::from_secs_f64(0.02)).unwrap();
+    assert_eq!(sig(&e, "motor.i_a"), 0.0);
+    assert!(sig(&e, "motor.i_b").abs() > 0.01, "b–c path conducts");
+}

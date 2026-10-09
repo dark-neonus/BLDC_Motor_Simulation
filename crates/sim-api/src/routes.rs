@@ -45,22 +45,15 @@ async fn set_param(
     State(s): State<AppState>,
     Json(p): Json<ParamEdit>,
 ) -> Result<Json<Map<String, Json_>>, (StatusCode, Json<Json_>)> {
-    let cmds = s
+    let st = s
         .apply_param(&p.path, p.value, ChangeSource::Ui)
+        .await
         .map_err(|e| {
             (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Json(serde_json::json!({ "error": e })),
             )
         })?;
-    let mut last = None;
-    for c in cmds {
-        last = s.command(RunnerCommand::Engine(c)).await;
-    }
-    let st = match last {
-        Some(st) => st,
-        None => s.sim.status(),
-    };
     Ok(Json(state_map(&s.sim, &st)))
 }
 

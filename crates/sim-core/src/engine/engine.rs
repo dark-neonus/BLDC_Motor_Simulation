@@ -351,6 +351,18 @@ impl Engine {
         self.pending.push(cmd);
     }
 
+    /// Apply `cmd` now (after anything already queued) and return its rejection reason, if
+    /// any. The event is recorded either way.
+    pub fn apply_now(&mut self, cmd: EngineCommand) -> Result<(), String> {
+        let at = self.events.len() + self.pending.len();
+        self.queue(cmd);
+        self.apply_pending();
+        match self.events.get(at) {
+            Some(EngineEvent::CommandRejected { reason, .. }) => Err(reason.clone()),
+            _ => Ok(()),
+        }
+    }
+
     /// Apply queued commands now (also called automatically by `step_until`).
     pub fn apply_pending(&mut self) {
         if self.pending.is_empty() {

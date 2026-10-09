@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::Router;
 use sim_core::build::{SceneModel, build_engine as build_scene, reflected_inertia};
-use sim_core::engine::commands::{ChangeSource, EngineCommand};
+use sim_core::engine::commands::ChangeSource;
 use sim_core::engine::runner::{RunnerCommand, RunnerHandle, RunnerStatus};
 use sim_core::skeleton::adapter::{SkeletonOptions, build_engine};
 use sim_model::scene::ResolvedScene;
@@ -45,14 +45,16 @@ impl AppState {
 
 impl AppState {
     /// A live parameter edit. `motor.*` goes through the constraint rules (`apply_edit`)
-    /// first; on success the scene is updated and the engine commands are returned.
-    pub fn apply_param(
+    /// first, then the engine applies the resulting commands; the scene is updated only
+    /// when both accept, so a later reset rebuilds what is running. Returns the status
+    /// right after the change.
+    pub async fn apply_param(
         &self,
         path: &str,
         value: serde_json::Value,
         source: ChangeSource,
-    ) -> Result<Vec<EngineCommand>, String> {
-        let Some(scene) = &self.scene else {
+    ) -> Result<RunnerStatus, String> {
+        let Some(scene) = self.scene.clone() else {
             return Err("no scene is loaded; parameters cannot be edited".into());
         };
         if !path.starts_with("motor.") {
@@ -60,18 +62,30 @@ impl AppState {
                 "`{path}`: only motor.* parameters are editable live so far"
             ));
         }
-        let mut sc = scene
-            .lock()
-            .map_err(|_| "scene lock poisoned".to_string())?;
-        let extra_j =
-            reflected_inertia(sc.gearbox.as_ref(), sc.load.as_ref()).map_err(|e| e.to_string())?;
-        let mut model = SceneModel {
-            motor: sc.motor.clone(),
-            extra_j,
-        };
-        let cmds = model.edit(path, value, source)?;
-        sc.motor = model.motor;
-        Ok(cmds)
+        let (sim, path) = (Arc::clone(&self.sim), path.to_string());
+        // The scene lock is held across the engine round trip so concurrent edits serialise.
+        tokio::task::spawn_blocking(move || {
+            let mut sc = scene
+                .lock()
+                .map_err(|_| "scene lock poisoned".to_string())?;
+            let extra_j = reflected_inertia(sc.gearbox.as_ref(), sc.load.as_ref())
+                .map_err(|e| e.to_string())?;
+            let mut model = SceneModel {
+                motor: sc.motor.clone(),
+                extra_j,
+            };
+            let cmds = model.edit(&path, value, source)?;
+            let st = sim
+                .request(RunnerCommand::ApplyNow(cmds))
+                .ok_or("the simulation did not answer")?;
+            if let Some(why) = &st.rejected {
+                return Err(format!("`{path}` rejected by the engine: {why}"));
+            }
+            sc.motor = model.motor;
+            Ok(st)
+        })
+        .await
+        .map_err(|e| e.to_string())?
     }
 }
 

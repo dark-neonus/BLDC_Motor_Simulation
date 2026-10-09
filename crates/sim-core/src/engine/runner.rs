@@ -33,6 +33,9 @@ pub enum RunnerCommand {
     /// Sim seconds per wall second; `f64::INFINITY` = as fast as possible.
     TimeScale(f64),
     Engine(EngineCommand),
+    /// Apply these engine commands now, in order, stopping at the first rejection; the
+    /// reply's `rejected` carries its reason.
+    ApplyNow(Vec<EngineCommand>),
     /// Save a named in-memory snapshot of the full engine state.
     SnapshotSave(String),
     /// Restore a named snapshot (pauses the runner).
@@ -56,6 +59,9 @@ pub struct RunnerStatus {
     pub error: Option<String>,
     /// Paced-loop iterations so far (diagnostic; must not grow while paused).
     pub iterations: u64,
+    /// Only in a reply to `ApplyNow`: why a command was rejected.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rejected: Option<String>,
 }
 
 struct Envelope {
@@ -169,6 +175,7 @@ impl Runner {
             values: self.engine.bus.values().to_vec(),
             error: self.error.clone(),
             iterations: self.iterations,
+            rejected: None,
         }
     }
 
@@ -194,6 +201,7 @@ impl Runner {
     /// Apply one command; returns false on shutdown. Returns true if pacing must restart.
     fn apply(&mut self, env: Envelope) -> (bool, bool) {
         let mut restart = false;
+        let mut rejected = None;
         match env.cmd {
             RunnerCommand::Play => {
                 self.running = self.error.is_none();
@@ -227,6 +235,14 @@ impl Runner {
                     self.engine.apply_pending();
                 }
             }
+            RunnerCommand::ApplyNow(cmds) => {
+                for c in cmds {
+                    if let Err(e) = self.engine.apply_now(c) {
+                        rejected = Some(e);
+                        break;
+                    }
+                }
+            }
             RunnerCommand::SnapshotSave(name) => {
                 let snap = self.engine.snapshot();
                 self.snapshots.insert(name, snap);
@@ -246,7 +262,10 @@ impl Runner {
         }
         self.publish();
         if let Some(r) = env.reply {
-            let _ = r.send(self.snapshot());
+            let _ = r.send(RunnerStatus {
+                rejected,
+                ..self.snapshot()
+            });
         }
         (true, restart)
     }

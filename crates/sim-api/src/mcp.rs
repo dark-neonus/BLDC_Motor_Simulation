@@ -103,14 +103,12 @@ impl BldcMcp {
         &self,
         Parameters(SetParamArgs { path, value }): Parameters<SetParamArgs>,
     ) -> Result<CallToolResult, ErrorData> {
-        let cmds = self
+        let st = self
             .app
             .apply_param(&path, value, ChangeSource::Mcp)
+            .await
             .map_err(|e| ErrorData::invalid_params(e, None))?;
-        for c in cmds {
-            self.app.command(RunnerCommand::Engine(c)).await;
-        }
-        structured(&state_map(&self.app.sim, &self.app.sim.status()))
+        structured(&state_map(&self.app.sim, &st))
     }
 
     #[tool(

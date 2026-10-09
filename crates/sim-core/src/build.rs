@@ -165,22 +165,54 @@ impl SceneModel {
         }
         let after = pmsm_from(&r.model, self.extra_j).map_err(|e| e.to_string())?;
         if after.p != before.p {
-            return Err(format!("`{path}`: changing the pole count needs a rebuild"));
+            return Err(format!("`{path}`: changing the pole count needs a reset"));
         }
-        self.motor = r.model;
+        // Parts of the motor that are fixed when the engine is built: refuse a live change
+        // instead of updating the scene but not the engine.
+        let (m0, m1) = (&self.motor, &r.model);
+        if m0.magnetic.emf_shape != m1.magnetic.emf_shape
+            || m0.magnetic.cogging != m1.magnetic.cogging
+            || m0.magnetic.saturation != m1.magnetic.saturation
+            || m0.winding != m1.winding
+        {
+            return Err(format!(
+                "`{path}` cannot change while running; edit the scene and reset"
+            ));
+        }
+        let j = |m: &MotorParams| {
+            si(
+                &m.mechanical.j_rotor,
+                Kind::Inertia,
+                "motor.mechanical.j_rotor",
+            )
+        };
+        let k = |p: &Option<Param>, path: &str| {
+            p.as_ref().map_or(Ok(0.0), |p| {
+                p.value
+                    .si(Kind::Dimensionless)
+                    .map_err(|e| BuildError::Param(path.into(), e.to_string()))
+            })
+        };
+        let num = |r: Result<f64, BuildError>| r.map_err(|e| e.to_string());
         let pairs = [
             ("electrical.r_phase", before.r, after.r),
             ("electrical.l_d", before.ld, after.ld),
             ("electrical.l_q", before.lq, after.lq),
             ("electrical.lambda_m", before.lambda, after.lambda),
-            (
-                "mechanical.j_rotor",
-                before.j - self.extra_j,
-                after.j - self.extra_j,
-            ),
+            ("mechanical.j_rotor", num(j(m0))?, num(j(m1))?),
             ("mechanical.friction.viscous", before.b, after.b),
+            (
+                "magnetic.k_hy",
+                num(k(&m0.magnetic.k_hy, "motor.magnetic.k_hy"))?,
+                num(k(&m1.magnetic.k_hy, "motor.magnetic.k_hy"))?,
+            ),
+            (
+                "magnetic.k_ed",
+                num(k(&m0.magnetic.k_ed, "motor.magnetic.k_ed"))?,
+                num(k(&m1.magnetic.k_ed, "motor.magnetic.k_ed"))?,
+            ),
         ];
-        Ok(pairs
+        let cmds = pairs
             .iter()
             .filter(|(_, a, b)| a != b)
             .map(|(n, _, v)| EngineCommand::SetParam {
@@ -188,7 +220,9 @@ impl SceneModel {
                 value: *v,
                 source,
             })
-            .collect())
+            .collect();
+        self.motor = r.model;
+        Ok(cmds)
     }
 }
 
