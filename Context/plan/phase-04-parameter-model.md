@@ -63,7 +63,7 @@
   - **Verify:** Tests against published values: 12N14P winding factor ≈ 0.933; 9N12P ≈ 0.866; 36N42P ≈ 0.933; 24N28P ≈ 0.933. Cross-check with an online calculator (e.g. emetor.com) and cite it in the test comment. Invalid combos (e.g. 12N12P) are rejected.
   - **Done when:** Passing.
 
-- [ ] **P04.T05** — Constraint graph & `apply_edit`
+- [x] **P04.T05** — Constraint graph & `apply_edit`
   - **Depends:** P04.T04
   - **Do:**
     1. Declarative rules, each `{id, inputs, outputs, kind: Derive|Reject|Warn, explanation, help_id}`:
