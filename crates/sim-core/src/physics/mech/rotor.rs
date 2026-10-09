@@ -12,8 +12,11 @@ use crate::engine::signals::{SignalBus, SignalError, SignalId, SignalKind};
 
 #[derive(Debug, Clone, Copy)]
 pub struct RotorParams {
-    /// Shaft inertia [kg·m²] (rotor + reflected load).
+    /// Rotor inertia [kg·m²] (`motor.mechanical.j_rotor`).
     pub j: f64,
+    /// Reflected gearbox/load inertia added to the shaft [kg·m²] (fixed here; P06 models
+    /// the load itself).
+    pub j_load: f64,
     /// Viscous friction [N·m·s/rad].
     pub b: f64,
     /// Pole pairs (θe = p·θm).
@@ -118,7 +121,7 @@ impl PlantModule for RotorRigid {
         }
         let w = x[off + 1];
         dx[0] = w;
-        dx[1] = self.torque(bus, w) / self.p.j;
+        dx[1] = self.torque(bus, w) / (self.p.j + self.p.j_load);
     }
     fn params(&self) -> Vec<(String, String)> {
         vec![
@@ -157,7 +160,7 @@ impl PlantModule for RotorRigid {
                 self.locked = v != 0.0;
                 if self.locked {
                     // Stopping the shaft removes its kinetic energy.
-                    self.jump -= 0.5 * self.p.j * x_own[1] * x_own[1];
+                    self.jump -= 0.5 * (self.p.j + self.p.j_load) * x_own[1] * x_own[1];
                     x_own[1] = 0.0;
                 }
                 Ok(old)
@@ -177,7 +180,7 @@ impl PlantModule for RotorRigid {
         p[1] = self.external.iter().map(|&id| bus.get(id)).sum::<f64>() * w;
     }
     fn stored_energy(&self, x: &[f64], off: usize, _bus: &SignalBus) -> f64 {
-        0.5 * self.p.j * x[off + 1] * x[off + 1]
+        0.5 * (self.p.j + self.p.j_load) * x[off + 1] * x[off + 1]
     }
     fn take_external_energy(&mut self) -> f64 {
         std::mem::take(&mut self.jump)
@@ -246,6 +249,7 @@ mod tests {
     fn constant_torque_accelerates_linearly() {
         let p = RotorParams {
             j: 2e-4,
+            j_load: 0.0,
             b: 0.0,
             pole_pairs: 7.0,
             theta0: 0.0,
@@ -268,6 +272,7 @@ mod tests {
     fn viscous_spin_down_is_exponential() {
         let p = RotorParams {
             j: 2e-4,
+            j_load: 0.0,
             b: 1e-3,
             pole_pairs: 7.0,
             theta0: 0.0,
@@ -286,6 +291,7 @@ mod tests {
     fn inertia_change_keeps_speed_and_books_the_energy() {
         let p = RotorParams {
             j: 2e-4,
+            j_load: 0.0,
             b: 0.0,
             pole_pairs: 7.0,
             theta0: 0.0,

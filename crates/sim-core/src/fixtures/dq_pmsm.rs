@@ -90,6 +90,24 @@ impl Pmsm {
         1.5 * p.p * (p.lambda * s.iq + (p.ld - p.lq) * s.id * s.iq)
     }
 
+    /// d/dt of (i_d, i_q, ω, θ) for given dq voltages (EQ-MOT-06 + rigid rotor).
+    pub fn derivatives(p: &PmsmParams, locked: bool, vd: f64, vq: f64, x: &[f64; 4]) -> [f64; 4] {
+        let (id, iq, omega) = (x[0], x[1], x[2]);
+        let we = p.p * omega;
+        let torque = 1.5 * p.p * (p.lambda * iq + (p.ld - p.lq) * id * iq);
+        let (dw, dth) = if locked {
+            (0.0, 0.0)
+        } else {
+            ((torque - p.b * omega) / p.j, omega)
+        };
+        [
+            (vd - p.r * id + we * p.lq * iq) / p.ld,
+            (vq - p.r * iq - we * p.ld * id - we * p.lambda) / p.lq,
+            dw,
+            dth,
+        ]
+    }
+
     /// Advance by `dt` seconds with constant dq voltages (zero-order hold).
     pub fn step(&mut self, vd: f64, vq: f64, dt: f64) {
         let p = self.params;
@@ -97,18 +115,8 @@ impl Pmsm {
         let s = self.state;
         let mut x = [s.id, s.iq, s.omega, s.theta];
         rk4_step(&mut x, dt, |x, dx| {
-            let (id, iq, omega) = (x[0], x[1], x[2]);
-            let we = p.p * omega;
-            dx[0] = (vd - p.r * id + we * p.lq * iq) / p.ld;
-            dx[1] = (vq - p.r * iq - we * p.ld * id - we * p.lambda) / p.lq;
-            let torque = 1.5 * p.p * (p.lambda * iq + (p.ld - p.lq) * id * iq);
-            if locked {
-                dx[2] = 0.0;
-                dx[3] = 0.0;
-            } else {
-                dx[2] = (torque - p.b * omega) / p.j;
-                dx[3] = omega;
-            }
+            let d = Self::derivatives(&p, locked, vd, vq, &[x[0], x[1], x[2], x[3]]);
+            dx.copy_from_slice(&d);
         });
         self.state = PmsmState {
             id: x[0],

@@ -92,6 +92,7 @@ fn sig(e: &Engine, p: &str) -> f64 {
 fn rotor(theta0: f64, omega0: f64, j: f64) -> RotorParams {
     RotorParams {
         j,
+        j_load: 0.0,
         b: 0.0,
         pole_pairs: P,
         theta0,

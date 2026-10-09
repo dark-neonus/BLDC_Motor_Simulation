@@ -23,7 +23,7 @@ fn snapshot_with_live_param_restores_into_same_and_fresh_engine() {
     });
     e.step_until(SimTime::from_secs_f64(0.05)).unwrap();
     e.queue(EngineCommand::SetParam {
-        path: "motor.locked".into(),
+        path: "motor.mechanical.locked".into(),
         value: 1.0,
         source: ChangeSource::Ui,
     });
@@ -42,7 +42,7 @@ fn snapshot_with_live_param_restores_into_same_and_fresh_engine() {
     // Fresh engine: live param (locked) comes back with the snapshot.
     let mut f = build_engine(SkeletonOptions::default());
     f.restore(&snap).unwrap();
-    assert_eq!(f.get_param("motor.locked"), Some(1.0));
+    assert_eq!(f.get_param("motor.mechanical.locked"), Some(1.0));
     f.step_until(SimTime::from_secs_f64(0.1)).unwrap();
     assert_eq!(f.x, xa);
 }

@@ -227,7 +227,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
         dt: 1.0 / rate,
     };
     let extra_j = reflected_inertia(scene.gearbox.as_ref(), scene.load.as_ref())?;
-    let mp = pmsm_from(&scene.motor, extra_j)?;
+    let mp = pmsm_from(&scene.motor, 0.0)?;
     let dt_max = match scene.fidelity.as_ref().and_then(|f| f.dt_max.as_ref()) {
         Some(p) => si(p, Kind::Time, "fidelity.dt_max")?,
         None => cfg.dt / 10.0,

@@ -37,7 +37,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `sensors.adc.i_a`, `.i_b`, `.i_c`, `sensors.adc.v_bus` | A, V | measured currents / bus | ADC | EQ-SENS-06 |
 | `est.theta`, `est.omega`, `est.valid` | rad, rad/s, – | estimator outputs | estimators | EQ-CTRL-08/09 |
 | `ctrl.omega_ref`, `ctrl.theta_ref`, `ctrl.torque_ref` | rad/s, rad, N·m | active setpoints | setpoint | EQ-CTRL-04/07 |
-| `ctrl.foc.id_ref`, `ctrl.foc.iq_ref`, `ctrl.foc.v_d`, `ctrl.foc.v_q`, `ctrl.foc.saturated` | A, V, – | FOC internals | FOC | EQ-CTRL-03 |
+| `ctrl.foc.id_ref`, `ctrl.foc.iq_ref`, `ctrl.foc.v_d`, `ctrl.foc.v_q`, `ctrl.foc.v_alpha`, `ctrl.foc.v_beta`, `ctrl.foc.saturated` | A, V, – | FOC internals (αβ = commands after inverse Park, held until the next tick) | FOC | EQ-CTRL-03 |
 | `ctrl.six_step.sector`, `ctrl.open_loop.theta_ref` | –, rad | controller internals | controllers | EQ-CTRL-05/06 |
 | `fault.<id>.active`, `protect.<id>.tripped` | – | fault / protection flags | faults | P10 |
 | `energy.in`, `energy.loss`, `energy.loss.<term>`, `energy.stored`, `energy.external`, `energy.residual`, `energy.ok` | J, J, J, J, J, –, – | energy accounting | engine | EQ-ENER |

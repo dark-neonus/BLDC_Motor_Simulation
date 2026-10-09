@@ -239,3 +239,9 @@
 - Rotor builders `with_internal`, `with_locked` (the motor torque signal exists only after the motor is built).
 - Tests (`tests/motor_abc.rs`): locked-rotor RL τ = L/R (rtol 1e-8), LL back-EMF peak = Ke·ω (rtol 1e-6), stall torque = Kt·i_q, trapezoidal energy closure < 1e-6.
 - Line voltages are not output (not in signals.md); v_ab = v_aT − v_bT is available from the inverter signals.
+
+## 2026-10-09 — P05.T03 abc ≡ dq, P05.T11 interim drive path
+- `tests/abc_dq_equivalence.rs`: salient (L_d ≠ L_q) machine, smooth dq voltage program, abc engine (rotor + source doing inverse Park at its own θe + motor) vs the dq fixture as an engine module (`Pmsm::derivatives`, per-stage voltages; ZOH `step` cannot be matched exactly). All of i_d, i_q, ω, T within 1e-9 + 1e-6·|ref| every ms for 0.2 s.
+- `physics::inverter::ideal::IdealVoltageSource` (INTERIM until P07): inverter.v_x = invClarke(ctrl.foc.v_α/β) + V_bus/2. The skeleton adapter now builds rotor + ideal source + abc motor + skeleton FOC (INTERIM until P09.T03); the FOC block outputs ctrl.foc.v_alpha/v_beta (inverse Park at the tick, ZOH). The dq plant is fixture-only; `PmsmParams` remains as the skeleton's parameter bag.
+- Rotor: `j_load` (reflected inertia) separate from `j_rotor`; FOC gains designed on the total.
+- `just validate` (V-SKEL), `just e2e` and the gimbal-spin scenario pass unchanged. Bench not re-run (perf check at the gate).

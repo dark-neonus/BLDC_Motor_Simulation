@@ -35,7 +35,7 @@
     - trapezoidal shape has the correct flat-top width and fundamental normalization
   - **Done when:** Passing.
 
-- [ ] **P05.T03** — abc ≡ dq equivalence test
+- [x] **P05.T03** — abc ≡ dq equivalence test
   - **Depends:** P05.T02
   - **Do:** Run the abc model with sinusoidal back-EMF and the skeleton dq model (the test fixture from P03.T12) with identical sinusoidal voltages and initial conditions, and compare i_d, i_q, ω and T over 0.2 s. Afterwards no production code path uses the dq plant (it stays as a fixture only).
   - **Files:** `crates/sim-core/tests/abc_dq_equivalence.rs`
@@ -87,7 +87,7 @@
   - **Verify:** Test: a constant torque gives ω = T·t/J (B = 0); a viscous spin-down gives the exponential with τ = J/B.
   - **Done when:** Passing.
 
-- [ ] **P05.T11** — Interim drive path (keeps the app working until P07/P09)
+- [x] **P05.T11** — Interim drive path (keeps the app working until P07/P09)
   - **Depends:** P05.T01, P05.T02
   - **Do:** An `IdealVoltageSource` module (`inverter.mode = ideal`): phase voltages = the commanded values, with no bus or losses (V_bus constant for limits). Adapt the skeleton FOC block to output v_α/v_β → v_a, v_b, v_c (inverse Clarke). Rebuild the default scene, server, CLI and V-SKEL scenarios on **abc motor + rigid rotor + ideal source + skeleton FOC**. Mark the skeleton FOC `// INTERIM: replaced in P09.T03`.
   - **Files:** `crates/sim-core/src/physics/inverter/ideal.rs`, skeleton FOC adaptation
