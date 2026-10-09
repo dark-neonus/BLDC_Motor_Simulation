@@ -7,6 +7,7 @@
 
 pub mod constraints;
 pub mod io;
+pub mod library;
 pub mod param;
 pub mod params;
 pub mod units;

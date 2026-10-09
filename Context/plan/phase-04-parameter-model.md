@@ -100,7 +100,7 @@
   - **Verify:** `just gen-schemas && git diff --exit-code schemas/`; `uvx check-jsonschema --schemafile schemas/motor.schema.json presets/motors/*.yaml` (once T09 exists; wire it into `just check`).
   - **Done when:** Schemas are committed and the check is wired into `just check`.
 
-- [ ] **P04.T08** — Library locations & operations
+- [x] **P04.T08** — Library locations & operations
   - **Depends:** P04.T06
   - **Do:**
     - Library sources: **builtin** (`presets/`, embedded in the binary via rust-embed and read-only), **user** (`~/.local/share/bldc-sim/library/`, created on first run) and **extra** folders listed in `~/.config/bldc-sim/config.yaml`.

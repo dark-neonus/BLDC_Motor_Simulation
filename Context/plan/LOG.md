@@ -182,3 +182,7 @@
 - schemars 1.2 derives on all params types; `Param` uses `#[schemars(with = "ParamRepr")]` → anyOf(number|string, {value, source, note}).
 - `bldc-sim dump-schemas` writes motor/gearbox/load/inverter/supply/sensors/controller; scene/scenario join in T11. `just gen-schemas`, `just schemas-check` (in `just check`) and a CI step.
 - `check-jsonschema` on presets is wired when presets exist (P04.T09). Sanity-checked: valid sample passes, unknown field rejected.
+
+## 2026-10-09 — P04.T08 Library
+- `sim_model::library::Library`: builtin (rust-embed over `presets/**/*.yaml`, or a dir in tests), user (`$XDG_DATA_HOME|~/.local/share/bldc-sim/library`, created per kind), extra folders from `~/.config/bldc-sim/config.yaml` `library_extra:` (ids `extraN:`; read-only).
+- Ops: list(kind, filter), load (raw text), save_as, duplicate (sets `identity.name`, keeps the modeline; comments are not preserved in the copy), rename, delete. Names restricted to `[A-Za-z0-9._-]` (no path traversal); `_`-prefixed files (e.g. `_sources`) are hidden.

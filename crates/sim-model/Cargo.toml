@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+rust-embed = { version = "8.13.0", features = ["include-exclude"] }
 schemars = "1.2.2"
 serde.workspace = true
 serde-saphyr = "1.3.0"
