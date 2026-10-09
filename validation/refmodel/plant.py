@@ -283,7 +283,9 @@ class Plant:
             i_dc = 0.0
         else:
             # Q-05 (answered): only legs that switch (PWM legs; the H/O leg in six-step).
-            switching = [abs(i) for i, c in zip(i_abc, d.leg_cmd) if c in ("pwm", "ho")]
+            switching = [
+                abs(i) for i, c in zip(i_abc, d.leg_cmd, strict=True) if c in ("pwm", "ho")
+            ]
             i_sw = inv.f_pwm * 0.5 * (inv.t_rise + inv.t_fall) * sum(switching)
         i_ch = vb / bus.r_brake if (bus.chopper_enabled and d.chopper_on) else 0.0
         i_load = i_dc + i_sw + i_ch
