@@ -77,7 +77,7 @@ impl Recorder {
             max_rows,
             n_signals: n,
             t: Vec::with_capacity(max_rows.min(1 << 20)),
-            data: Vec::with_capacity((max_rows * n).min(1 << 22)),
+            data: Vec::with_capacity(max_rows.saturating_mul(n).min(1 << 22)),
             truncated: false,
         });
     }

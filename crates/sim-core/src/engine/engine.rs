@@ -452,7 +452,18 @@ impl Engine {
     fn repoll_variable(&mut self, after: SimTime) {
         for (i, b) in self.blocks.iter().enumerate() {
             if b.period().is_none() {
-                self.next_fire[i] = b.next_event(after).filter(|&t| t > after).unwrap_or(NEVER);
+                self.next_fire[i] = match b.next_event(after) {
+                    Some(t) if t > after => t,
+                    Some(t) => {
+                        self.events.push(EngineEvent::Warning {
+                            t: self.time,
+                            source: b.id().to_string(),
+                            msg: format!("next_event returned {t}, not after {after}; block idle until re-polled"),
+                        });
+                        NEVER
+                    }
+                    None => NEVER,
+                };
             }
         }
     }
@@ -460,7 +471,16 @@ impl Engine {
     /// Apply a fidelity configuration: step limit (EQ-NUM-04), energy tolerance (EQ-ENER-03),
     /// `sim.dt_max` / `sim.tier` signals.
     pub fn set_fidelity(&mut self, cfg: FidelityConfig, limits: &StepLimits) {
-        self.dt_max = super::fidelity::dt_max(&cfg, limits);
+        let dt = super::fidelity::dt_max(&cfg, limits);
+        if dt.is_finite() && dt > 0.0 {
+            self.dt_max = dt;
+        } else {
+            self.events.push(EngineEvent::Warning {
+                t: self.time,
+                source: "engine".into(),
+                msg: format!("ignored invalid dt_max {dt}; keeping {}", self.dt_max),
+            });
+        }
         self.set_energy_tolerance(if cfg.tier == Tier::Detailed {
             crate::energy::R_TOL_DETAILED
         } else {
@@ -494,6 +514,8 @@ impl Engine {
     pub(crate) fn clear_queues(&mut self) {
         self.pending.clear();
         self.events.clear();
+        // Time may have moved backwards: restart the Zeno window.
+        self.zeno = (f64::NEG_INFINITY, 0);
     }
 
     pub(crate) fn block_mut(&mut self, i: usize) -> &mut dyn DiscreteBlock {

@@ -204,7 +204,7 @@
   - **Verify:** `cargo nextest run -p sim-core`; `just bench`.
   - **Done when:** all pass.
 
-- [~] **P03.T14** — Phase gate
+- [x] **P03.T14** — Phase gate
   - **Depends:** P03.T01, P03.T02, P03.T03, P03.T04, P03.T05, P03.T06, P03.T07, P03.T08, P03.T09, P03.T10, P03.T11, P03.T12, P03.T13, P03.T15, P03.T16, P03.T17, P03.T18, P03.T19, P03.T20
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-03-done`.

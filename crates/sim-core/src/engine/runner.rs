@@ -235,8 +235,9 @@ impl Runner {
                 Some(s) => {
                     let s = s.clone();
                     self.running = false;
-                    if let Err(e) = self.engine.restore(&s) {
-                        self.error = Some(e.to_string());
+                    match self.engine.restore(&s) {
+                        Ok(()) => self.error = None,
+                        Err(e) => self.error = Some(e.to_string()),
                     }
                 }
                 None => self.error = Some(format!("no snapshot named `{name}`")),

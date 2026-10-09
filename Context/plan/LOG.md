@@ -142,3 +142,13 @@
   - RNG in `StepCtx`: blocks own their `BlockRng` from `RngService` (simpler, and snapshotted per block).
   - exponential RL step as an integrator option: P05 decides whether the flux-state motor needs it.
 - Next: P03.T20, then the P03 gate.
+
+## 2026-10-09 — P03.T20 + Phase 03 gate (agent: Claude)
+- T20: event edge-case tests (simultaneous crossings, substep end, t1), per-impact interval check (≤ 1 ns), External/jump/floor energy tests, xcheck through the engine, runner snapshot save/restore commands, plant and 3-rate event benches.
+- Gate review (focused re-review of the T17–T20 commits): 7 findings, all fixed:
+  - restore rollback on block/module data errors; dt_max validation (restore + set_fidelity)
+  - Zeno window reset on restore; runner clears the error after a successful restore
+  - saturating capture sizing; warning on silent repoll disable
+  - dq model moved to `fixtures/dq_pmsm.rs` (cfg gate to be added when the skeleton is removed, P05.T11)
+- Verified: `just check` green; 60 Rust tests.
+- Next: P04.T01; also answer `validation/refmodel/SPEC_QUESTIONS.md` (P11.T01).

@@ -94,3 +94,28 @@ fn sim_time_saturates_instead_of_overflowing() {
     // A huge step target must not overflow (the target is computed with saturating add).
     assert_eq!(e.time + SimTime(i64::MAX), SimTime(i64::MAX));
 }
+
+#[test]
+fn failed_restore_rolls_back_and_invalid_dt_is_rejected() {
+    let mut e = build_engine(SkeletonOptions::default());
+    e.queue(EngineCommand::SetSignal {
+        path: "ctrl.omega_ref".into(),
+        value: 10.0,
+        source: ChangeSource::Ui,
+    });
+    e.step_until(SimTime::from_secs_f64(0.02)).unwrap();
+    let good = e.snapshot();
+    e.step_until(SimTime::from_secs_f64(0.03)).unwrap();
+    let before = (e.time, e.x.clone(), e.bus.values().to_vec());
+
+    // Block data valid, module data invalid → error after blocks were restored → roll back.
+    let mut bad = good.clone();
+    bad.modules[0].1 = serde_json::json!({ "nope": 1 });
+    assert!(e.restore(&bad).is_err());
+    assert_eq!((e.time, e.x.clone(), e.bus.values().to_vec()), before);
+
+    let mut bad = good.clone();
+    bad.dt_max = 0.0; // would make advance() loop forever
+    assert!(e.restore(&bad).is_err());
+    assert_eq!(e.time, before.0);
+}

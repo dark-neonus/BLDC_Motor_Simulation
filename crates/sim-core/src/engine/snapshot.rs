@@ -71,6 +71,25 @@ impl Engine {
 
     /// Restore a snapshot taken from an engine with the same structure.
     pub fn restore(&mut self, s: &Snapshot) -> Result<(), SnapshotError> {
+        if !(s.dt_max.is_finite() && s.dt_max > 0.0) {
+            return Err(SnapshotError::Mismatch(format!(
+                "invalid dt_max {}",
+                s.dt_max
+            )));
+        }
+        // Block/module data is only validated by their own restore(); keep a backup and
+        // roll back so a failure never leaves a half-restored engine.
+        let backup = self.snapshot();
+        match self.restore_unchecked(s) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let _ = self.restore_unchecked(&backup);
+                Err(e)
+            }
+        }
+    }
+
+    fn restore_unchecked(&mut self, s: &Snapshot) -> Result<(), SnapshotError> {
         // Validate everything before mutating anything (imported files may not match).
         let ids: Vec<&str> = self.blocks().iter().map(|b| b.id()).collect();
         let names: Vec<&str> = self.plant.modules().iter().map(|m| m.name()).collect();
