@@ -25,7 +25,7 @@
   - **Verify:** `cargo nextest run -p sim-model units` (the fixture-driven test passes).
   - **Done when:** Passing. Wrong-kind input gives a helpful error ("expected inductance, got resistance").
 
-- [ ] **P04.T02** — Provenance wrapper `Param<T>`
+- [x] **P04.T02** — Provenance wrapper `Param<T>`
   - **Depends:** P04.T01
   - **Do:** `Param<T> { value: T, source: Measured|Datasheet|Estimated|Derived|Default, note: Option<String> }` with serde that accepts both shorthand `kv: "100 rpm/V"` (source = Default/Datasheet per context) and long form `kv: {value: "100 rpm/V", source: datasheet, note: "seller page"}`.
   - **Files:** `crates/sim-model/src/param.rs`
