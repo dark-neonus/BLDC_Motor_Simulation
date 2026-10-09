@@ -43,20 +43,20 @@ impl SimTime {
 impl std::ops::Add for SimTime {
     type Output = SimTime;
     fn add(self, rhs: SimTime) -> SimTime {
-        SimTime(self.0 + rhs.0)
+        SimTime(self.0.saturating_add(rhs.0))
     }
 }
 
 impl std::ops::Sub for SimTime {
     type Output = SimTime;
     fn sub(self, rhs: SimTime) -> SimTime {
-        SimTime(self.0 - rhs.0)
+        SimTime(self.0.saturating_sub(rhs.0))
     }
 }
 
 impl std::ops::AddAssign for SimTime {
     fn add_assign(&mut self, rhs: SimTime) {
-        self.0 += rhs.0;
+        self.0 = self.0.saturating_add(rhs.0);
     }
 }
 

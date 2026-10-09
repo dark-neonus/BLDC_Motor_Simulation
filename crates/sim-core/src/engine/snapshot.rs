@@ -64,11 +64,16 @@ impl Engine {
 
     /// Restore a snapshot taken from an engine with the same structure.
     pub fn restore(&mut self, s: &Snapshot) -> Result<(), SnapshotError> {
+        // Validate everything before mutating anything (imported files may not match).
         let ids: Vec<&str> = self.blocks().iter().map(|b| b.id()).collect();
+        let names: Vec<&str> = self.plant.modules().iter().map(|m| m.name()).collect();
         if s.x.len() != self.x.len()
             || s.bus.len() != self.bus.len()
+            || s.next_fire.len() != ids.len()
             || s.blocks.len() != ids.len()
             || s.blocks.iter().zip(&ids).any(|((a, _), b)| a != b)
+            || s.modules.len() != names.len()
+            || s.modules.iter().zip(&names).any(|((a, _), b)| a != b)
         {
             return Err(SnapshotError::Mismatch(
                 "state size or block list differs".into(),
@@ -88,6 +93,7 @@ impl Engine {
         self.x.copy_from_slice(&s.x);
         self.bus.values_mut().copy_from_slice(&s.bus);
         self.set_next_fire_times(&s.next_fire);
+        self.clear_queues();
         Ok(())
     }
 }

@@ -190,6 +190,8 @@ pub fn build_engine(opts: SkeletonOptions) -> Engine {
     let mp = PmsmParams::skeleton_6020();
     let cfg = FocConfig::skeleton();
     let mut bus = SignalBus::new();
+    // INVARIANT: the skeleton registers a fixed, unique set of paths into a fresh bus,
+    // so `register` cannot fail here.
     let mut reg = |p: &str, u: &str, d: &str, k: SignalKind| {
         bus.register(p, u, d, k).expect("unique skeleton signal")
     };

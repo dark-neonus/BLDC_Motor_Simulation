@@ -169,7 +169,7 @@
     - a damped one → loss integral = initial energy − final within 1e-9
   - **Done when:** Passing. P05–P09 use `energy.residual` in their tests; P10.T04 adds the engine-wide property test.
 
-- [ ] **P03.T17** — Review fixes: safety (NaN guard, input validation, panic-free restore)
+- [x] **P03.T17** — Review fixes: safety (NaN guard, input validation, panic-free restore)
   - **Depends:** P03.T16
   - **Do:** From the P03 review (LOG 2026-10-09):
     - NaN/Inf check of `x` after each `advance` → `SimError::Numerical`.

@@ -9,7 +9,7 @@ use super::commands::{EngineCommand, EngineEvent};
 use super::integrate::Rk4;
 use super::plant::Plant;
 use super::recorder::Recorder;
-use super::signals::SignalBus;
+use super::signals::{SignalBus, SignalKind};
 use super::time::SimTime;
 use crate::energy::{EnergyBook, EnergySignals, R_TOL_STANDARD};
 
@@ -157,6 +157,14 @@ impl Engine {
             let t_next = self.next_event_time().map_or(target, |t| t.min(target));
             let (t0, t1) = (self.time.as_secs_f64(), t_next.as_secs_f64());
             self.advance(t0, t1)?;
+            if let Some(i) = self.x.iter().position(|v| !v.is_finite()) {
+                return Err(SimError::Numerical {
+                    t: t_next,
+                    msg: format!(
+                        "state {i} became non-finite (step too large or invalid parameter?)"
+                    ),
+                });
+            }
             self.update_energy();
             self.time = t_next;
         }
@@ -264,7 +272,8 @@ impl Engine {
             match self.next_event_time() {
                 Some(t) if t > self.time => self.step_until(t)?,
                 Some(_) => {
-                    // An event is due now: fire it and move to the following one.
+                    // An event is due now: apply commands, fire it, move to the following one.
+                    self.apply_pending();
                     self.fire_due()?;
                     if let Some(t) = self.next_event_time() {
                         self.step_until(t)?;
@@ -310,6 +319,10 @@ impl Engine {
                 value,
                 source,
             } => match self.bus.id(&path) {
+                Ok(_) if !value.is_finite() => reject(format!("`{path}`: value must be finite")),
+                Ok(id) if self.bus.meta(id).kind != SignalKind::Input => {
+                    reject(format!("`{path}` is not an input signal"))
+                }
                 Ok(id) => {
                     let old = self.bus.get(id);
                     self.bus.set(id, value);
@@ -375,6 +388,12 @@ impl Engine {
 
     pub(crate) fn set_next_fire_times(&mut self, t: &[SimTime]) {
         self.next_fire.copy_from_slice(t);
+    }
+
+    /// Drop queued commands and undelivered events (used by snapshot restore).
+    pub(crate) fn clear_queues(&mut self) {
+        self.pending.clear();
+        self.events.clear();
     }
 
     pub(crate) fn block_mut(&mut self, i: usize) -> &mut dyn DiscreteBlock {
