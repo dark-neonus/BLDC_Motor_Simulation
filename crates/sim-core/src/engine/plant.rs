@@ -89,6 +89,8 @@ pub struct Plant {
     energy_terms: Vec<(usize, crate::energy::PowerKind)>,
     energy_off: usize,
     p_scratch: Vec<f64>,
+    /// Number of power terms per module (precomputed; no per-stage counting).
+    term_counts: Vec<usize>,
 }
 
 impl Plant {
@@ -113,7 +115,9 @@ impl Plant {
         }
         self.energy_off = self.n;
         for (mi, m) in self.modules.iter().enumerate() {
-            for (_, kind) in m.power_terms() {
+            let terms = m.power_terms();
+            self.term_counts.push(terms.len());
+            for (_, kind) in terms {
                 self.energy_terms.push((mi, kind));
             }
         }
@@ -258,7 +262,7 @@ impl Plant {
             // d(energy integral)/dt = power; last state = throughput Σ|P|.
             let mut k = 0;
             for (mi, (m, &off)) in self.modules.iter().zip(&self.offsets).enumerate() {
-                let nt = self.energy_terms.iter().filter(|(i, _)| *i == mi).count();
+                let nt = self.term_counts[mi];
                 if nt > 0 {
                     m.powers(t, x, off, bus, &mut self.p_scratch[k..k + nt]);
                     k += nt;

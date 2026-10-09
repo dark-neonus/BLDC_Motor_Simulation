@@ -34,11 +34,19 @@ pub struct Recorder {
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Capture {
     pub t: Vec<f64>,
-    /// Row-major: one row of values per time sample.
-    pub rows: Vec<Vec<f64>>,
+    /// Row-major flat buffer: `n_signals` values per time sample (no per-sample allocation).
+    pub data: Vec<f64>,
+    pub n_signals: usize,
     pub max_rows: usize,
     /// Set when the cap was reached (later samples dropped).
     pub truncated: bool,
+}
+
+impl Capture {
+    /// Row `k` (values of all captured signals at `t[k]`).
+    pub fn row(&self, k: usize) -> &[f64] {
+        &self.data[k * self.n_signals..(k + 1) * self.n_signals]
+    }
 }
 
 impl Recorder {
@@ -64,9 +72,13 @@ impl Recorder {
 
     /// Start full-rate capture of the subscribed signals (≤ `max_rows` samples).
     pub fn start_capture(&mut self, max_rows: usize) {
+        let n = self.ids.len();
         self.capture = Some(Capture {
             max_rows,
-            ..Default::default()
+            n_signals: n,
+            t: Vec::with_capacity(max_rows.min(1 << 20)),
+            data: Vec::with_capacity((max_rows * n).min(1 << 22)),
+            truncated: false,
         });
     }
 
@@ -92,8 +104,7 @@ impl Recorder {
         if let Some(c) = &mut self.capture {
             if c.t.len() < c.max_rows {
                 c.t.push(t);
-                c.rows
-                    .push(self.ids.iter().map(|&id| bus.get(id)).collect());
+                c.data.extend(self.ids.iter().map(|&id| bus.get(id)));
             } else {
                 c.truncated = true;
             }
@@ -176,6 +187,6 @@ mod tests {
         let c = rec.stop_capture().unwrap();
         assert_eq!(c.t.len(), 5);
         assert!(c.truncated);
-        assert_eq!(c.rows[4], vec![4.0]);
+        assert_eq!(c.row(4), &[4.0]);
     }
 }

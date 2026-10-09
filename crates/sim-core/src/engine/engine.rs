@@ -30,6 +30,8 @@ pub struct Engine {
     pub dt_max: f64,
     /// Scratch: indices of blocks due now (no allocation per event).
     due: Vec<usize>,
+    /// Zeno guard: (window start [s], events in window).
+    zeno: (f64, usize),
     /// Fidelity configuration (set via `set_fidelity`).
     pub fidelity: Option<FidelityConfig>,
     fid_sig: Option<(super::signals::SignalId, super::signals::SignalId)>,
@@ -107,6 +109,7 @@ impl Engine {
             pending: Vec::new(),
             events: init_events,
             fidelity: None,
+            zeno: (f64::NEG_INFINITY, 0),
             fid_sig,
             recorder: None,
             energy: energy_sig.map(|s| {
@@ -232,15 +235,22 @@ impl Engine {
             self.plant
                 .event_functions(t, &self.x, &self.bus, &mut self.g_prev);
         }
-        let mut burst = (t0, 0usize); // Zeno guard: events within 1 µs of sim time
+        // Zeno guard state persists across calls (self.zeno): events within 1 µs of sim time.
         while t < t1 {
             let remaining = t1 - t;
             let n = (remaining / self.dt_max).ceil().max(1.0);
             let h = remaining / n;
-            self.x_save.clone_from(&self.x);
+            let last = n <= 1.0;
+            if ne > 0 {
+                self.x_save.clone_from(&self.x);
+            }
             self.integrator
                 .step(&mut self.plant, &mut self.bus, t, &mut self.x, h);
-            self.plant.outputs(t + h, &self.x, &mut self.bus);
+            // The next RK4 stage re-evaluates outputs anyway; only refresh the bus when
+            // something reads it now (events, recorder) or at the end of the interval.
+            if ne > 0 || last || self.recorder.is_some() {
+                self.plant.outputs(t + h, &self.x, &mut self.bus);
+            }
             if ne > 0 {
                 self.plant
                     .event_functions(t + h, &self.x, &self.bus, &mut self.g_new);
@@ -278,11 +288,11 @@ impl Engine {
                         }
                     }
                     // Zeno guard.
-                    if t - burst.0 > 1e-6 {
-                        burst = (t, 0);
+                    if t - self.zeno.0 > 1e-6 {
+                        self.zeno = (t, 0);
                     }
-                    burst.1 += 1;
-                    if burst.1 > ZENO_EVENTS {
+                    self.zeno.1 += 1;
+                    if self.zeno.1 > ZENO_EVENTS {
                         return Err(SimError::Numerical {
                             t: SimTime::from_secs_f64(t),
                             msg: format!(

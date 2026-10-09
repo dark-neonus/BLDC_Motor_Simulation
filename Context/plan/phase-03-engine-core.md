@@ -192,13 +192,13 @@
   - **Verify:** snapshot test on the skeleton engine with a `SetParam` before the snapshot + restore into the same engine + `energy.residual` check; PWM-style variable block reacting to a duty written by another block.
   - **Done when:** all pass.
 
-- [ ] **P03.T19** — Review fixes: performance and minor gaps
+- [x] **P03.T19** — Review fixes: performance and minor gaps
   - **Depends:** P03.T18
   - **Do:** gate `x_save.clone_from` and per-substep `outputs` on (events ∨ recorder ∨ last substep); precompute per-module energy-term counts; optional event direction mask; per-module Zeno guard persisting across `advance` calls; runner: clamp TimeScale to [1e-4, ∞], rebase pacing when lagging, reset ratio/lagging on Reset, paused-CPU test; recorder flat preallocated capture buffer; RNG in `StepCtx`; exp-RL step as an integrator option.
   - **Verify:** `just bench` (record the new sim/real ratio in LOG; target ≥ the 16× baseline); all tests.
   - **Done when:** all pass and no regression.
 
-- [ ] **P03.T20** — Review fixes: missing tests and commands
+- [~] **P03.T20** — Review fixes: missing tests and commands
   - **Depends:** P03.T18
   - **Do:** tests for simultaneous crossings in two modules, crossing at a substep end and at `t1`; tighten bouncing-ball tolerance to ≤ 1 ns per impact; oscillator 1e4 periods (release-only test or justified reduction); xcheck through `Engine::advance`; energy tests for `External` terms, jumps, `E_FLOOR` branch; benchmarks for plant steps/s and 3-rate events/s; `EngineCommand`/`RunnerCommand` gain Snapshot save/restore (Fault/LoadScene/Subscribe stay for P04/P10/P12 — note it).
   - **Verify:** `cargo nextest run -p sim-core`; `just bench`.

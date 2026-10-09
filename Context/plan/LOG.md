@@ -130,3 +130,15 @@
 - Scope: rigid drivetrain, linear magnetics, averaged inverter, ideal sensors. Not covered: saturation, backlash, switching inverter, phase-open fault, all-off rectification, sensors/observer/auto-tune.
 - 20 spec questions are in `validation/refmodel/SPEC_QUESTIONS.md` (Q-01…Q-20). **P11.T01 stays [~] until they are answered in the spec** (task "Done when").
 - Next: P03.T17, then resolve the SPEC_QUESTIONS.
+
+## 2026-10-09 — P03.T17–T19 (agent: Claude)
+- Did:
+  - T17: NaN guard, input-only and finite SetSignal, validate-then-restore, saturating SimTime.
+  - T18: snapshots now carry the energy book, dt, fidelity, FOC integrators and the motor's live `locked` param (the test caught the missing FOC state); variable-event re-poll + warnings; `set_fidelity` → `sim.dt_max`/`sim.tier` + tier tolerance; `energy.loss.<module>`; `sim_core::fixtures::dq_pmsm`.
+  - T19: hot-path gating (x_save, outputs), precomputed term counts, persistent Zeno window, runner TimeScale floor 1e-4 + lag rebase + reset clears ratio + paused-spin test, flat capture buffer.
+- Bench: 16× → **19.4×** real time.
+- Deferred (by decision, not forgotten):
+  - event direction mask and per-module Zeno: add if profiling shows bisection cost (P19.T01).
+  - RNG in `StepCtx`: blocks own their `BlockRng` from `RngService` (simpler, and snapshotted per block).
+  - exponential RL step as an integrator option: P05 decides whether the flux-state motor needs it.
+- Next: P03.T20, then the P03 gate.

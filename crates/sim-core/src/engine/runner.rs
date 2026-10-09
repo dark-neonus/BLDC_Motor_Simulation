@@ -50,6 +50,8 @@ pub struct RunnerStatus {
     pub values: Vec<f64>,
     /// Last error (numerical fault etc.); the runner pauses on error.
     pub error: Option<String>,
+    /// Paced-loop iterations so far (diagnostic; must not grow while paused).
+    pub iterations: u64,
 }
 
 struct Envelope {
@@ -90,6 +92,7 @@ impl RunnerHandle {
                     ratio: 0.0,
                     lagging: false,
                     error: None,
+                    iterations: 0,
                     shared,
                     events,
                 }
@@ -144,6 +147,7 @@ struct Runner {
     ratio: f64,
     lagging: bool,
     error: Option<String>,
+    iterations: u64,
     shared: Arc<Mutex<RunnerStatus>>,
     events: Option<SyncSender<EngineEvent>>,
 }
@@ -158,6 +162,7 @@ impl Runner {
             lagging: self.lagging,
             values: self.engine.bus.values().to_vec(),
             error: self.error.clone(),
+            iterations: self.iterations,
         }
     }
 
@@ -192,6 +197,8 @@ impl Runner {
             RunnerCommand::Reset => {
                 self.engine = (self.factory)();
                 self.error = None;
+                self.ratio = 0.0;
+                self.lagging = false;
                 restart = true;
             }
             RunnerCommand::StepTime(dt) => {
@@ -203,7 +210,8 @@ impl Runner {
                 self.guarded(|e| e.step_events(n));
             }
             RunnerCommand::TimeScale(s) if s > 0.0 => {
-                self.scale = s;
+                // Slow-motion floor 1e-4 (POLISHED_IDEA §6.1); ∞ = as fast as possible.
+                self.scale = s.max(1e-4);
                 restart = true;
             }
             RunnerCommand::TimeScale(_) => {}
@@ -242,8 +250,8 @@ impl Runner {
 
     /// Pace until paused or a restart is needed. Returns false on shutdown.
     fn run_paced(&mut self, rx: &Receiver<Envelope>) -> bool {
-        let wall0 = Instant::now();
-        let sim0 = self.engine.time;
+        let mut wall0 = Instant::now();
+        let mut sim0 = self.engine.time;
         let mut last_pub = Instant::now();
         let mut last_ratio = (Instant::now(), self.engine.time);
         while self.running {
@@ -258,6 +266,12 @@ impl Runner {
                 self.guarded(|e| e.step_until(to));
             }
             self.lagging = self.scale.is_finite() && self.engine.time < target;
+            self.iterations += 1;
+            if self.lagging {
+                // Can't keep up: rebase pacing so we don't sprint to catch up later.
+                wall0 = Instant::now();
+                sim0 = self.engine.time;
+            }
             if last_ratio.0.elapsed() >= Duration::from_millis(100) {
                 let r = (self.engine.time - last_ratio.1).as_secs_f64()
                     / last_ratio.0.elapsed().as_secs_f64();
@@ -378,6 +392,16 @@ mod tests {
             "sim time {} after 0.4 s wall (a 1-state plant should be ≫ real time)",
             s.t
         );
+    }
+
+    #[test]
+    fn paused_runner_does_not_spin() {
+        let h = RunnerHandle::spawn(factory(), None).unwrap();
+        h.request(RunnerCommand::Play);
+        std::thread::sleep(Duration::from_millis(50));
+        let a = h.request(RunnerCommand::Pause).unwrap().iterations;
+        std::thread::sleep(Duration::from_millis(150));
+        assert_eq!(h.status().iterations, a, "paced loop iterated while paused");
     }
 
     #[test]
