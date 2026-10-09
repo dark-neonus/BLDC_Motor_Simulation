@@ -34,13 +34,29 @@ struct DqMotor {
 impl PlantModule for DqMotor {
     fn save(&self) -> serde_json::Value {
         // Live parameters belong in snapshots (Snapshot doc).
-        serde_json::json!({ "locked": self.locked })
+        let p = &self.p;
+        serde_json::json!({ "locked": self.locked, "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda, "j": p.j, "b": p.b })
     }
     fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
+        let f = |k: &str| {
+            v.get(k)
+                .and_then(serde_json::Value::as_f64)
+                .ok_or(format!("missing `{k}`"))
+        };
+        let p = PmsmParams {
+            p: self.p.p,
+            r: f("r")?,
+            ld: f("ld")?,
+            lq: f("lq")?,
+            lambda: f("lambda")?,
+            j: f("j")?,
+            b: f("b")?,
+        };
         self.locked = v
             .get("locked")
             .and_then(serde_json::Value::as_bool)
             .ok_or("missing `locked`")?;
+        self.p = p;
         Ok(())
     }
     fn name(&self) -> &str {
@@ -94,20 +110,54 @@ impl PlantModule for DqMotor {
         }
     }
     fn params(&self) -> Vec<(String, String)> {
-        vec![("locked".into(), "-".into())]
+        [
+            ("locked", "-"),
+            ("r", "ohm"),
+            ("ld", "H"),
+            ("lq", "H"),
+            ("lambda", "Wb"),
+            ("j", "kg*m^2"),
+            ("b", "N*m*s/rad"),
+        ]
+        .iter()
+        .map(|(n, u)| ((*n).into(), (*u).into()))
+        .collect()
     }
     fn get_param(&self, name: &str) -> Option<f64> {
-        (name == "locked").then_some(if self.locked { 1.0 } else { 0.0 })
+        let p = &self.p;
+        Some(match name {
+            "locked" => f64::from(u8::from(self.locked)),
+            "r" => p.r,
+            "ld" => p.ld,
+            "lq" => p.lq,
+            "lambda" => p.lambda,
+            "j" => p.j,
+            "b" => p.b,
+            _ => return None,
+        })
     }
     fn set_param(&mut self, name: &str, v: f64, _: &mut [f64]) -> Result<f64, String> {
-        match name {
-            "locked" => {
-                let old = if self.locked { 1.0 } else { 0.0 };
-                self.locked = v != 0.0;
-                Ok(old)
-            }
-            _ => Err(format!("unknown parameter `{name}`")),
+        if name == "locked" {
+            let old = f64::from(u8::from(self.locked));
+            self.locked = v != 0.0;
+            return Ok(old);
         }
+        // Validated by sim-model's constraint rules before they get here (P04.T13);
+        // keep a last guard so a bad command cannot poison the state.
+        if !(v > 0.0 || (name == "b" && v >= 0.0)) {
+            return Err(format!("`{name}` must be positive, got {v}"));
+        }
+        let p = &mut self.p;
+        let slot = match name {
+            "r" => &mut p.r,
+            "ld" => &mut p.ld,
+            "lq" => &mut p.lq,
+            "lambda" => &mut p.lambda,
+            "j" => &mut p.j,
+            "b" => &mut p.b,
+            _ => return Err(format!("unknown parameter `{name}`")),
+        };
+        Ok(std::mem::replace(slot, v))
     }
     fn power_terms(&self) -> Vec<(String, PowerKind)> {
         vec![
@@ -208,8 +258,11 @@ impl Default for SkeletonOptions {
 
 /// Build the skeleton engine (6020-class motor + 20 kHz FOC).
 pub fn build_engine(opts: SkeletonOptions) -> Engine {
-    let mp = PmsmParams::skeleton_6020();
-    let cfg = FocConfig::skeleton();
+    build_engine_with(PmsmParams::skeleton_6020(), FocConfig::skeleton(), opts)
+}
+
+/// Skeleton engine with given motor parameters and controller configuration.
+pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) -> Engine {
     let mut bus = SignalBus::new();
     // INVARIANT: the skeleton registers a fixed, unique set of paths into a fresh bus,
     // so `register` cannot fail here.

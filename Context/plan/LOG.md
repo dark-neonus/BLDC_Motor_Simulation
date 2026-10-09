@@ -206,3 +206,10 @@
 - `wizard::{start, WizardState::{questions, answer, accept_suggestions, finish}}`. Slots are a required input; questions only when relevant (poles meaning — auto-resolved by plausibility q ≥ 1/4; Kv definition; Kt basis; R/L LL vs phase; star/delta). Provenance: datasheet / derived / estimated, `Estimate{path, rule, confidence}`.
 - New rules EQ-EST-04 (mass from envelope) and EQ-EST-05 (envelope from size class). Test uses the CubeMars AK10-9 V2 spec table: derived Kt 0.0827 vs listed 0.095 (−13 %, within 20 %), Kt·50 A = 4.13 N·m vs 38/9 = 4.22 N·m (−2 %).
 - Lesson: Python heredocs writing LaTeX must use raw strings (`\r`, `\f`, `\a` became control chars).
+
+## 2026-10-09 — P04.T13 Engine from scene, scenario asserts
+- `sim_core::build::build_engine(&ResolvedScene) -> BuiltScene{engine, model, ratio, ctrl_dt}` maps the scene onto the skeleton dq motor + FOC (R, L, λ, p, J + reflected gearbox/load inertia, supply voltage incl. battery OCV at soc_init, FOC rate/bandwidth/current limit). Only `foc` builds before P09. `DqMotor` now exposes r/ld/lq/lambda/j/b as live params and saves them in snapshots.
+- `SceneModel::edit` routes `motor.*` edits through `apply_edit` and emits `SetParam`s; rejected edits fail the run (exit 1).
+- `sim_core::scenario_run::run`: sequential timeline → timed events; asserts at a time or over a window (checked at every sample); velocity targets with ramps (load side × N); `fault`/`disturbance` warn until P10/P05; position/torque targets error until P09.
+- CLI `run-scenario`: both formats (full = has `timeline:`), `asserts.json`, pass/fail table, exit 0/1/2, `--no-asserts`. New preset scenario `gimbal-spin` (runs, passes).
+- **Deferred:** the live server (sim-api) still runs the default skeleton engine without a scene, so live `SetParam` does not yet pass through `apply_edit`; wire `SceneModel::edit` in when the server loads scenes.

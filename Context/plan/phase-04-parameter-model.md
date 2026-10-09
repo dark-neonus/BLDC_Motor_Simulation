@@ -158,7 +158,7 @@
   - **Verify:** Test: entering a real public datasheet (record which) produces a model whose derived Kt/peak torque match the datasheet within tolerance.
   - **Done when:** Passing.
 
-- [ ] **P04.T13** — Engine builds from a scene; scenario asserts & CLI exit codes
+- [x] **P04.T13** — Engine builds from a scene; scenario asserts & CLI exit codes
   - **Depends:** P04.T05, P04.T08, P04.T11
   - **Do:** `sim-core::build_engine(scene: &ResolvedScene) -> Engine` (resolve library refs in `sim-model`, convert uom → f64 per D-003). Live `SetParam` commands route through `apply_edit` first (so constraints are enforced at runtime too). Wire the CLI `run-scenario` to the full scenario format (keep skeleton scenarios working, or migrate them). Scenario `assert` actions are evaluated by the engine at their time/window. The CLI prints a pass/fail table, writes `asserts.json` next to the outputs, and **exits with code 2 if any assert fails** (1 = error, 0 = all passed). `--no-asserts` skips them.
   - **Files:** `crates/sim-core/src/build.rs`, CLI

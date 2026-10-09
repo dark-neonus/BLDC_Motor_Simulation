@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../schemas/scenario.schema.json
+# Smoke test of the gimbal-hold scene: spin the camera arm slowly and check the speed.
+# (Position hold arrives with the position controller in P09.)
+schema_version: 1
+name: Gimbal spin
+scene: { preset: "builtin:scenes/gimbal-hold" }
+sample: 1 ms
+record: [motor.omega, motor.i_q, ctrl.omega_ref]
+timeline:
+  - target: { kind: velocity, value: 5 rad/s, ramp: 0.1 s }
+  - wait: 0.6 s
+  - assert: { signal: motor.omega, op: eq, value: 5, tol: 0.25, window: 0.1 s, message: "tracks 5 rad/s" }
+  - set: { path: motor.electrical.r_phase, value: 6 ohm }
+  - wait: 0.1 s
+  - stop

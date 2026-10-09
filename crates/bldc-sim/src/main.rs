@@ -28,13 +28,17 @@ enum Cmd {
         #[arg(long)]
         open: bool,
     },
-    /// Run a scenario file headless and write signals.parquet, signals.csv and meta.json.
+    /// Run a scenario file headless and write signals.parquet, signals.csv, meta.json and
+    /// asserts.json. Exit code: 0 all asserts passed, 1 error, 2 an assert failed.
     RunScenario {
         /// Scenario YAML file.
         file: PathBuf,
         /// Output directory.
         #[arg(long, default_value = "out")]
         out: PathBuf,
+        /// Skip `assert` actions.
+        #[arg(long)]
+        no_asserts: bool,
     },
     /// Check parameter files; exit code 1 on any parse error or rejected value.
     ValidateFile {
@@ -62,7 +66,16 @@ fn main() -> anyhow::Result<()> {
         Some(Cmd::Serve { port, host, open }) => {
             Ok(sim_api::run_blocking((host, port).into(), open)?)
         }
-        Some(Cmd::RunScenario { file, out }) => cli::run_scenario::run(&file, &out),
+        Some(Cmd::RunScenario {
+            file,
+            out,
+            no_asserts,
+        }) => {
+            if !cli::run_scenario::run(&file, &out, !no_asserts)? {
+                std::process::exit(2);
+            }
+            Ok(())
+        }
         Some(Cmd::DumpSchemas { out }) => cli::dump_schemas::run(&out),
         Some(Cmd::ValidateFile { files }) => {
             if !cli::validate_file::run(&files) {
