@@ -385,4 +385,24 @@ mod tests {
         assert!(lib.list("motors", "renamed").is_empty());
         let _ = std::fs::remove_dir_all(root);
     }
+
+    #[test]
+    fn embedded_motor_presets_load_and_validate() {
+        let lib = Library::new(None, tmp("emb").join("user"), vec![]).unwrap();
+        let motors = lib.list("motors", "");
+        assert!(motors.len() >= 9, "{motors:?}");
+        for e in motors {
+            let text = lib.load(&e.id).unwrap();
+            let mut m: crate::params::MotorParams = crate::io::parse_yaml(&text, &e.id).unwrap();
+            let mut issues = Vec::new();
+            crate::constraints::derive(&mut m, &mut issues);
+            issues.extend(crate::constraints::validate(&m));
+            let rejects: Vec<_> = issues
+                .iter()
+                .filter(|i| i.severity == crate::constraints::Severity::Reject)
+                .collect();
+            assert!(rejects.is_empty(), "{}: {rejects:?}", e.id);
+        }
+        let _ = std::fs::remove_dir_all(tmp("emb"));
+    }
 }

@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=../../schemas/motor.schema.json
+# Generic 10015-class outrunner (not a specific product). Sources: _sources.md
+schema_version: 1
+identity: { name: "Generic 10015 outrunner", size_class: "10015", topology: outrunner }
+electrical:
+  r_phase: { value: "45 mohm", source: datasheet, note: "star-equivalent: half of AK10-9 90 mΩ LL; MN1010 46 mΩ" }
+  l_d: { value: "165.5 uH", source: datasheet, note: "half of line-line" }
+  l_q: { value: "165.5 uH", source: datasheet, note: "surface PM: L_q = L_d" }
+  lambda_m: { value: "2.6254 mWb", source: derived }
+  entered_as: kv
+  kv: { value: "100 rpm/V", source: datasheet, note: "CubeMars AK10-9 V2 (motor stage); T-Motor MN1010 KV90" }
+  connection: star
+magnetic:
+  emf_shape: { kind: sinusoidal }
+winding: { slots: 36, pole_pairs: 21 }
+geometry:
+  rotor_od: { value: "106 mm", source: datasheet }
+mechanical:
+  j_rotor: { value: "6193.84 g*cm^2", source: estimated, note: "EQ-EST-01" }
+  mass: { value: "630 g", source: datasheet }
+thermal:
+  r_ws: { value: "0.5 K/W", source: estimated, note: "EQ-EST-03" }
+  r_sh: { value: "0.3 K/W", source: estimated, note: "EQ-EST-03" }
+  r_ha: { value: "3.01498 K/W", source: estimated, note: "EQ-EST-03, h = 12 W/(m^2 K)" }
+  c_w: { value: "36.3825 J/K", source: estimated, note: "EQ-EST-03" }
+  c_s: { value: "101.43 J/K", source: estimated, note: "EQ-EST-03" }
+  c_h: { value: "226.8 J/K", source: estimated, note: "EQ-EST-03" }
+  t_max: { value: "100 degC", source: estimated }
+ratings:
+  current_continuous: { value: "18.5 A", source: estimated }
+  current_peak: { value: "50 A", source: datasheet }

@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=../../schemas/motor.schema.json
+# Generic 4108-class outrunner (not a specific product). Sources: _sources.md
+schema_version: 1
+identity: { name: "Generic 4108 outrunner", size_class: "4108", topology: outrunner }
+electrical:
+  r_phase: { value: "5.55 ohm", source: datasheet, note: "star-equivalent: half of iFlight GM4108H-120T" }
+  l_d: { value: "1.665 mH", source: estimated, note: "EQ-EST-02, tau_e = 0.3 ms" }
+  l_q: { value: "1.665 mH", source: estimated, note: "surface PM: L_q = L_d" }
+  lambda_m: { value: "18.563 mWb", source: derived }
+  entered_as: kv
+  kv: { value: "27 rpm/V", source: estimated, note: "from no-load 513–567 rpm @ 20 V (iFlight GM4108H-120T)" }
+  connection: star
+magnetic:
+  emf_shape: { kind: sinusoidal }
+winding: { slots: 24, pole_pairs: 11 }
+geometry:
+  rotor_od: { value: "47 mm", source: datasheet }
+mechanical:
+  j_rotor: { value: "239.676 g*cm^2", source: estimated, note: "EQ-EST-01" }
+  mass: { value: "124 g", source: datasheet }
+thermal:
+  r_ws: { value: "0.5 K/W", source: estimated, note: "EQ-EST-03" }
+  r_sh: { value: "0.3 K/W", source: estimated, note: "EQ-EST-03" }
+  r_ha: { value: "10.169 K/W", source: estimated, note: "EQ-EST-03, h = 12 W/(m^2 K)" }
+  c_w: { value: "7.161 J/K", source: estimated, note: "EQ-EST-03" }
+  c_s: { value: "19.964 J/K", source: estimated, note: "EQ-EST-03" }
+  c_h: { value: "44.64 J/K", source: estimated, note: "EQ-EST-03" }
+  t_max: { value: "100 degC", source: estimated }
+ratings:
+  current_continuous: { value: "1.5 A", source: estimated }
+  current_peak: { value: "2.5 A", source: estimated }

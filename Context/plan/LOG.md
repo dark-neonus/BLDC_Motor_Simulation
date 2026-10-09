@@ -186,3 +186,8 @@
 ## 2026-10-09 — P04.T08 Library
 - `sim_model::library::Library`: builtin (rust-embed over `presets/**/*.yaml`, or a dir in tests), user (`$XDG_DATA_HOME|~/.local/share/bldc-sim/library`, created per kind), extra folders from `~/.config/bldc-sim/config.yaml` `library_extra:` (ids `extraN:`; read-only).
 - Ops: list(kind, filter), load (raw text), save_as, duplicate (sets `identity.name`, keeps the modeline; comments are not preserved in the copy), rename, delete. Names restricted to `[A-Za-z0-9._-]` (no path traversal); `_`-prefixed files (e.g. `_sources`) are hidden.
+
+## 2026-10-09 — P04.T09 Motor presets
+- 9 generic outrunner classes (2804 … 12020) in `presets/motors/`, generated from a class table (LL→phase halving, λ derived from Kv). Sources, ranges and the Kt·I check in `_sources.md`; 8010 and 12020 are interpolated/scaled (no exact-size datasheet found); no inrunner variants (not common in these classes).
+- `estimation.md` now holds EQ-EST-01 (outrunner J), EQ-EST-02 (L from τ_e), EQ-EST-03 (thermal from mass/size); P04.T12 extends it.
+- `just presets-check` (check-jsonschema + validate-file) in `just check`; a library test validates all embedded motor presets.

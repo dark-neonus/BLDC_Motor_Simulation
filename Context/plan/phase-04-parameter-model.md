@@ -110,7 +110,7 @@
   - **Verify:** Tests with temp dirs: builtin is read-only; duplicate preserves content and changes the name; extra folders are listed.
   - **Done when:** Passing.
 
-- [ ] **P04.T09** — Generic motor preset research & files
+- [x] **P04.T09** — Generic motor preset research & files
   - **Depends:** P04.T05, P04.T08
   - **Do:**
     1. For classes 2804, 4108, 5010, 6010, 6020, 8010, 8108, 10015 and 12020 (outrunner gimbal/robot types; plus inrunner variants where common), research **typical** values from ≥ 2 public datasheets per class (web search): slots/poles, Kv, phase R, L, mass, rotor inertia (if listed), rated/peak current and torque.

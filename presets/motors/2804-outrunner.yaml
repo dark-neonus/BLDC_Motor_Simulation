@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=../../schemas/motor.schema.json
+# Generic 2804-class outrunner (not a specific product). Sources: _sources.md
+schema_version: 1
+identity: { name: "Generic 2804 outrunner", size_class: "2804", topology: outrunner }
+electrical:
+  r_phase: { value: "4.5 ohm", source: datasheet, note: "star-equivalent: half of iFlight GM2804 9 Ω; GBM2804H 10 Ω" }
+  l_d: { value: "1.35 mH", source: estimated, note: "EQ-EST-02, tau_e = 0.3 ms" }
+  l_q: { value: "1.35 mH", source: estimated, note: "surface PM: L_q = L_d" }
+  lambda_m: { value: "5.2508 mWb", source: derived }
+  entered_as: kv
+  kv: { value: "150 rpm/V", source: estimated, note: "from no-load 1468–1622 rpm @ 10 V (iFlight GBM2804H-100T)" }
+  connection: star
+magnetic:
+  emf_shape: { kind: sinusoidal }
+winding: { slots: 12, pole_pairs: 7 }
+geometry:
+  rotor_od: { value: "35 mm", source: datasheet }
+mechanical:
+  j_rotor: { value: "41.8031 g*cm^2", source: estimated, note: "EQ-EST-01" }
+  mass: { value: "39 g", source: datasheet }
+thermal:
+  r_ws: { value: "0.5 K/W", source: estimated, note: "EQ-EST-03" }
+  r_sh: { value: "0.3 K/W", source: estimated, note: "EQ-EST-03" }
+  r_ha: { value: "23.3194 K/W", source: estimated, note: "EQ-EST-03, h = 12 W/(m^2 K)" }
+  c_w: { value: "2.25225 J/K", source: estimated, note: "EQ-EST-03" }
+  c_s: { value: "6.279 J/K", source: estimated, note: "EQ-EST-03" }
+  c_h: { value: "14.04 J/K", source: estimated, note: "EQ-EST-03" }
+  t_max: { value: "100 degC", source: estimated }
+ratings:
+  current_continuous: { value: "1 A", source: estimated }
+  current_peak: { value: "2 A", source: estimated }

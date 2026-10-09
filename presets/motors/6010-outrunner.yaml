@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=../../schemas/motor.schema.json
+# Generic 6010-class outrunner (not a specific product). Sources: _sources.md
+schema_version: 1
+identity: { name: "Generic 6010 outrunner", size_class: "6010", topology: outrunner }
+electrical:
+  r_phase: { value: "115 mohm", source: datasheet, note: "star-equivalent: half of DJI 6010 line-line" }
+  l_d: { value: "115 uH", source: estimated, note: "EQ-EST-02, tau_e = 1.0 ms" }
+  l_q: { value: "115 uH", source: estimated, note: "surface PM: L_q = L_d" }
+  lambda_m: { value: "3.0293 mWb", source: derived }
+  entered_as: kv
+  kv: { value: "130 rpm/V", source: datasheet, note: "DJI E2000 6010 130 KV; Vector Technics 6010 PRO 160 KV" }
+  connection: star
+magnetic:
+  emf_shape: { kind: sinusoidal }
+winding: { slots: 24, pole_pairs: 14 }
+geometry:
+  rotor_od: { value: "68 mm", source: datasheet }
+mechanical:
+  j_rotor: { value: "930.58 g*cm^2", source: estimated, note: "EQ-EST-01" }
+  mass: { value: "230 g", source: datasheet }
+thermal:
+  r_ws: { value: "0.5 K/W", source: estimated, note: "EQ-EST-03" }
+  r_sh: { value: "0.3 K/W", source: estimated, note: "EQ-EST-03" }
+  r_ha: { value: "6.09509 K/W", source: estimated, note: "EQ-EST-03, h = 12 W/(m^2 K)" }
+  c_w: { value: "13.2825 J/K", source: estimated, note: "EQ-EST-03" }
+  c_s: { value: "37.03 J/K", source: estimated, note: "EQ-EST-03" }
+  c_h: { value: "82.8 J/K", source: estimated, note: "EQ-EST-03" }
+  t_max: { value: "100 degC", source: estimated }
+ratings:
+  current_continuous: { value: "12 A", source: estimated }
+  current_peak: { value: "30 A", source: estimated }

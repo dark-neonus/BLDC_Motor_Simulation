@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=../../schemas/motor.schema.json
+# Generic 12020-class outrunner (not a specific product). Sources: _sources.md
+schema_version: 1
+identity: { name: "Generic 12020 outrunner", size_class: "12020", topology: outrunner }
+electrical:
+  r_phase: { value: "60 mohm", source: estimated, note: "star-equivalent: half of RO100 143 mΩ LL" }
+  l_d: { value: "60 uH", source: datasheet, note: "half of line-line" }
+  l_q: { value: "60 uH", source: datasheet, note: "surface PM: L_q = L_d" }
+  lambda_m: { value: "5.2508 mWb", source: derived }
+  entered_as: kv
+  kv: { value: "50 rpm/V", source: estimated, note: "scaled from CubeMars RO100 KV55 (Φ108 mm)" }
+  connection: star
+magnetic:
+  emf_shape: { kind: sinusoidal }
+winding: { slots: 36, pole_pairs: 21 }
+geometry:
+  rotor_od: { value: "128 mm", source: estimated }
+mechanical:
+  j_rotor: { value: "15769.6 g*cm^2", source: estimated, note: "EQ-EST-01" }
+  mass: { value: "1100 g", source: estimated }
+thermal:
+  r_ws: { value: "0.5 K/W", source: estimated, note: "EQ-EST-03" }
+  r_sh: { value: "0.3 K/W", source: estimated, note: "EQ-EST-03" }
+  r_ha: { value: "2.09326 K/W", source: estimated, note: "EQ-EST-03, h = 12 W/(m^2 K)" }
+  c_w: { value: "63.525 J/K", source: estimated, note: "EQ-EST-03" }
+  c_s: { value: "177.1 J/K", source: estimated, note: "EQ-EST-03" }
+  c_h: { value: "396 J/K", source: estimated, note: "EQ-EST-03" }
+  t_max: { value: "100 degC", source: estimated }
+ratings:
+  current_continuous: { value: "25 A", source: estimated }
+  current_peak: { value: "70 A", source: estimated }

@@ -100,7 +100,7 @@ fmt-check:
 check-fast: fmt-check lint test-rust test-web plan-check
 
 # Full gate, run at phase gates
-check: check-fast validate e2e schemas-check
+check: check-fast validate e2e schemas-check presets-check
     pnpm -C web build
     pnpm -C docs build
 
@@ -131,3 +131,8 @@ gen-schemas:
 # Fail if committed schemas differ from the generated ones
 schemas-check: gen-schemas
     git diff --exit-code schemas/
+
+# Check presets against their JSON Schemas and the constraint rules
+presets-check:
+    uvx -q check-jsonschema --schemafile schemas/motor.schema.json presets/motors/*.yaml
+    cargo run -q -p bldc-sim -- validate-file presets/motors/*.yaml
