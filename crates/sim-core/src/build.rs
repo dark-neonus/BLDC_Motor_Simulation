@@ -6,13 +6,17 @@
 
 use sim_model::constraints::{self, Severity};
 use sim_model::param::Param;
-use sim_model::params::{ControllerParams, GearboxParams, LoadParams, MotorParams, SupplyParams};
+use sim_model::params::{
+    ControllerParams, GearboxParams, LoadParams, MotorParams, SupplyParams, TierParam,
+};
 use sim_model::scene::ResolvedScene;
 use sim_model::units::Kind;
 
 use crate::engine::commands::{ChangeSource, EngineCommand};
 use crate::engine::engine::Engine;
+use crate::engine::fidelity::{FidelityConfig, Tier};
 use crate::fixtures::dq_pmsm::PmsmParams;
+use crate::physics::motor::cogging::CoggingParams;
 use crate::skeleton::adapter::{SkeletonOptions, build_engine_with};
 use crate::skeleton::foc::FocConfig;
 
@@ -194,6 +198,44 @@ pub struct BuiltScene {
     pub ctrl_dt: f64,
 }
 
+/// The scene's fidelity tier (default Standard, EQ-NUM-07).
+pub fn tier(scene: &ResolvedScene) -> Tier {
+    match scene.fidelity.as_ref().map(|f| f.tier) {
+        Some(TierParam::Ideal) => Tier::Ideal,
+        Some(TierParam::Detailed) => Tier::Detailed,
+        _ => Tier::Standard,
+    }
+}
+
+/// Cogging terms (EQ-MOT-08) if the tier enables them and the motor has any.
+fn cogging(scene: &ResolvedScene) -> Result<Option<CoggingParams>, BuildError> {
+    let m = &scene.motor;
+    if !FidelityConfig::preset(tier(scene)).enable_cogging || m.magnetic.cogging.is_empty() {
+        return Ok(None);
+    }
+    let terms = m
+        .magnetic
+        .cogging
+        .iter()
+        .enumerate()
+        .map(|(k, c)| {
+            Ok((
+                si(
+                    &c.amplitude,
+                    Kind::Torque,
+                    &format!("motor.magnetic.cogging.{k}.amplitude"),
+                )?,
+                c.phase,
+            ))
+        })
+        .collect::<Result<Vec<_>, BuildError>>()?;
+    let n_c = f64::from(sim_model::winding::cogging_periods(
+        m.winding.slots,
+        m.winding.pole_pairs,
+    ));
+    Ok(Some(CoggingParams { n_c, terms }))
+}
+
 pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
     // Derive (so motor-constant overrides reach λ) and refuse anything with a Reject.
     let mut scene = scene.clone();
@@ -241,6 +283,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             dt_max,
             extra_j,
             ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
+            cogging: cogging(scene)?,
         },
     );
     Ok(BuiltScene {

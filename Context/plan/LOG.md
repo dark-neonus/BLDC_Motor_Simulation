@@ -245,3 +245,8 @@
 - `physics::inverter::ideal::IdealVoltageSource` (INTERIM until P07): inverter.v_x = invClarke(ctrl.foc.v_α/β) + V_bus/2. The skeleton adapter now builds rotor + ideal source + abc motor + skeleton FOC (INTERIM until P09.T03); the FOC block outputs ctrl.foc.v_alpha/v_beta (inverse Park at the tick, ZOH). The dq plant is fixture-only; `PmsmParams` remains as the skeleton's parameter bag.
 - Rotor: `j_load` (reflected inertia) separate from `j_rotor`; FOC gains designed on the total.
 - `just validate` (V-SKEL), `just e2e` and the gimbal-spin scenario pass unchanged. Bench not re-run (perf check at the gate).
+
+## 2026-10-09 — P05.T04 Cogging
+- `physics::motor::cogging::Cogging` (module `motor.cogging`, stateless): reads motor.theta, writes motor.torque_cog (rotor internal input), U_cog as stored energy (EQ-MOT-08). Tests: period 2π/N_c, zero mean, T = −dU/dθ, unpowered cogging rotor energy residual < 1e-6 over 1 s.
+- Wired via `SkeletonOptions::cogging`; `build::tier()` maps the scene tier; added when `FidelityConfig::preset(tier).enable_cogging` (Standard/Detailed) and the motor lists terms. N_c from `winding::cogging_periods`.
+- Presets: one estimated harmonic at 2 % of Kt·I_peak each (`_sources.md`, [HendershotMiller2010] range 0.5–5 %).

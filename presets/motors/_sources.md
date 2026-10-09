@@ -26,6 +26,12 @@ Inrunner variants: none of these classes is commonly sold as an inrunner for gim
 (the CubeMars RI100, Φ104 × 26 mm, 14 pole pairs, 105 rpm/V, 126 mΩ / 366.7 µH LL, is the
 nearest), so no inrunner presets were added.
 
+## Cogging (EQ-MOT-08)
+
+No datasheet in the table lists cogging torque. Each preset carries one harmonic with
+amplitude **2 % of Kt·I_peak** (`source: estimated`), the middle of the 0.5–5 % of rated
+torque typical for slotted gimbal motors `[HendershotMiller2010]`. Phase 0; N_c = LCM(slots, 2p).
+
 ## Peak-torque check (Kt · I_peak vs datasheet, ±30 %)
 
 | Class | Kt (derived) | Kt · I | Datasheet torque | Difference |

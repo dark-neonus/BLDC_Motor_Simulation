@@ -12,6 +12,7 @@ electrical:
   connection: star
 magnetic:
   emf_shape: { kind: sinusoidal }
+  cogging: [ { amplitude: { value: "0.0153 N*m", source: estimated, note: "EQ-MOT-08: 2 % of Kt·I_peak" } } ]
 winding: { slots: 24, pole_pairs: 11 }
 geometry:
   rotor_od: { value: "47 mm", source: datasheet }

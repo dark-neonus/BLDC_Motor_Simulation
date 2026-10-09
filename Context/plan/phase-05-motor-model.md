@@ -42,7 +42,7 @@
   - **Verify:** Difference ≤ 1e-9 abs + 1e-6 rel at the same dt (CONVENTIONS §7; i_d ≈ 0 needs the abs floor).
   - **Done when:** Passing; the skeleton is gone from production code.
 
-- [ ] **P05.T04** — Cogging torque
+- [x] **P05.T04** — Cogging torque
   - **Depends:** P05.T02
   - **Do:** T_cog = Σ A_k sin(k·N_c·θm + φ_k), using N_c from `winding.rs`. Enabled by `fidelity.enable_cogging`. Default amplitude per preset (typically 1–5 % of rated torque; cite the source in `_sources.md`). Cogging is conservative (it has an associated potential energy, report it).
   - **Files:** `crates/sim-core/src/physics/motor/cogging.rs`

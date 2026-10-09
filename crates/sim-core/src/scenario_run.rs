@@ -479,4 +479,30 @@ mod tests {
         assert!((base / fast - 10.0).abs() < 1e-9, "{base} {fast}");
         let _ = std::fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn cogging_follows_the_fidelity_tier() {
+        let dir = std::env::temp_dir().join(format!("bldc-cog-{}", std::process::id()));
+        let lib = Library::new(None, dir.join("user"), vec![]).unwrap();
+        let scene: sim_model::scene::Scene =
+            parse_yaml(&lib.load("builtin:scenes/gimbal-hold").unwrap(), "s").unwrap();
+        let mut r = scene.resolve(&lib).unwrap();
+        // Default tier (Standard) enables cogging (EQ-NUM-07 table).
+        let b = build_engine(&r).unwrap();
+        assert!(b.engine.bus.id("motor.torque_cog").is_ok());
+        r.fidelity = Some(sim_model::params::FidelityParams {
+            tier: sim_model::params::TierParam::Ideal,
+            inverter_mode: None,
+            dt_max: None,
+        });
+        assert!(
+            build_engine(&r)
+                .unwrap()
+                .engine
+                .bus
+                .id("motor.torque_cog")
+                .is_err()
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

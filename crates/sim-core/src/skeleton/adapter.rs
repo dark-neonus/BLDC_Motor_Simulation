@@ -13,6 +13,7 @@ use crate::engine::time::{SimTime, period_from_hz};
 use crate::physics::inverter::ideal::IdealVoltageSource;
 use crate::physics::mech::rotor::{RotorParams, RotorRigid};
 use crate::physics::motor::backemf::Shape;
+use crate::physics::motor::cogging::{Cogging, CoggingParams};
 use crate::physics::motor::electrical::{ElectricalInputs, ElectricalParams, MotorElectrical};
 
 /// Signals the FOC block reads and writes.
@@ -87,7 +88,7 @@ impl DiscreteBlock for FocBlock {
 }
 
 /// Options for the skeleton engine.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct SkeletonOptions {
     pub locked: bool,
     pub open_loop_vq: Option<f64>,
@@ -97,6 +98,8 @@ pub struct SkeletonOptions {
     pub extra_j: f64,
     /// Gear ratio N (load-side setpoints × N = motor side).
     pub ratio: f64,
+    /// Cogging (EQ-MOT-08), when the fidelity tier enables it.
+    pub cogging: Option<CoggingParams>,
 }
 
 impl Default for SkeletonOptions {
@@ -107,6 +110,7 @@ impl Default for SkeletonOptions {
             dt_max: 5e-6,
             extra_j: 0.0,
             ratio: 1.0,
+            cogging: None,
         }
     }
 }
@@ -191,7 +195,16 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         theta_e0: 0.0,
     };
     let motor = MotorElectrical::new(ep, inp, &mut bus).expect("unique skeleton signal");
-    let rotor = rotor.with_internal(id(&bus, "motor.torque_em"));
+    let mut rotor = rotor.with_internal(id(&bus, "motor.torque_em"));
+    let cogging = match opts.cogging {
+        Some(c) => {
+            let m =
+                Cogging::new(c, id(&bus, "motor.theta"), &mut bus).expect("unique skeleton signal");
+            rotor = rotor.with_internal(m.torque_id());
+            Some(m)
+        }
+        None => None,
+    };
     let s = FocSignals {
         v_d,
         v_q,
@@ -206,6 +219,9 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
     plant.add(Box::new(rotor));
     plant.add(Box::new(source));
     plant.add(Box::new(motor));
+    if let Some(c) = cogging {
+        plant.add(Box::new(c));
+    }
     let period = period_from_hz(1.0 / cfg.dt)
         .map(|p| p.period)
         .unwrap_or(SimTime(50_000));
