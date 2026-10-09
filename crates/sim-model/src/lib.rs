@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 pub mod constraints;
+pub mod io;
 pub mod param;
 pub mod params;
 pub mod units;

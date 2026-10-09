@@ -81,7 +81,7 @@
   - **Verify:** A test per rule. Property test (proptest): any sequence of valid edits leaves the model with `validate()` free of Reject issues.
   - **Done when:** Passing. Explanations are written for beginners.
 
-- [ ] **P04.T06** — YAML IO, schema version & migrations
+- [x] **P04.T06** — YAML IO, schema version & migrations
   - **Depends:** P04.T03
   - **Do:**
     - `load_yaml<T>(path)` / `save_yaml(path, &T)` with serde-saphyr.

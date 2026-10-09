@@ -36,6 +36,12 @@ enum Cmd {
         #[arg(long, default_value = "out")]
         out: PathBuf,
     },
+    /// Check parameter files; exit code 1 on any parse error or rejected value.
+    ValidateFile {
+        /// YAML files to check.
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -51,6 +57,12 @@ fn main() -> anyhow::Result<()> {
             Ok(sim_api::run_blocking((host, port).into(), open)?)
         }
         Some(Cmd::RunScenario { file, out }) => cli::run_scenario::run(&file, &out),
+        Some(Cmd::ValidateFile { files }) => {
+            if !cli::validate_file::run(&files) {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
         None => {
             println!(
                 "bldc-sim {} — see `bldc-sim --help`",

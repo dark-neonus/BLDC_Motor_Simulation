@@ -173,3 +173,7 @@
 - Stopped at ~45 % usage (user limit for this window: 50 %).
 - P04.T04 also done: star-of-slots layout + winding factor (6 published values incl. 12N14P 0.933, 9N8P 0.945), balance, validity, cogging LCM.
 - Next: P04.T05 (constraint graph & apply_edit).
+
+## 2026-10-09 — P04.T06 YAML IO
+- `sim_model::io`: load/save/parse_yaml (serde-saphyr, line/col errors prefixed with file), schema modeline on save, `schema_version` with TooNew error and a `migrate()` hook (v1 identity).
+- `bldc-sim validate-file`: motor files only for now (detected by `electrical:` key); other types join in T10/T11. Unknown-field errors list the expected fields (serde), no extra fuzzy matcher.

@@ -356,6 +356,7 @@ dependencies = [
  "sha2",
  "sim-api",
  "sim-core",
+ "sim-model",
  "tracing-subscriber",
 ]
 

@@ -15,6 +15,7 @@ sha2 = "0.11.0"
 arrow-array = "60"
 arrow-schema = "60"
 sim-core.workspace = true
+sim-model.workspace = true
 serde = { workspace = true, features = ["derive"] }
 anyhow.workspace = true
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
