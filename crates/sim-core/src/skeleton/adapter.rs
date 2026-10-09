@@ -4,7 +4,7 @@
 //! survives only as a test fixture (`fixtures::dq_pmsm`).
 
 use super::foc::{Foc, FocConfig, FocGains};
-use super::model::PmsmParams;
+use super::params::PmsmParams;
 use crate::engine::block::{DiscreteBlock, SimError, StepCtx, priority};
 use crate::engine::engine::Engine;
 use crate::engine::plant::Plant;

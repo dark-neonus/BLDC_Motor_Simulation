@@ -1,5 +1,5 @@
-//! Fixtures for cross-checks. `dq_pmsm` is the reference dq model (P05.T03 compares
-//! the stationary-frame motor against it). Until P05.T11 removes the skeleton it is
-//! also used by `skeleton`; then gate this module with `#[cfg(any(test, feature = "fixtures"))]`.
+//! Test fixtures (built with `cfg(test)` or the `fixtures` feature): `dq_pmsm` is the
+//! reference dq model the stationary-frame motor is compared against (V-MOT-005).
 
 pub mod dq_pmsm;
+pub mod rk4;

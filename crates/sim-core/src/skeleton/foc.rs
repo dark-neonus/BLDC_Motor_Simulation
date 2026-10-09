@@ -5,7 +5,7 @@
 //! by conditional integration (clamping): an integrator only accumulates while
 //! its output is not saturated.
 
-use super::model::PmsmParams;
+use super::params::PmsmParams;
 
 /// Controller configuration.
 #[derive(Debug, Clone, Copy)]
@@ -161,8 +161,8 @@ impl Foc {
 
 #[cfg(test)]
 mod tests {
-    use super::super::model::Pmsm;
     use super::*;
+    use crate::fixtures::dq_pmsm::Pmsm;
 
     /// Speed step 0 → 20 rad/s: enters the ±2 % band before 0.5 s and *stays* in it until
     /// the end of a 1 s run, overshoot < 20 %, and |i_q| never exceeds I_max.

@@ -5,6 +5,7 @@
 pub mod build;
 pub mod energy;
 pub mod engine;
+#[cfg(any(test, feature = "fixtures"))]
 pub mod fixtures;
 pub mod physics;
 pub mod scenario_run;

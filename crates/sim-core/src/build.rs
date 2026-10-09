@@ -15,12 +15,12 @@ use sim_model::units::Kind;
 use crate::engine::commands::{ChangeSource, EngineCommand};
 use crate::engine::engine::Engine;
 use crate::engine::fidelity::{FidelityConfig, Tier};
-use crate::fixtures::dq_pmsm::PmsmParams;
 use crate::physics::motor::cogging::CoggingParams;
 use crate::physics::motor::electrical::SatParams;
 use crate::physics::motor::iron_loss::IronLossParams;
 use crate::skeleton::adapter::{SkeletonOptions, build_engine_with};
 use crate::skeleton::foc::FocConfig;
+use crate::skeleton::params::PmsmParams;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
