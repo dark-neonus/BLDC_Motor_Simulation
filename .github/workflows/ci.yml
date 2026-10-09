@@ -77,6 +77,7 @@ jobs:
           install_args: "cargo-binstall rust python uv just"
       - uses: Swatinem/rust-cache@v2
       - run: scripts/ci-run.sh "just validate" just validate
+      - run: scripts/ci-run.sh "presets check" just presets-check
 
   e2e:
     runs-on: ubuntu-latest

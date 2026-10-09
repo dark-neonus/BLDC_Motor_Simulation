@@ -35,7 +35,7 @@ pub struct Issue {
     pub help_id: String,
 }
 
-fn issue(sev: Severity, path: &str, msg: impl Into<String>) -> Issue {
+pub(crate) fn issue(sev: Severity, path: &str, msg: impl Into<String>) -> Issue {
     Issue {
         severity: sev,
         path: path.into(),
@@ -55,7 +55,7 @@ pub struct EditResult {
     pub rejected: bool,
 }
 
-fn si(p: &Param, kind: Kind, path: &str, out: &mut Vec<Issue>) -> Option<f64> {
+pub(crate) fn si(p: &Param, kind: Kind, path: &str, out: &mut Vec<Issue>) -> Option<f64> {
     match p.si(kind) {
         Ok(v) if v.is_finite() => Some(v),
         Ok(_) => {
@@ -377,6 +377,20 @@ pub fn apply_edit(model: &MotorParams, path: &str, value: Value) -> EditResult {
         Ok(m) => m,
         Err(e) => return reject(format!("invalid value: {e}")),
     };
+    // Sub-fields of a derived (locked) constant cannot be edited: derive() would
+    // silently overwrite them. Editing the constant itself switches `entered_as`.
+    for (name, form) in [
+        ("kv", ConstantForm::Kv),
+        ("kt", ConstantForm::Kt),
+        ("ke", ConstantForm::Ke),
+        ("lambda_m", ConstantForm::LambdaM),
+    ] {
+        if rest.starts_with(&format!("electrical.{name}.")) && model.electrical.entered_as != form {
+            return reject(format!(
+                "`{name}` is derived from the entered constant and locked; enter `{name}` itself to make it the entered one"
+            ));
+        }
+    }
     let entered = match rest {
         "electrical.kv" => Some(ConstantForm::Kv),
         "electrical.kt" => Some(ConstantForm::Kt),
@@ -390,7 +404,14 @@ pub fn apply_edit(model: &MotorParams, path: &str, value: Value) -> EditResult {
     let mut issues = Vec::new();
     derive(&mut new, &mut issues);
     issues.extend(validate(&new));
-    issues.sort_by_key(|i| std::cmp::Reverse(i.severity));
+    // Full sort so duplicates (derive and validate both report entered-constant problems)
+    // are adjacent; most severe first.
+    issues.sort_by(|a, b| {
+        b.severity
+            .cmp(&a.severity)
+            .then_with(|| a.path.cmp(&b.path))
+            .then_with(|| a.message.cmp(&b.message))
+    });
     issues.dedup();
     if issues.iter().any(|i| i.severity == Severity::Reject) {
         return EditResult {
@@ -464,6 +485,7 @@ mechanical: { j_rotor: 2.5e-4 }
         let e = &r.model.electrical;
         assert_eq!(e.entered_as, ConstantForm::Kv);
         // EQ-CONV worked example: Kv 100 rpm/V, p = 14 → λ = 3.9381 mWb, Kt = 82.699 mN·m/A.
+        // atol = half a unit in the last printed digit of the worked example.
         assert!((e.lambda_m.si(Kind::FluxLinkage).unwrap() - 3.9381e-3).abs() < 1e-7);
         assert!((si_of(&e.kt, Kind::TorqueConstant) - 0.082699).abs() < 1e-6);
         assert_eq!(e.lambda_m.source, Source::Derived);
@@ -578,6 +600,14 @@ mechanical: { j_rotor: 2.5e-4 }
             );
             assert_eq!(r.rejected, sev == Severity::Reject, "{path}");
         }
+        // Sub-fields of a derived constant are locked.
+        assert!(apply_edit(&motor(), "motor.electrical.kv.source", json!("measured")).rejected);
+        // No duplicate issues: an invalid entered constant is reported once.
+        let r = apply_edit(&motor(), "motor.electrical.lambda_m", json!("-1 Wb"));
+        let mut paths: Vec<_> = r.issues.iter().map(|i| (&i.path, &i.message)).collect();
+        let n = paths.len();
+        paths.dedup();
+        assert_eq!(paths.len(), n, "{:?}", r.issues);
         // The fixture itself is clean.
         assert!(validate(&motor()).is_empty(), "{:?}", validate(&motor()));
     }

@@ -14,7 +14,7 @@ pub struct Scenario {
     pub name: String,
     pub description: Option<String>,
     pub scene: Component<Scene>,
-    /// Signal ids to record (`motor.omega_m`, …). Empty: the default set.
+    /// Signal ids to record (`motor.omega`, …). Empty: the default set.
     #[serde(default)]
     pub record: Vec<String>,
     /// Recording period (default: every controller tick).
@@ -99,7 +99,7 @@ mod tests {
 schema_version: 1
 name: arm step
 scene: { preset: "builtin:scenes/arm-servo" }
-record: [motor.omega_m, motor.i_q]
+record: [motor.omega, motor.i_q]
 timeline:
   - target: { kind: position, value: 90 deg, ramp: 0.2 s }
   - wait: 1 s

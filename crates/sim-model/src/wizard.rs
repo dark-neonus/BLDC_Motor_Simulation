@@ -217,7 +217,8 @@ pub fn start(inputs: WizardInputs) -> Result<WizardState, WizardError> {
 
 fn param(v: f64, unit: &str, source: Source, note: Option<&str>) -> Param {
     Param {
-        value: Raw::Text(format!("{v:.6} {unit}")),
+        // Shortest round-trip form: datasheet values are kept exactly.
+        value: Raw::Text(format!("{v} {unit}")),
         source,
         note: note.map(str::to_owned),
     }
@@ -486,6 +487,23 @@ impl WizardState {
             },
         };
         let mut issues = Vec::new();
+        // Kv was used; an entered Kt is only a cross-check (hobby Kv and Kt often differ).
+        if let (Some(_), Some(kt)) = (&i.kv, si(&i.kt, Kind::TorqueConstant, "Kt")?) {
+            let kt = if self.ans(KtBasis) == Some("rms") {
+                kt / SQRT_2
+            } else {
+                kt
+            };
+            if (kt / kt_si - 1.0).abs() > 0.15 {
+                issues.push(constraints::issue(
+                    constraints::Severity::Warn,
+                    "motor.electrical.kt",
+                    format!(
+                        "datasheet Kt {kt:.4} N·m/A differs from the Kt derived from Kv ({kt_si:.4}) by more than 15 %; Kv was used"
+                    ),
+                ));
+            }
+        }
         constraints::derive(&mut motor, &mut issues);
         issues.extend(constraints::validate(&motor));
         Ok(WizardResult {
@@ -553,6 +571,7 @@ mod tests {
             "peak torque {}",
             kt * 50.0
         );
+        // Exact arithmetic (90 mΩ / 2) up to float formatting: atol 1e-9 Ω.
         assert!((e.r_phase.value.si(Kind::Resistance).unwrap() - 0.045).abs() < 1e-9);
         assert_eq!(e.r_phase.source, Source::Datasheet);
         assert_eq!(e.lambda_m.source, Source::Derived);
@@ -563,6 +582,28 @@ mod tests {
             "OD was estimated from the size class"
         );
         assert!(r.estimates.iter().any(|x| x.path == "motor.thermal.r_ha"));
+        // Datasheet values are kept to full f64 precision (rtol 1e-12, i.e. no decimal rounding):
+        // 331 µH LL → 165.5 µH.
+        let l = e.l_d.value.si(Kind::Inductance).unwrap();
+        assert!((l / 165.5e-6 - 1.0).abs() < 1e-12, "{l}");
+    }
+
+    #[test]
+    fn kt_disagreeing_with_kv_is_reported() {
+        let mut w = start(WizardInputs {
+            kt: t("0.1 N*m/A"),
+            ..ak10()
+        })
+        .unwrap();
+        w.accept_suggestions();
+        w.answer(QuestionId::KtBasis, "peak").unwrap();
+        // 0.1 vs 0.0827 derived: 21 % apart → warned (the AK10's own 0.095 is 14.9 %, just inside).
+        let r = w.finish().unwrap();
+        assert!(
+            r.issues.iter().any(|i| i.path == "motor.electrical.kt"),
+            "{:?}",
+            r.issues
+        );
     }
 
     #[test]
@@ -587,6 +628,7 @@ mod tests {
             .unwrap()
             * 60.0
             / (2.0 * PI);
+        // 70.7 / √2 = 49.99 rpm/V (the input is rounded to 3 digits): atol 0.01 rpm/V.
         assert!((kv - 50.0).abs() < 0.01, "{kv}");
         assert!((m.electrical.r_phase.value.si(Kind::Resistance).unwrap() - 0.03).abs() < 1e-9);
         // 12 slots with "14 poles": 14 pairs is invalid → pole count, no question.

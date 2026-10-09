@@ -163,6 +163,31 @@ impl Scene {
     }
 }
 
+impl ResolvedScene {
+    /// Derive the motor constants (so overrides of Kv/Kt/… take effect) and run every
+    /// rule: motor, each component, and the cross-component scene rules.
+    pub fn check(&mut self) -> Vec<Issue> {
+        use crate::components::*;
+        let mut out = Vec::new();
+        crate::constraints::derive(&mut self.motor, &mut out);
+        out.extend(crate::constraints::validate(&self.motor));
+        if let Some(g) = &self.gearbox {
+            out.extend(validate_gearbox(g));
+        }
+        if let Some(l) = &self.load {
+            out.extend(validate_load(l));
+        }
+        out.extend(validate_inverter(&self.inverter));
+        out.extend(validate_supply(&self.supply));
+        if let Some(s) = &self.sensors {
+            out.extend(validate_sensors(s));
+        }
+        out.extend(validate_controller(&self.controller));
+        out.extend(validate_scene(self));
+        out
+    }
+}
+
 fn warn(path: &str, message: String) -> Issue {
     Issue {
         severity: Severity::Warn,

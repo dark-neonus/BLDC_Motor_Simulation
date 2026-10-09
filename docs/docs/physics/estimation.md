@@ -26,7 +26,9 @@ $$
 J_{rotor} \approx 0.35\, m \left(\frac{D}{2}\right)^2
 $$
 
-The rotating can and magnets carry roughly 40 % of the mass at roughly 90 % of the outer radius ($0.4 \cdot 0.9^2 \approx 0.32$). Checked against CubeMars RO100 (0.71 kg, Φ108 mm): the rule gives 7200 g·cm², and the listings give 5290–8700 g·cm².
+The rotating can and magnets carry roughly 40 % of the mass at roughly 90 % of the outer radius ($0.4 \cdot 0.9^2 \approx 0.32$); the coefficient is rounded up to 0.35 to include the hub and shaft. Checked against CubeMars RO100 (0.71 kg, Φ108 mm): the rule gives 7200 g·cm², and the listings give 5290–8700 g·cm².
+
+**Inrunner.** The rotor is a solid cylinder of about 30 % of the mass with a diameter of about 0.55 $D$: $J \approx 0.3\,m \cdot \tfrac12 (0.55\,D/2)^2 \approx 0.045\,m\,(D/2)^2$. This is an order-of-magnitude guess (confidence low).
 
 ### EQ-EST-02 — Inductance from a typical time constant {/* #eq-est-02 */}
 

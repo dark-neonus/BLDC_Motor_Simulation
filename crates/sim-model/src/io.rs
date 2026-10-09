@@ -99,9 +99,10 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(e.contains("m.yaml") && e.contains("colour"), "{e}");
+        // `colour` is on line 10 of the document, indented by two spaces.
         assert!(
-            e.chars().any(|c| c.is_ascii_digit()),
-            "error should mention a line: {e}"
+            e.contains("line 10 column 3"),
+            "error should locate the field: {e}"
         );
         let e = parse_yaml::<MotorParams>("a: [", "x.yaml")
             .unwrap_err()

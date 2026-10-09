@@ -26,7 +26,10 @@ struct MotorSignals {
 
 /// dq PMSM plant module: states (i_d, i_q, ω, θ); reads ctrl.v_d/v_q from the bus.
 struct DqMotor {
+    /// `p.j` is the total shaft inertia: rotor + `extra_j`.
     p: PmsmParams,
+    /// Reflected gearbox/load inertia [kg·m²] (fixed for the run).
+    extra_j: f64,
     locked: bool,
     s: MotorSignals,
 }
@@ -35,7 +38,7 @@ impl PlantModule for DqMotor {
     fn save(&self) -> serde_json::Value {
         // Live parameters belong in snapshots (Snapshot doc).
         let p = &self.p;
-        serde_json::json!({ "locked": self.locked, "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda, "j": p.j, "b": p.b })
+        serde_json::json!({ "locked": self.locked, "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda, "j": p.j, "b": p.b, "extra_j": self.extra_j })
     }
     fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
         let f = |k: &str| {
@@ -57,6 +60,7 @@ impl PlantModule for DqMotor {
             .and_then(serde_json::Value::as_bool)
             .ok_or("missing `locked`")?;
         self.p = p;
+        self.extra_j = f("extra_j")?;
         Ok(())
     }
     fn name(&self) -> &str {
@@ -109,15 +113,16 @@ impl PlantModule for DqMotor {
             dx[3] = w;
         }
     }
+    // Canonical ids (CONVENTIONS §3): `motor.<name>` matches the sim-model path.
     fn params(&self) -> Vec<(String, String)> {
         [
             ("locked", "-"),
-            ("r", "ohm"),
-            ("ld", "H"),
-            ("lq", "H"),
-            ("lambda", "Wb"),
-            ("j", "kg*m^2"),
-            ("b", "N*m*s/rad"),
+            ("electrical.r_phase", "ohm"),
+            ("electrical.l_d", "H"),
+            ("electrical.l_q", "H"),
+            ("electrical.lambda_m", "Wb"),
+            ("mechanical.j_rotor", "kg*m^2"),
+            ("mechanical.friction.viscous", "N*m*s/rad"),
         ]
         .iter()
         .map(|(n, u)| ((*n).into(), (*u).into()))
@@ -127,12 +132,12 @@ impl PlantModule for DqMotor {
         let p = &self.p;
         Some(match name {
             "locked" => f64::from(u8::from(self.locked)),
-            "r" => p.r,
-            "ld" => p.ld,
-            "lq" => p.lq,
-            "lambda" => p.lambda,
-            "j" => p.j,
-            "b" => p.b,
+            "electrical.r_phase" => p.r,
+            "electrical.l_d" => p.ld,
+            "electrical.l_q" => p.lq,
+            "electrical.lambda_m" => p.lambda,
+            "mechanical.j_rotor" => p.j - self.extra_j,
+            "mechanical.friction.viscous" => p.b,
             _ => return None,
         })
     }
@@ -144,20 +149,22 @@ impl PlantModule for DqMotor {
         }
         // Validated by sim-model's constraint rules before they get here (P04.T13);
         // keep a last guard so a bad command cannot poison the state.
-        if !(v > 0.0 || (name == "b" && v >= 0.0)) {
-            return Err(format!("`{name}` must be positive, got {v}"));
+        let viscous = name == "mechanical.friction.viscous";
+        if !v.is_finite() || v < 0.0 || (v == 0.0 && !viscous) {
+            return Err(format!("`{name}` must be finite and positive, got {v}"));
         }
+        let extra = self.extra_j;
         let p = &mut self.p;
-        let slot = match name {
-            "r" => &mut p.r,
-            "ld" => &mut p.ld,
-            "lq" => &mut p.lq,
-            "lambda" => &mut p.lambda,
-            "j" => &mut p.j,
-            "b" => &mut p.b,
+        let (slot, offset) = match name {
+            "electrical.r_phase" => (&mut p.r, 0.0),
+            "electrical.l_d" => (&mut p.ld, 0.0),
+            "electrical.l_q" => (&mut p.lq, 0.0),
+            "electrical.lambda_m" => (&mut p.lambda, 0.0),
+            "mechanical.j_rotor" => (&mut p.j, extra),
+            "mechanical.friction.viscous" => (&mut p.b, 0.0),
             _ => return Err(format!("unknown parameter `{name}`")),
         };
-        Ok(std::mem::replace(slot, v))
+        Ok(std::mem::replace(slot, v + offset) - offset)
     }
     fn power_terms(&self) -> Vec<(String, PowerKind)> {
         vec![
@@ -193,6 +200,8 @@ struct FocBlock {
     s: MotorSignals,
     omega_ref: SignalId,
     iq_ref: SignalId,
+    /// Gear ratio N: `ctrl.omega_ref` is load-side, the speed loop runs on the motor side.
+    ratio: f64,
 }
 
 impl DiscreteBlock for FocBlock {
@@ -219,7 +228,7 @@ impl DiscreteBlock for FocBlock {
         let (vd, vq) = match self.open_loop_vq {
             Some(v) => (0.0, v),
             None => {
-                self.foc.omega_ref = ctx.bus.get(self.omega_ref);
+                self.foc.omega_ref = self.ratio * ctx.bus.get(self.omega_ref);
                 self.foc.update(
                     ctx.bus.get(self.s.i_d),
                     ctx.bus.get(self.s.i_q),
@@ -244,6 +253,10 @@ pub struct SkeletonOptions {
     pub open_loop_vq: Option<f64>,
     /// Integration step limit [s].
     pub dt_max: f64,
+    /// Reflected gearbox/load inertia added to `PmsmParams::j` by the caller [kg·m²].
+    pub extra_j: f64,
+    /// Gear ratio N (load-side setpoints × N = motor side).
+    pub ratio: f64,
 }
 
 impl Default for SkeletonOptions {
@@ -252,6 +265,8 @@ impl Default for SkeletonOptions {
             locked: false,
             open_loop_vq: None,
             dt_max: 5e-6,
+            extra_j: 0.0,
+            ratio: 1.0,
         }
     }
 }
@@ -310,6 +325,7 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
     let mut plant = Plant::new();
     plant.add(Box::new(DqMotor {
         p: mp,
+        extra_j: opts.extra_j,
         locked: opts.locked,
         s,
     }));
@@ -323,6 +339,7 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         s,
         omega_ref,
         iq_ref,
+        ratio: opts.ratio,
     })];
     Engine::new(plant, bus, blocks, opts.dt_max)
 }
@@ -353,6 +370,7 @@ mod tests {
             locked: true,
             open_loop_vq: Some(1.0),
             dt_max: 2.5e-7,
+            ..Default::default()
         });
         e.step_until(SimTime::from_secs_f64(0.01)).unwrap();
         let r = e.bus.get(e.bus.id("energy.residual").unwrap());

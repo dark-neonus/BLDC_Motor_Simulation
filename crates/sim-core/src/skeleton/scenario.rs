@@ -81,6 +81,7 @@ pub fn simulate(sc: &SkeletonScenario) -> Result<Vec<[f64; 6]>, String> {
         locked: sc.lock_rotor,
         open_loop_vq: sc.vq_open_loop,
         dt_max: sc.dt,
+        ..Default::default()
     });
     let ids: Vec<_> = COLUMNS[1..]
         .iter()

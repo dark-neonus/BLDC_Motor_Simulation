@@ -92,8 +92,10 @@ fn print_table(rs: &[AssertResult]) {
             "{res:<6} {:<22} {cond:<28} {:>14.6} {:>10.4}",
             r.signal, r.observed, r.t_observed
         );
-        if let (false, Some(m)) = (r.passed, &r.message) {
-            println!("       ↳ {m}");
+        if !r.passed {
+            for m in [&r.message, &r.note].into_iter().flatten() {
+                println!("       ↳ {m}");
+            }
         }
     }
     let failed = rs.iter().filter(|r| !r.passed).count();

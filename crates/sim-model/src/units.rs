@@ -123,8 +123,13 @@ pub enum UnitError {
     },
 }
 
-/// Normalise Unicode spellings to the table's ASCII keys (lower-case).
-fn normalize(unit: &str) -> String {
+/// Normalise Unicode spellings to the table's ASCII keys (lower-case). Returns `None`
+/// for a leading upper-case `M` (mega): lower-casing would turn `MΩ` into `mΩ`, a factor
+/// of 10⁹, and no supported unit uses mega.
+fn normalize(unit: &str) -> Option<String> {
+    if unit.trim().starts_with('M') {
+        return None;
+    }
     let u = unit
         .trim()
         .replace(['µ', 'μ'], "u")
@@ -135,7 +140,7 @@ fn normalize(unit: &str) -> String {
         .replace("°C", "degc")
         .replace('°', "deg")
         .replace(' ', "");
-    u.to_lowercase()
+    Some(u.to_lowercase())
 }
 
 /// Parse `"<number> [unit]"`. A bare number is SI of the expected kind.
@@ -161,7 +166,11 @@ pub fn parse_quantity(input: &str, expected: Kind) -> Result<f64, UnitError> {
         .trim()
         .parse()
         .map_err(|_| UnitError::Syntax(input.into()))?;
-    let unit = normalize(unit);
+    let raw_unit = unit;
+    let unit = normalize(unit).ok_or_else(|| UnitError::UnknownUnit {
+        input: input.into(),
+        unit: format!("{} (mega prefixes are not supported)", raw_unit.trim()),
+    })?;
     if unit.is_empty() {
         return Ok(value);
     }
@@ -185,7 +194,7 @@ pub fn parse_quantity(input: &str, expected: Kind) -> Result<f64, UnitError> {
 
 /// Format an SI value in `unit` (one of the table's canonical keys), e.g. `"2.5 mH"`.
 pub fn format_quantity(si_value: f64, unit: &str) -> Option<String> {
-    let key = normalize(unit);
+    let key = normalize(unit)?;
     let &(_, _, scale, offset) = TABLE.iter().find(|(u, _, _, _)| *u == key)?;
     Some(format!("{} {}", (si_value - offset) / scale, unit))
 }
@@ -240,12 +249,14 @@ mod tests {
             Err(UnitError::Syntax(_))
         ));
         assert_eq!(format_quantity(0.0025, "mH").as_deref(), Some("2.5 mH"));
-        assert_eq!(
-            format_quantity(318.15, "degC").as_deref(),
-            Some("45.00000000000006 degC")
-                .or(Some("45 degC"))
-                .filter(|_| false)
-                .or(format_quantity(318.15, "degC").as_deref())
-        );
+        // Offset units round-trip: 318.15 K is 45 °C (rtol 1e-12 for the offset subtraction).
+        let c = format_quantity(318.15, "degC").unwrap();
+        let back = parse_quantity(&c, Kind::Temperature).unwrap();
+        assert!((back / 318.15 - 1.0).abs() < 1e-12, "{c}");
+        assert!(c.starts_with("45") && c.ends_with(" degC"), "{c}");
+        // Mega is not silently read as milli.
+        assert!(parse_quantity("1 MΩ", Kind::Resistance).is_err());
+        assert!(parse_quantity("1 Mohm", Kind::Resistance).is_err());
+        assert!(parse_quantity("1 mΩ", Kind::Resistance).is_ok());
     }
 }

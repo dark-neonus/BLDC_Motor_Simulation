@@ -399,7 +399,9 @@ impl Engine {
                 value,
                 source,
             } => {
-                let Some((owner, name)) = path.rsplit_once('.') else {
+                // `<owner>.<param>` where the param may itself be dotted
+                // (`motor.electrical.r_phase`, CONVENTIONS §3): the owner is the first segment.
+                let Some((owner, name)) = path.split_once('.') else {
                     return reject(format!("invalid parameter path `{path}`"));
                 };
                 if !value.is_finite() {

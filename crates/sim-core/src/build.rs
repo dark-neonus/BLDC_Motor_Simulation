@@ -22,6 +22,8 @@ pub enum BuildError {
     Param(String, String),
     #[error("{0}")]
     Unsupported(String),
+    #[error("invalid scene:\n{0}")]
+    Invalid(String),
 }
 
 fn si(p: &Param, kind: Kind, path: &str) -> Result<f64, BuildError> {
@@ -159,12 +161,16 @@ impl SceneModel {
         }
         self.motor = r.model;
         let pairs = [
-            ("r", before.r, after.r),
-            ("ld", before.ld, after.ld),
-            ("lq", before.lq, after.lq),
-            ("lambda", before.lambda, after.lambda),
-            ("j", before.j, after.j),
-            ("b", before.b, after.b),
+            ("electrical.r_phase", before.r, after.r),
+            ("electrical.l_d", before.ld, after.ld),
+            ("electrical.l_q", before.lq, after.lq),
+            ("electrical.lambda_m", before.lambda, after.lambda),
+            (
+                "mechanical.j_rotor",
+                before.j - self.extra_j,
+                after.j - self.extra_j,
+            ),
+            ("mechanical.friction.viscous", before.b, after.b),
         ];
         Ok(pairs
             .iter()
@@ -189,6 +195,18 @@ pub struct BuiltScene {
 }
 
 pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
+    // Derive (so motor-constant overrides reach λ) and refuse anything with a Reject.
+    let mut scene = scene.clone();
+    let rejects: Vec<String> = scene
+        .check()
+        .into_iter()
+        .filter(|i| i.severity == Severity::Reject)
+        .map(|i| format!("  {}: {}", i.path, i.message))
+        .collect();
+    if !rejects.is_empty() {
+        return Err(BuildError::Invalid(rejects.join("\n")));
+    }
+    let scene = &scene;
     let ControllerParams::Foc {
         current, limits, ..
     } = &scene.controller
@@ -221,6 +239,8 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             locked: false,
             open_loop_vq: None,
             dt_max,
+            extra_j,
+            ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
         },
     );
     Ok(BuiltScene {
