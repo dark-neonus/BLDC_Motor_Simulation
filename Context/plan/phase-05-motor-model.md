@@ -105,7 +105,7 @@
   - **Verify:** API test: a rejected `motor.electrical.r_phase` edit returns the issue and leaves the engine unchanged; scenario test with `value: 90 deg`; `just gen-schemas` shows descriptions; schemas-check green.
   - **Done when:** Green.
 
-- [ ] **P05.T09** — Phase gate
+- [x] **P05.T09** — Phase gate
   - **Depends:** P05.T01, P05.T02, P05.T03, P05.T04, P05.T05, P05.T06, P05.T07, P05.T08, P05.T10, P05.T11, P05.T12
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-05-done`.

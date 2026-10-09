@@ -280,3 +280,30 @@
 
 ## 2026-10-09 — P05 gate prep: performance
 - Bench `skeleton_foc_10ms_sim_dt5us`: abc model made it 2.44 ms (4.1× real time, was 19.4× on the dq plant). Exact-match solve cache (outputs → derivatives/powers of the same RK stage), ψ output from the state in normal mode, sinusoidal EMFs from one sin_cos: **1.62 ms (6.2× real time)**. No hard target in the spec; revisit in the perf phase.
+
+## 2026-10-09 — P05 phase gate
+- **Exit criteria evidence:**
+  - All V-MOT cases pass with catalog tolerances: `tests/v_mot.rs` V-MOT-001…013 (13 tests); the reviewer checked each tolerance against validation-catalog.md.
+  - abc ≡ dq: V-MOT-005 (`tests/support/abc_dq.rs`), salient machine, i_d/i_q/ω/T within 1e-9 + 1e-6·|ref| every ms for 0.2 s.
+  - Skeleton dq plant removed from production: `fixtures` (dq model + its RK4) is `#[cfg(any(test, feature = "fixtures"))]`; integration tests enable the feature through a self dev-dependency; `PmsmParams` lives in `skeleton::params` as the FOC design bag.
+  - `just check` green: 133 Rust tests, web 5, Python 4, e2e 1, docs + web builds. Bench `skeleton_foc_10ms_sim_dt5us` ≈ 6.2× real time (abc model; was 19.4× on the dq skeleton).
+- **Review:** 4 major, 7 minor findings. Majors fixed:
+  - dq plant gated out of production (cc38300);
+  - scene `emf_shape` now reaches the motor; the test fails on the old code (07cad41);
+  - MotorElectrical snapshots now hold last θe/λ, pending sign and jump, `restore` clears the cache, and the engine refreshes outputs on restore; a mid-fault bit-identical restore test fails on the old code (28e8798);
+  - live edits commit to the scene only after the engine accepts them (`RunnerCommand::ApplyNow`, reply `rejected`); build-time motor fields (shape, cogging, saturation, winding) are refused with "reset"; k_hy/k_ed map to SetParam (0c47502).
+- **Minors:**
+  - Fixed: exact j_rotor in edits; an open request at zero current takes effect at once; doc fixes (EQ-MOT-10 wording, EQ-MOT-12 P07 status note, engine-only live params in signals.md, iron coefficients documented as bare SI) (26b976d).
+  - λ(T) energy is already covered by energy.md ("neglected").
+  - Solver diagnostics, V-MOT test strengthening and missing tests → **P06.T10**.
+- **graphify:** AST update via the commit hook / `graphify update .`. Doc re-extraction is skipped this gate because only 3 spec pages changed (motor, signals, estimation); it is due at the P06 gate.
+- **Phase summary:** the production plant is now the stationary-frame abc motor:
+  - flux-linkage states;
+  - sinusoidal, trapezoidal and harmonic EMF;
+  - EQ-MOT-07 torque;
+  - co-energy saturation with a PD validity rule;
+  - open-phase single-path mode with an event-timed entry;
+  - conservative cogging;
+  - iron-loss drag.
+  
+  It runs with a rigid rotor and an ideal voltage source under the interim skeleton FOC. Energy closes for every term, and the server holds a live scene whose edits pass the constraint rules and the engine.
