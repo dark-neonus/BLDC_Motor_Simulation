@@ -163,3 +163,12 @@
   - Q-18: no gearbox friction
 - The refmodel was updated for Q-05/14/17; 47/47 self-tests green.
 - Follow-up for Rust (when the modules exist): `energy.loss.<term>` names (currently per module; switch to term names in P05/P10); setpoints load-side with N (P09).
+
+## 2026-10-09 — P04.T01–T03 (agent: Claude)
+- Did:
+  - T01: `sim-model::units` (whitelisted table, Unicode normalisation, kind errors) + 56-case `schemas/units-fixture.yaml`.
+  - T02: `Param` (short/long YAML forms, provenance).
+  - T03: parameter types for motor, gearbox, loads, inverter, supply, bus/chopper, sensors, controllers, protection, fidelity (serde, deny_unknown_fields, tagged enums). JSON Schema derivation moved to P04.T07 (noted in the task).
+- CI for the phase-03 push: **all 5 jobs green** (37903922496). This confirms the rustfmt-component and needs_binary fixes.
+- Stopped at ~45 % usage (user limit for this window: 50 %).
+- Next: P04.T04 (winding/topology computations).

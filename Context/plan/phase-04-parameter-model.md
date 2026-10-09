@@ -32,7 +32,7 @@
   - **Verify:** Round-trip tests for both forms.
   - **Done when:** Passing.
 
-- [ ] **P04.T03** — Parameter types for all components
+- [x] **P04.T03** — Parameter types for all components
   - **Depends:** P04.T02
   - **Do:** Define serde + `schemars::JsonSchema` structs. **Every field gets a doc comment**, which becomes the schema description and seeds the help registry.
     - `MotorParams`:
@@ -95,7 +95,7 @@
 
 - [ ] **P04.T07** — JSON Schema generation
   - **Depends:** P04.T06
-  - **Do:** `bldc-sim dump-schemas --out schemas/` writes one schema per file type (motor, gearbox, load, inverter, supply, sensors, controller, scene, scenario; `lesson` is added in P18.T09). Add the `just gen-schemas` recipe. CI check: regenerating produces no diff.
+  - **Do:** First derive/implement `schemars::JsonSchema` for all `sim-model::params` types (deferred from P04.T03; `Param` needs a manual impl accepting number | quantity string | `{value, source, note}`). Then `bldc-sim dump-schemas --out schemas/` writes one schema per file type (motor, gearbox, load, inverter, supply, sensors, controller, scene, scenario; `lesson` is added in P18.T09). Add the `just gen-schemas` recipe. CI check: regenerating produces no diff.
   - **Files:** `crates/bldc-sim/src/cli/dump_schemas.rs`, `schemas/*.schema.json`
   - **Verify:** `just gen-schemas && git diff --exit-code schemas/`; `uvx check-jsonschema --schemafile schemas/motor.schema.json presets/motors/*.yaml` (once T09 exists; wire it into `just check`).
   - **Done when:** Schemas are committed and the check is wired into `just check`.
