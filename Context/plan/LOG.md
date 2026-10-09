@@ -216,3 +216,15 @@
 
 ## 2026-10-09 — Session stop before P04.T14 (usage limit 60 %)
 - `just check` (full gate) green after P04.T13. Remaining for the gate: phase-end review subagent (pre-approved), graphify doc re-extraction (deferred from P04 start), fix findings, tag `phase-04-done`, push.
+
+## 2026-10-09 — P04 phase gate
+- **Exit criteria evidence:**
+  - All presets load and validate: `just presets-check` → check-jsonschema ok for 9 kinds; `validate-file presets/*/*.yaml` → 0 Reject, 0 Warn (35 files).
+  - Every constraint rule has a test: `constraints::tests::every_rule_fires` (11 cases) + named tests for Kv derive, slot/pole, units/signs, locked derived fields, dedup; `components::tests::bad_components_are_rejected`; `scene::tests::scene_rules_fire`. Rule-list deviations in D-014.
+  - `dump-schemas` writes schemas; regenerating gives no diff (`just schemas-check`, CI step); presets validate with `uvx check-jsonschema`.
+  - `apply_edit` Kv→λ→Kt: Kv 100 rpm/V, p = 14 → λ 3.9381 mWb, Kt 82.699 mN·m/A (`kv_edit_derives_lambda_kt_ke`); overrides reach the engine (`motor_constant_overrides_reach_the_engine`).
+  - Units fixture: `units::tests::shared_fixture_parses_exactly` (56 cases).
+  - `just check` green: 94 Rust tests, web 5, Python 4 (+47 refmodel self-tests), e2e 1, docs + web builds.
+- **Review:** 1 blocker, 8 major, 14 minor findings. All blocker/major fixed (commit e5fa0b1); minors fixed except field doc comments, quantity-valued asserts and live-server `apply_edit` routing → **P05.T12**; declarative rule ids → D-014 / P05.T12.
+- **graphify:** incremental update with doc re-extraction (35 docs, 2 agents): 2417 nodes, 4329 edges, 296 communities.
+- **Phase summary:** sim-model now holds units, provenance params, all component types, winding layout, constraint rules + apply_edit, YAML IO with schemas, the library (builtin/user/extra), 9 motor + 26 component presets with sources, scenes/scenarios, and the datasheet wizard; sim-core builds an engine from a scene and runs scenarios with asserts (CLI exit 0/1/2).

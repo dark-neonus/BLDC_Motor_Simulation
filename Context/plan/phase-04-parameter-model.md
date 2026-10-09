@@ -165,7 +165,7 @@
   - **Verify:** `just validate` still green; a new scenario using `presets/scenes/gimbal-hold.yaml` runs (with the skeleton physics until P05); a scenario with a deliberately false assert exits 2.
   - **Done when:** Passing.
 
-- [ ] **P04.T14** — Phase gate
+- [x] **P04.T14** — Phase gate
   - **Depends:** P04.T01, P04.T02, P04.T03, P04.T04, P04.T05, P04.T06, P04.T07, P04.T08, P04.T09, P04.T10, P04.T11, P04.T12, P04.T13
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-04-done`.
