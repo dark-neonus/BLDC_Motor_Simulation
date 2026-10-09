@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=../../schemas/load.schema.json
+# Steel disc Φ100 mm × 10 mm (0.62 kg): J = m r² / 2.
+kind: flywheel
+inertia: 7.7 kg*cm^2

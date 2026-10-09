@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../../schemas/sensors.schema.json
+# 12-bit ADC on two low-side shunts, ±20 A full scale.
+adc:
+  bits: 12
+  full_scale: 20 A
+  shunts: 2
+  noise: { value: 20 mA, source: estimated }

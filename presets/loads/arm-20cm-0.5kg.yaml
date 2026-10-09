@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../../schemas/load.schema.json
+# Light pendulum arm: 20 cm rod (50 g) with 0.5 kg at the tip.
+kind: arm
+arm_length: 20 cm
+arm_mass: 50 g
+mass: 0.5 kg
+distance: 20 cm

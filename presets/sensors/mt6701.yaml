@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../../schemas/sensors.schema.json
+# MagnTek MT6701 14-bit magnetic encoder (SSI/I2C, ABZ, PWM/analog); < 5 µs system delay.
+encoder:
+  kind: magnetic
+  chip: MT6701
+  bits: 14
+  inl: { value: 1 deg, source: datasheet, note: "±1° typ. (reseller copy of datasheet)" }
+  update_rate: { value: 10 kHz, source: estimated, note: SSI polling rate }
+  latency: { value: 5 us, source: datasheet }

@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=../../schemas/load.schema.json
+# Constant-torque brake that opposes motion (stops at zero speed).
+kind: brake
+torque: 0.5 N*m

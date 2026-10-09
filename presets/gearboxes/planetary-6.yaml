@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=../../schemas/gearbox.schema.json
+# Single-stage planetary.
+name: Planetary 1:6
+ratio: 6
+efficiency: 0.94
+backlash: { value: 0.3 deg, source: estimated }

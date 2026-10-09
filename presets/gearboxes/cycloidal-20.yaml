@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=../../schemas/gearbox.schema.json
+# Cycloidal drive; low backlash, lower efficiency.
+name: Cycloidal 1:20
+ratio: 20
+efficiency: 0.85
+backlash: { value: 0.05 deg, source: estimated }

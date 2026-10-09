@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=../../schemas/sensors.schema.json
+# Generic incremental optical encoder, 1000 counts per revolution (4000 edges in x4 decoding).
+encoder:
+  kind: incremental
+  cpr: 1000

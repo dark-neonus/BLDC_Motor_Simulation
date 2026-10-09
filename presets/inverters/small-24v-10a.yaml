@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=../../schemas/inverter.schema.json
+# Generic small MOSFET stage (30-40 V FETs), e.g. SimpleFOC-class boards.
+name: Small 24 V / 10 A MOSFET stage
+f_pwm: 20 kHz
+dead_time: { value: 500 ns, source: estimated }
+r_on: { value: 10 mohm, source: estimated, note: "typical 40 V logic-level FET incl. board traces" }
+v_f: { value: 0.8 V, source: estimated, note: body diode }
+t_rise: { value: 30 ns, source: estimated }
+t_fall: { value: 30 ns, source: estimated }
+v_max: 30 V
+i_max: 10 A

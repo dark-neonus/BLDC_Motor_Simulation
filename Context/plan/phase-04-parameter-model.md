@@ -120,7 +120,7 @@
   - **Verify:** `cargo run -p bldc-sim -- validate-file presets/motors/*.yaml` → no Reject issues. Check derived Kt·I_peak against the datasheet peak torque within ±30 % (record the comparison in `_sources.md`).
   - **Done when:** ≥ 9 motor presets, all validated, with sources documented. These are **generic classes**, not specific products (user decision).
 
-- [ ] **P04.T10** — Other component presets
+- [x] **P04.T10** — Other component presets
   - **Depends:** P04.T08
   - **Do:** YAML presets:
     - **inverters:** small 24 V/10 A and medium 48 V/40 A generic MOSFET stages (R_ds,on, t_r/t_f, dead time, PWM 20/40 kHz)

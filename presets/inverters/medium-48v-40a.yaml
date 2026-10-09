@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=../../schemas/inverter.schema.json
+# Generic medium MOSFET stage (80-100 V FETs), e.g. ODrive/VESC-class boards.
+name: Medium 48 V / 40 A MOSFET stage
+f_pwm: 40 kHz
+dead_time: { value: 300 ns, source: estimated }
+r_on: { value: 3 mohm, source: estimated, note: "typical 100 V FET incl. board traces" }
+v_f: { value: 0.8 V, source: estimated, note: body diode }
+t_rise: { value: 50 ns, source: estimated }
+t_fall: { value: 50 ns, source: estimated }
+v_max: 56 V
+i_max: 40 A

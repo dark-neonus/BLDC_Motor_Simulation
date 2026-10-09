@@ -134,5 +134,10 @@ schemas-check: gen-schemas
 
 # Check presets against their JSON Schemas and the constraint rules
 presets-check:
-    uvx -q check-jsonschema --schemafile schemas/motor.schema.json presets/motors/*.yaml
-    cargo run -q -p bldc-sim -- validate-file presets/motors/*.yaml
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for pair in motors:motor gearboxes:gearbox loads:load inverters:inverter supplies:supply sensors:sensors controllers:controller; do
+        dir=${pair%%:*}; schema=${pair##*:}
+        uvx -q check-jsonschema --schemafile schemas/$schema.schema.json presets/$dir/*.yaml
+    done
+    cargo run -q -p bldc-sim -- validate-file presets/*/*.yaml > /dev/null

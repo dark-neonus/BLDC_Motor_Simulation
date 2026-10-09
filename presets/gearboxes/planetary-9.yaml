@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=../../schemas/gearbox.schema.json
+# Single-stage planetary (e.g. CubeMars AK/SteadyWin class).
+name: Planetary 1:9
+ratio: 9
+efficiency: 0.92
+backlash: { value: 0.3 deg, source: estimated }

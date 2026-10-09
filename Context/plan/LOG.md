@@ -191,3 +191,8 @@
 - 9 generic outrunner classes (2804 … 12020) in `presets/motors/`, generated from a class table (LL→phase halving, λ derived from Kv). Sources, ranges and the Kt·I check in `_sources.md`; 8010 and 12020 are interpolated/scaled (no exact-size datasheet found); no inrunner variants (not common in these classes).
 - `estimation.md` now holds EQ-EST-01 (outrunner J), EQ-EST-02 (L from τ_e), EQ-EST-03 (thermal from mass/size); P04.T12 extends it.
 - `just presets-check` (check-jsonschema + validate-file) in `just check`; a library test validates all embedded motor presets.
+
+## 2026-10-09 — P04.T10 Component presets
+- 26 presets: 2 inverters, 3 PSUs + 5 batteries (LiPo 4S/6S, Li-ion 12S, LiFePO4 4S/16S), 5 gearboxes, 4 loads, 6 sensors, 1 placeholder FOC controller. Sources in `presets/{sensors,supplies}/_sources.md`.
+- Component files carry the schema modeline but **no `schema_version`** (types have no such field; `deny_unknown_fields`); a missing version is read as current. Revisit if a component format ever needs a migration.
+- `validate-file` picks the type from the folder name; non-motor files get a typed parse only (no unit-kind checks yet; those come with each module's constraint rules). `presets-check` runs check-jsonschema per kind.

@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../../schemas/sensors.schema.json
+# ams AS5600 12-bit magnetic encoder (I2C / analog / PWM).
+encoder:
+  kind: magnetic
+  chip: AS5600
+  bits: 12
+  inl: { value: 1 deg, source: estimated, note: "typical for diametric-magnet setups; see _sources.md" }
+  update_rate: { value: 1 kHz, source: estimated, note: "I2C polling rate, not the chip's internal rate" }
+  latency: { value: 1 ms, source: estimated }

@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=../../schemas/supply.schema.json
+# 16S LiFePO4 pack (48 V nominal, 20 Ah cells). OCV table: see _sources.md.
+kind: battery
+chemistry: lifepo4
+series: 16
+parallel: 1
+capacity_cell: { value: 20 Ah, source: estimated }
+r0_cell: { value: 4 mohm, source: estimated }
+r1_cell: { value: 2 mohm, source: estimated }
+c1_cell: { value: 20000 F, source: estimated }
+soc_init: 0.9
+ocv_cell: [[0.0, 2.5], [0.05, 2.9], [0.1, 3.0], [0.2, 3.2], [0.3, 3.22], [0.4, 3.25], [0.5, 3.26], [0.6, 3.27], [0.7, 3.3], [0.8, 3.32], [0.9, 3.35], [1.0, 3.4]]

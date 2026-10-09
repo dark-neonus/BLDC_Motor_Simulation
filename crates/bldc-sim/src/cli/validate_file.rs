@@ -4,8 +4,11 @@
 use std::path::Path;
 
 use sim_model::constraints::{self, Severity};
-use sim_model::io::load_yaml;
-use sim_model::params::MotorParams;
+use sim_model::io::{load_yaml, parse_yaml};
+use sim_model::params::{
+    ControllerParams, GearboxParams, InverterParams, LoadParams, MotorParams, SensorsParams,
+    SupplyParams,
+};
 
 pub fn run(files: &[std::path::PathBuf]) -> bool {
     let mut ok = true;
@@ -25,8 +28,38 @@ fn check(f: &Path) -> bool {
             return false;
         }
     };
+    // File type from the library folder (`presets/<kind>/x.yaml`); motor files are also
+    // recognised by their `electrical:` key. Non-motor types are checked by a typed parse
+    // (unknown fields, tags, value forms); their constraint rules come with their modules.
+    let dir = f
+        .parent()
+        .and_then(|d| d.file_name())
+        .and_then(|d| d.to_str())
+        .unwrap_or("");
+    let typed = |r: Result<(), sim_model::io::IoError>| match r {
+        Ok(()) => {
+            println!("{name}: ok");
+            true
+        }
+        Err(e) => {
+            println!("error: {e}");
+            false
+        }
+    };
+    let n = name.to_string();
+    match dir {
+        "gearboxes" => return typed(parse_yaml::<GearboxParams>(&text, &n).map(drop)),
+        "loads" => return typed(parse_yaml::<LoadParams>(&text, &n).map(drop)),
+        "inverters" => return typed(parse_yaml::<InverterParams>(&text, &n).map(drop)),
+        "supplies" => return typed(parse_yaml::<SupplyParams>(&text, &n).map(drop)),
+        "sensors" => return typed(parse_yaml::<SensorsParams>(&text, &n).map(drop)),
+        "controllers" => return typed(parse_yaml::<ControllerParams>(&text, &n).map(drop)),
+        _ => {}
+    }
     if !text.lines().any(|l| l.starts_with("electrical:")) {
-        println!("{name}: error: unknown file type (only motor files are validated so far)");
+        println!(
+            "{name}: error: unknown file type (put it in a library folder such as motors/ or loads/)"
+        );
         return false;
     }
     let mut m: MotorParams = match load_yaml(f) {

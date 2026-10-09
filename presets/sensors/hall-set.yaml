@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=../../schemas/sensors.schema.json
+# Generic set of three Hall switches placed 120° (electrical) apart.
+hall:
+  offsets: [0 deg, 0 deg, 0 deg]
+  hysteresis: 0.02
+  latency: { value: 2 us, source: estimated }

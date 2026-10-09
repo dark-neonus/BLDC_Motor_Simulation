@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=../../schemas/supply.schema.json
+# 12S Li-ion 18650 pack (3.5 Ah NMC cells, 1P). OCV table: see _sources.md.
+kind: battery
+chemistry: li_ion
+series: 12
+parallel: 1
+capacity_cell: { value: 3.5 Ah, source: estimated }
+r0_cell: { value: 30 mohm, source: estimated }
+r1_cell: { value: 15 mohm, source: estimated }
+c1_cell: { value: 2000 F, source: estimated }
+soc_init: 0.9
+ocv_cell: [[0.0, 3.0], [0.05, 3.3], [0.1, 3.45], [0.2, 3.55], [0.3, 3.62], [0.4, 3.68], [0.5, 3.74], [0.6, 3.82], [0.7, 3.9], [0.8, 3.98], [0.9, 4.08], [1.0, 4.2]]

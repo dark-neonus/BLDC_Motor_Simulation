@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=../../schemas/supply.schema.json
+# Lab bench supply in constant-voltage mode with a current limit.
+kind: psu
+voltage: 24 V
+current_limit: 5 A
+r_out: { value: 20 mohm, source: estimated, note: "leads + output stage" }

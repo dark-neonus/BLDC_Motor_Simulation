@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../../schemas/sensors.schema.json
+# ams AS5047P 14-bit magnetic encoder (SPI + ABI), DAEC latency compensation, up to 28 krpm.
+encoder:
+  kind: magnetic
+  chip: AS5047P
+  bits: 14
+  inl: { value: 0.34 deg, source: estimated }
+  update_rate: { value: 10 kHz, source: estimated, note: SPI polling rate }
+  latency: { value: 10 us, source: estimated, note: "DAEC: near-zero latency" }
