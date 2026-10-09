@@ -684,7 +684,11 @@ impl PlantModule for MotorElectrical {
     }
     fn save(&self) -> serde_json::Value {
         let p = &self.p;
-        serde_json::json!({ "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda, "open": self.open, "pending": self.pending })
+        serde_json::json!({
+            "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda,
+            "open": self.open, "pending": self.pending, "pending_sign": self.pending_sign,
+            "last_theta_e": self.last_theta_e, "last_lambda": self.last_lambda, "jump": self.jump,
+        })
     }
     fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
         let f = |k: &str| {
@@ -698,8 +702,16 @@ impl PlantModule for MotorElectrical {
                 .map_err(|e| e.to_string())
         };
         let (open, pending) = (k("open")?, k("pending")?);
+        let (sign, th, lam, jump) = (
+            f("pending_sign")?,
+            f("last_theta_e")?,
+            f("last_lambda")?,
+            f("jump")?,
+        );
         (self.p.r, self.p.ld, self.p.lq, self.p.lambda) = (r, ld, lq, lambda);
-        (self.open, self.pending) = (open, pending);
+        (self.open, self.pending, self.pending_sign) = (open, pending, sign);
+        (self.last_theta_e, self.last_lambda, self.jump) = (th, lam, jump);
+        self.cache = None;
         Ok(())
     }
 }

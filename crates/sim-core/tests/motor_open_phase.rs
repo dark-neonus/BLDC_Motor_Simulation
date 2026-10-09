@@ -140,3 +140,39 @@ fn open_phase_c_keeps_ic_zero_and_energy_closes() {
         assert!(sig(&e, "motor.i_c").abs() > 0.0 && sig(&e, "energy.residual").abs() < 1e-6);
     }
 }
+
+/// A snapshot taken while the open is pending, and one taken while it is open, both restore
+/// into a fresh engine (through bytes) and continue bit-identically, reconnect included.
+#[test]
+fn snapshot_restore_mid_fault_continues_bit_identically() {
+    use sim_core::engine::snapshot::Snapshot;
+    let t = SimTime::from_secs_f64;
+    let fresh = |s: &Snapshot| {
+        let mut b = engine(Shape::Sinusoidal);
+        b.restore(&Snapshot::from_bytes(&s.to_bytes().unwrap()).unwrap())
+            .unwrap();
+        b
+    };
+    let mut a = engine(Shape::Sinusoidal);
+    a.step_until(t(0.05)).unwrap();
+    set(&mut a, 2.0);
+    a.step_until(t(0.05 + 1e-5)).unwrap();
+    assert_eq!(sig(&a, "motor.open_phase"), -1.0, "still pending");
+    let pending = a.snapshot();
+    a.step_until(t(0.08)).unwrap();
+    assert_eq!(sig(&a, "motor.open_phase"), 2.0);
+    let mut b = fresh(&pending);
+    b.step_until(t(0.08)).unwrap();
+    assert_eq!(a.snapshot().x, b.snapshot().x, "pending → open");
+
+    let open = a.snapshot();
+    let mut b = fresh(&open);
+    for e in [&mut a, &mut b] {
+        set(e, -1.0);
+        e.step_until(t(0.12)).unwrap();
+    }
+    let (sa, sb) = (a.snapshot(), b.snapshot());
+    assert_eq!(sa.x, sb.x, "open → reconnect");
+    assert_eq!(sa.bus, sb.bus);
+    assert!(sig(&b, "energy.residual").abs() < 1e-6);
+}

@@ -125,6 +125,9 @@ impl Engine {
         }
         self.dt_max = s.dt_max;
         self.fidelity = s.fidelity;
+        // Modules keep per-step caches (last θe, solves): refresh them from the restored state.
+        self.plant
+            .outputs(self.time.as_secs_f64(), &self.x, &mut self.bus);
         Ok(())
     }
 }
