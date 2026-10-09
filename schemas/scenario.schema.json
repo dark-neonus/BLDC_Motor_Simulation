@@ -13,7 +13,7 @@
       "type": "string"
     },
     "record": {
-      "description": "Signal ids to record (`motor.omega_m`, …). Empty: the default set.",
+      "description": "Signal ids to record (`motor.omega`, …). Empty: the default set.",
       "type": "array",
       "default": [],
       "items": {
