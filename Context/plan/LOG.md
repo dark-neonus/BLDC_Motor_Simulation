@@ -232,3 +232,10 @@
 ## 2026-10-09 — P05.T10 Rigid rotor
 - `physics::mech::rotor::RotorRigid` (module `motor.mechanical`, so `motor.mechanical.j_rotor` routes to it): states θm, ωm; outputs motor.theta/omega/theta_e/omega_e; torque inputs split into internal (no power term) and external (`External` "load" term); viscous loss "friction"; D-007 inertia change keeps ω and books ½ΔJω² as an external jump; `locked` param.
 - Prep: `energy.loss.<term>` per loss-term name (signals.md); `SetParam` routes to the module/block with the longest dotted-name prefix.
+
+## 2026-10-09 — P05.T01/T02 abc electrical model, back-EMF shapes, torque
+- `physics::motor::electrical::MotorElectrical` (module `motor`): ψα/ψβ states (D-013), linear EQ-MOT-02 inversion incl. harmonic magnet flux, EQ-MOT-01 derivatives, outputs per signals.md (ψ, i_abc/αβ/dq, e_abc, v_n, torque_em, p_cu); EQ-MOT-07 torque (dq term + harmonic term); energy: `electrical_in` Input, `copper` Loss, W_mag stored; L/λ edits keep flux and book ΔW_mag; `with_lambda_temperature` hook for P06 (EQ-THERM-03). Torque lives in `electrical.rs` (no separate torque.rs).
+- `backemf::Shape`: sinusoidal / trapezoidal(w) / harmonics with k, Φ, k_h, Φ_h; tests: fundamental −sin θ for all shapes, Φ′ = k, zero mean, b1(120°) = 12/π², flat top 0.8225.
+- Rotor builders `with_internal`, `with_locked` (the motor torque signal exists only after the motor is built).
+- Tests (`tests/motor_abc.rs`): locked-rotor RL τ = L/R (rtol 1e-8), LL back-EMF peak = Ke·ω (rtol 1e-6), stall torque = Kt·i_q, trapezoidal energy closure < 1e-6.
+- Line voltages are not output (not in signals.md); v_ab = v_aT − v_bT is available from the inverter signals.

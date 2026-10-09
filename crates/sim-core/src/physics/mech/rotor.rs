@@ -61,6 +61,19 @@ impl RotorRigid {
         })
     }
 
+    /// Add an internal torque input registered after the rotor (the motor's torque
+    /// needs the rotor's angle signals first).
+    pub fn with_internal(mut self, id: SignalId) -> Self {
+        self.internal.push(id);
+        self
+    }
+
+    /// Start with the shaft held (ω = 0); `motor.mechanical.locked` releases it.
+    pub fn with_locked(mut self, locked: bool) -> Self {
+        self.locked = locked;
+        self
+    }
+
     fn torque(&self, bus: &SignalBus, w: f64) -> f64 {
         let sum: f64 = self
             .internal

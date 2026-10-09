@@ -10,7 +10,7 @@
 >
 > **Keeping the app green:** P05.T10 adds a minimal rigid rotor (the full mechanics come in P06). P05.T11 builds the **interim drive path**: the skeleton FOC (kept from P03.T12) → inverse Park → an "ideal voltage source" module writing phase voltages. This keeps the server, UI, E2E and V-SKEL validation working until P07 (real inverter) and P09 (real FOC) replace them.
 
-- [~] **P05.T01** — abc electrical plant module
+- [x] **P05.T01** — abc electrical plant module
   - **Depends:** P05.T10
   - **Do:** `MotorElectrical: PlantModule`:
     - States ψ_α, ψ_β (stationary-frame flux linkages, D-013). Currents come from the flux–current relation (EQ-MOT-02, closed form in the linear case); i_c = −i_a − i_b.
@@ -21,7 +21,7 @@
   - **Verify:** V-MOT locked-rotor RL test in abc (a phase-to-phase step) → τ = Ls/R.
   - **Done when:** Passing.
 
-- [ ] **P05.T02** — Back-EMF shape functions & torque
+- [x] **P05.T02** — Back-EMF shape functions & torque
   - **Depends:** P05.T01
   - **Do:**
     - Shape functions: sinusoidal, trapezoidal (flat-top width param), harmonic table.

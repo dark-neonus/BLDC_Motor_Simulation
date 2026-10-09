@@ -2,3 +2,4 @@
 //! `docs/docs/physics/`.
 
 pub mod mech;
+pub mod motor;
