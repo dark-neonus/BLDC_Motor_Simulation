@@ -7,7 +7,7 @@
 use sim_model::constraints::{self, Severity};
 use sim_model::param::Param;
 use sim_model::params::{
-    ControllerParams, GearboxParams, LoadParams, MotorParams, SupplyParams, TierParam,
+    ControllerParams, EmfShape, GearboxParams, LoadParams, MotorParams, SupplyParams, TierParam,
 };
 use sim_model::scene::ResolvedScene;
 use sim_model::units::Kind;
@@ -15,6 +15,7 @@ use sim_model::units::Kind;
 use crate::engine::commands::{ChangeSource, EngineCommand};
 use crate::engine::engine::Engine;
 use crate::engine::fidelity::{FidelityConfig, Tier};
+use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::CoggingParams;
 use crate::physics::motor::electrical::SatParams;
 use crate::physics::motor::iron_loss::IronLossParams;
@@ -262,6 +263,19 @@ fn iron(scene: &ResolvedScene) -> Result<Option<IronLossParams>, BuildError> {
     }))
 }
 
+/// Back-EMF shape (EQ-MOT-03). Not tier-gated: the shape is part of the motor.
+fn shape(scene: &ResolvedScene) -> Result<Shape, BuildError> {
+    Ok(match &scene.motor.magnetic.emf_shape {
+        EmfShape::Sinusoidal => Shape::Sinusoidal,
+        EmfShape::Trapezoidal { flat_top } => Shape::Trapezoidal {
+            w: si(flat_top, Kind::Angle, "motor.magnetic.emf_shape.flat_top")?,
+        },
+        EmfShape::Harmonics { terms } => {
+            Shape::Harmonics(terms.iter().map(|h| (h.n, h.b, h.phase)).collect())
+        }
+    })
+}
+
 /// Saturation curve (EQ-MOT-10) if the tier enables it and the motor has one.
 fn saturation(scene: &ResolvedScene) -> Result<Option<SatParams>, BuildError> {
     let Some(s) = &scene.motor.magnetic.saturation else {
@@ -331,6 +345,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             cogging: cogging(scene)?,
             iron: iron(scene)?,
             saturation: saturation(scene)?,
+            shape: shape(scene)?,
         },
     );
     Ok(BuiltScene {

@@ -107,6 +107,8 @@ pub struct SkeletonOptions {
     pub iron: Option<IronLossParams>,
     /// Co-energy saturation (EQ-MOT-10), Detailed tier.
     pub saturation: Option<SatParams>,
+    /// Back-EMF shape (EQ-MOT-03).
+    pub shape: Shape,
 }
 
 impl Default for SkeletonOptions {
@@ -120,6 +122,7 @@ impl Default for SkeletonOptions {
             cogging: None,
             iron: None,
             saturation: None,
+            shape: Shape::Sinusoidal,
         }
     }
 }
@@ -198,7 +201,7 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         lq: mp.lq,
         lambda: mp.lambda,
         pole_pairs: mp.p,
-        shape: Shape::Sinusoidal,
+        shape: opts.shape.clone(),
         i_d0: 0.0,
         i_q0: 0.0,
         theta_e0: 0.0,

@@ -503,6 +503,35 @@ mod tests {
     }
 
     #[test]
+    fn the_scene_emf_shape_reaches_the_motor() {
+        // Spin at a steady 20 rad/s and compare the e_a peak with the fundamental λ·p·ω:
+        // sinusoidal → 1, trapezoid (120° flat top, fundamental normalised to 1) → 1/b₁
+        // (EQ-MOT-03). 1/b₁(120°) ≈ 0.82, well apart from 1.
+        let peak_ratio = |ovr: &str| {
+            let o = go(&format!(
+                "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: {{ preset: \"builtin:motors/4108-outrunner\"{ovr} }}\n  inverter: {{ preset: \"builtin:inverters/small-24v-10a\" }}\n  supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n  controller: {{ preset: \"builtin:controllers/foc-default\" }}\nsample: 20 us\nrecord: [motor.e_a, motor.omega_e]\ntimeline:\n  - target: {{ kind: velocity, value: 20 rad/s, ramp: 0.1 s }}\n  - wait: 0.6 s\n"
+            ));
+            let tail: Vec<&Vec<f64>> = o.rows.iter().filter(|r| r[0] >= 0.4).collect();
+            let peak = tail.iter().map(|r| r[1].abs()).fold(0.0, f64::max);
+            let we = tail.iter().map(|r| r[2]).sum::<f64>() / tail.len() as f64;
+            (peak, we)
+        };
+        let (sin_peak, we1) = peak_ratio("");
+        let (trap_peak, we2) = peak_ratio(
+            ", overrides: { magnetic.emf_shape: { kind: trapezoidal, flat_top: 120 deg } }",
+        );
+        assert!((we1 / we2 - 1.0).abs() < 0.02, "{we1} {we2}");
+        let expect =
+            1.0 / crate::physics::motor::backemf::trap_b1(std::f64::consts::PI * 2.0 / 3.0);
+        // 2 %: speed ripple and the 20 µs sampling of the peak.
+        assert!(
+            (trap_peak / sin_peak - expect).abs() < 0.02,
+            "ratio {} expected {expect}",
+            trap_peak / sin_peak
+        );
+    }
+
+    #[test]
     fn cogging_follows_the_fidelity_tier() {
         let dir = std::env::temp_dir().join(format!("bldc-cog-{}", std::process::id()));
         let lib = Library::new(None, dir.join("user"), vec![]).unwrap();
