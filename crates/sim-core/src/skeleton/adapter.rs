@@ -14,7 +14,9 @@ use crate::physics::inverter::ideal::IdealVoltageSource;
 use crate::physics::mech::rotor::{RotorParams, RotorRigid};
 use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::{Cogging, CoggingParams};
-use crate::physics::motor::electrical::{ElectricalInputs, ElectricalParams, MotorElectrical};
+use crate::physics::motor::electrical::{
+    ElectricalInputs, ElectricalParams, MotorElectrical, SatParams,
+};
 use crate::physics::motor::iron_loss::{IronLoss, IronLossParams};
 
 /// Signals the FOC block reads and writes.
@@ -103,6 +105,8 @@ pub struct SkeletonOptions {
     pub cogging: Option<CoggingParams>,
     /// Iron loss (EQ-MOT-09), when the fidelity tier enables it.
     pub iron: Option<IronLossParams>,
+    /// Co-energy saturation (EQ-MOT-10), Detailed tier.
+    pub saturation: Option<SatParams>,
 }
 
 impl Default for SkeletonOptions {
@@ -115,6 +119,7 @@ impl Default for SkeletonOptions {
             ratio: 1.0,
             cogging: None,
             iron: None,
+            saturation: None,
         }
     }
 }
@@ -197,6 +202,7 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         i_d0: 0.0,
         i_q0: 0.0,
         theta_e0: 0.0,
+        saturation: opts.saturation,
     };
     let motor = MotorElectrical::new(ep, inp, &mut bus).expect("unique skeleton signal");
     let mut rotor = rotor.with_internal(id(&bus, "motor.torque_em"));

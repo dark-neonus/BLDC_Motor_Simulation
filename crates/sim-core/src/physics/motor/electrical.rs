@@ -30,6 +30,122 @@ pub struct ElectricalParams {
     pub i_d0: f64,
     pub i_q0: f64,
     pub theta_e0: f64,
+    /// Co-energy saturation (EQ-MOT-10, Detailed tier); `None` = linear magnetics.
+    pub saturation: Option<SatParams>,
+}
+
+/// EQ-MOT-10 parameters.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SatParams {
+    /// Knee current i_k [A].
+    pub i_k: f64,
+    /// Incremental q inductance deep in saturation L_∞ [H].
+    pub l_inf: f64,
+    /// Cross-saturation fraction c (0 ≤ c < 1).
+    pub c: f64,
+}
+
+/// Rotor-frame magnetics: ψ_dq(i_dq), its Jacobian and the co-energy (EQ-MOT-10; the
+/// linear model is the c = 0, L_∞ = L_q limit).
+#[derive(Debug, Clone, Copy)]
+struct Magnetics {
+    ld: f64,
+    lq: f64,
+    lambda: f64,
+    sat: Option<SatParams>,
+}
+
+impl Magnetics {
+    /// (h, h', h'') of the cross-saturation function.
+    fn h(&self, iq: f64) -> (f64, f64, f64) {
+        match self.sat {
+            None => (0.0, 0.0, 0.0),
+            Some(s) => {
+                let u = iq / s.i_k;
+                let d = 1.0 + u * u;
+                (
+                    s.c * u * u / d,
+                    s.c * 2.0 * u / (s.i_k * d * d),
+                    s.c * 2.0 * (1.0 - 3.0 * u * u) / (s.i_k * s.i_k * d * d * d),
+                )
+            }
+        }
+    }
+
+    fn psi(&self, id: f64, iq: f64) -> (f64, f64) {
+        let (h, hp, _) = self.h(iq);
+        let psi_q = match self.sat {
+            None => self.lq * iq,
+            Some(s) => {
+                s.l_inf * iq + (self.lq - s.l_inf) * s.i_k * (iq / s.i_k).tanh()
+                    - self.lambda * id * hp
+            }
+        };
+        (self.lambda * (1.0 - h) + self.ld * id, psi_q)
+    }
+
+    /// Co-energy W'(i_d, i_q).
+    fn coenergy(&self, id: f64, iq: f64) -> f64 {
+        let (h, _, _) = self.h(iq);
+        let q = match self.sat {
+            None => 0.5 * self.lq * iq * iq,
+            Some(s) => {
+                let u = iq / s.i_k;
+                // ln cosh(u) without overflow for large |u|.
+                let lncosh = u.abs() + (-2.0 * u.abs()).exp().ln_1p() - std::f64::consts::LN_2;
+                0.5 * s.l_inf * iq * iq + (self.lq - s.l_inf) * s.i_k * s.i_k * lncosh
+            }
+        };
+        self.lambda * id * (1.0 - h) + 0.5 * self.ld * id * id + q
+    }
+
+    /// Solve ψ_dq(i) = (pd, pq) for i (closed form when linear, Newton otherwise).
+    fn currents(&self, pd: f64, pq: f64) -> (f64, f64) {
+        let lin = ((pd - self.lambda) / self.ld, pq / self.lq);
+        let Some(s) = self.sat else { return lin };
+        // Start from the linear solution every time: stateless, so snapshots restore
+        // bit-identically. The Jacobian is the (symmetric) Hessian of W'.
+        let (mut id, mut iq) = lin;
+        // A q-current guess from the saturated asymptote converges faster deep in saturation.
+        if iq.abs() > s.i_k {
+            iq = (pq - (self.lq - s.l_inf) * s.i_k * iq.signum()) / s.l_inf;
+        }
+        // Damped Newton: halve the step until the flux residual decreases, so the
+        // iteration converges from the linear guess even deep in saturation.
+        let res = |id: f64, iq: f64| {
+            let (fd, fq) = self.psi(id, iq);
+            ((fd - pd).hypot(fq - pq), fd - pd, fq - pq)
+        };
+        let (mut norm, mut rd, mut rq) = res(id, iq);
+        let scale = 1e-15 * (1.0 + pd.abs() + pq.abs());
+        for _ in 0..100 {
+            if norm <= scale {
+                break;
+            }
+            let (_, hp, hpp) = self.h(iq);
+            let sech2 = 1.0 / (iq / s.i_k).cosh().powi(2);
+            let (a, b, d) = (
+                self.ld,
+                -self.lambda * hp,
+                s.l_inf + (self.lq - s.l_inf) * sech2 - self.lambda * id * hpp,
+            );
+            let det = a * d - b * b;
+            if !(det.is_finite() && det > 0.0) {
+                break; // outside the validated (positive-definite) range
+            }
+            let (did, diq) = ((d * rd - b * rq) / det, (a * rq - b * rd) / det);
+            let mut t = 1.0;
+            loop {
+                let (n2, d2, q2) = res(id - t * did, iq - t * diq);
+                if n2 < norm || t < 1e-6 {
+                    (id, iq, norm, rd, rq) = (id - t * did, iq - t * diq, n2, d2, q2);
+                    break;
+                }
+                t *= 0.5;
+            }
+        }
+        (id, iq)
+    }
 }
 
 /// Magnet temperature input for λ(T) = λ_ref·(1 + α_Br·(T − T_ref)) (EQ-THERM-03).
@@ -173,15 +289,23 @@ impl MotorElectrical {
         clarke(f(0.0), f(1.0), f(2.0))
     }
 
-    /// EQ-MOT-02, linear magnetics: states → currents.
+    fn magnetics(&self, lambda: f64) -> Magnetics {
+        Magnetics {
+            ld: self.p.ld,
+            lq: self.p.lq,
+            lambda,
+            sat: self.p.saturation,
+        }
+    }
+
+    /// EQ-MOT-02: states → currents (rotor-frame inversion of the magnetics).
     pub fn solve(&self, psi_a: f64, psi_b: f64, th: f64, lambda: f64) -> Solved {
         let (ha, hb) = self.harmonic_flux(th, lambda);
         let (a, b) = (psi_a - ha, psi_b - hb);
         let (s, c) = th.sin_cos();
         let psi_d = c * a + s * b;
         let psi_q = -s * a + c * b;
-        let i_d = (psi_d - lambda) / self.p.ld;
-        let i_q = psi_q / self.p.lq;
+        let (i_d, i_q) = self.magnetics(lambda).currents(psi_d, psi_q);
         Solved {
             i_alpha: c * i_d - s * i_q,
             i_beta: s * i_d + c * i_q,
@@ -207,9 +331,11 @@ impl MotorElectrical {
         t
     }
 
-    /// Magnetic stored energy (EQ-MOT-10 linear limit): ¾(L_d i_d² + L_q i_q²).
-    fn w_mag(&self, s: &Solved) -> f64 {
-        0.75 * (self.p.ld * s.i_d * s.i_d + self.p.lq * s.i_q * s.i_q)
+    /// Magnetic stored energy (EQ-MOT-10): 3/2·(ψ_d i_d + ψ_q i_q − W'); the linear case
+    /// gives ¾(L_d i_d² + L_q i_q²).
+    fn w_mag(&self, s: &Solved, lambda: f64) -> f64 {
+        let m = self.magnetics(lambda);
+        1.5 * (s.psi_d * s.i_d + s.psi_q * s.i_q - m.coenergy(s.i_d, s.i_q))
     }
 
     fn state(&self, x: &[f64], off: usize, bus: &SignalBus) -> (Solved, f64, f64) {
@@ -241,7 +367,7 @@ impl PlantModule for MotorElectrical {
         let p = &self.p;
         let th = p.theta_e0;
         let (s, c) = th.sin_cos();
-        let (pd, pq) = (p.ld * p.i_d0 + p.lambda, p.lq * p.i_q0);
+        let (pd, pq) = self.magnetics(p.lambda).psi(p.i_d0, p.i_q0);
         let (ha, hb) = self.harmonic_flux(th, p.lambda);
         x[0] = c * pd - s * pq + ha;
         x[1] = s * pd + c * pq + hb;
@@ -311,7 +437,7 @@ impl PlantModule for MotorElectrical {
         }
         // Flux is continuous; currents (and W_mag) jump with L or λ. Book the jump.
         let (th, lam_now) = (self.last_theta_e, self.last_lambda);
-        let before = self.w_mag(&self.solve(x_own[0], x_own[1], th, lam_now));
+        let before = self.w_mag(&self.solve(x_own[0], x_own[1], th, lam_now), lam_now);
         let scale = lam_now / self.p.lambda;
         let p = &mut self.p;
         let old = match name {
@@ -323,7 +449,7 @@ impl PlantModule for MotorElectrical {
         };
         let lam_new = self.p.lambda * scale;
         self.last_lambda = lam_new;
-        let after = self.w_mag(&self.solve(x_own[0], x_own[1], th, lam_new));
+        let after = self.w_mag(&self.solve(x_own[0], x_own[1], th, lam_new), lam_new);
         self.jump += after - before;
         Ok(old)
     }
@@ -341,8 +467,8 @@ impl PlantModule for MotorElectrical {
         p[1] = 1.5 * self.p.r * (s.i_alpha * s.i_alpha + s.i_beta * s.i_beta);
     }
     fn stored_energy(&self, x: &[f64], off: usize, bus: &SignalBus) -> f64 {
-        let (s, _, _) = self.state(x, off, bus);
-        self.w_mag(&s)
+        let (s, _, lambda) = self.state(x, off, bus);
+        self.w_mag(&s, lambda)
     }
     fn take_external_energy(&mut self) -> f64 {
         std::mem::take(&mut self.jump)
@@ -360,5 +486,57 @@ impl PlantModule for MotorElectrical {
         let (r, ld, lq, lambda) = (f("r")?, f("ld")?, f("lq")?, f("lambda")?);
         (self.p.r, self.p.ld, self.p.lq, self.p.lambda) = (r, ld, lq, lambda);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sat() -> Magnetics {
+        Magnetics {
+            ld: 2.5e-3,
+            lq: 2.5e-3,
+            lambda: 0.03,
+            sat: Some(SatParams {
+                i_k: 10.0,
+                l_inf: 0.75e-3,
+                c: 0.15,
+            }),
+        }
+    }
+
+    #[test]
+    fn newton_inverts_the_saturated_flux() {
+        let m = sat();
+        for &(id, iq) in &[
+            (0.0, 0.0),
+            (0.0, 5.0),
+            (-3.0, 25.0),
+            (2.0, -40.0),
+            (-10.0, 60.0),
+        ] {
+            let (pd, pq) = m.psi(id, iq);
+            let (a, b) = m.currents(pd, pq);
+            // Newton to 1e-13 relative step: recovered currents within 1e-9 A.
+            assert!(
+                (a - id).abs() < 1e-9 && (b - iq).abs() < 1e-9,
+                "({id}, {iq}) → ({a}, {b})"
+            );
+        }
+    }
+
+    #[test]
+    fn flux_is_the_gradient_of_the_coenergy() {
+        let m = sat();
+        let (id, iq, h) = (-2.0, 17.0, 1e-5);
+        let (pd, pq) = m.psi(id, iq);
+        let dd = (m.coenergy(id + h, iq) - m.coenergy(id - h, iq)) / (2.0 * h);
+        let dq = (m.coenergy(id, iq + h) - m.coenergy(id, iq - h)) / (2.0 * h);
+        // Central difference at h = 1e-5 A: atol 1e-9 Wb.
+        assert!(
+            (dd - pd).abs() < 1e-9 && (dq - pq).abs() < 1e-9,
+            "{dd} {pd} / {dq} {pq}"
+        );
     }
 }

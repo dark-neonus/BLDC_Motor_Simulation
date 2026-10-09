@@ -122,6 +122,7 @@ fn abc_engine(p: PmsmParams) -> Engine {
         i_d0: 0.0,
         i_q0: 0.0,
         theta_e0: 0.0,
+        saturation: None,
     };
     let motor = MotorElectrical::new(ep, inp, &mut bus).unwrap();
     let rotor = rotor.with_internal(bus.id("motor.torque_em").unwrap());

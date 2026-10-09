@@ -17,6 +17,7 @@ use crate::engine::engine::Engine;
 use crate::engine::fidelity::{FidelityConfig, Tier};
 use crate::fixtures::dq_pmsm::PmsmParams;
 use crate::physics::motor::cogging::CoggingParams;
+use crate::physics::motor::electrical::SatParams;
 use crate::physics::motor::iron_loss::IronLossParams;
 use crate::skeleton::adapter::{SkeletonOptions, build_engine_with};
 use crate::skeleton::foc::FocConfig;
@@ -260,6 +261,25 @@ fn iron(scene: &ResolvedScene) -> Result<Option<IronLossParams>, BuildError> {
     }))
 }
 
+/// Saturation curve (EQ-MOT-10) if the tier enables it and the motor has one.
+fn saturation(scene: &ResolvedScene) -> Result<Option<SatParams>, BuildError> {
+    let Some(s) = &scene.motor.magnetic.saturation else {
+        return Ok(None);
+    };
+    if !FidelityConfig::preset(tier(scene)).enable_saturation {
+        return Ok(None);
+    }
+    Ok(Some(SatParams {
+        i_k: si(&s.i_knee, Kind::Current, "motor.magnetic.saturation.i_knee")?,
+        l_inf: si(
+            &s.l_inf,
+            Kind::Inductance,
+            "motor.magnetic.saturation.l_inf",
+        )?,
+        c: s.cross,
+    }))
+}
+
 pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
     // Derive (so motor-constant overrides reach λ) and refuse anything with a Reject.
     let mut scene = scene.clone();
@@ -309,6 +329,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
             cogging: cogging(scene)?,
             iron: iron(scene)?,
+            saturation: saturation(scene)?,
         },
     );
     Ok(BuiltScene {

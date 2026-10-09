@@ -194,7 +194,7 @@ $$
 
 - **Linear limit:** $c = 0$ and $L_\infty = L_q$ give back the linear model exactly.
 - **Torque:** with $i_d = 0$, $T_e = \tfrac32 p\lambda_m(1 - h(i_q))\,i_q$. Torque per amp falls as current rises, which is what datasheet torque–current curves show.
-- **Inversion:** solve $\psi_{dq}(i_d,i_q) = \psi$ with 2-D Newton from the previous step's currents. The Jacobian is the Hessian of $W'$ (symmetric incremental-inductance matrix). Parameter validation (P04.T05) rejects sets where it is not positive definite over the reachable current range.
+- **Inversion:** solve $\psi_{dq}(i_d,i_q) = \psi$ with 2-D Newton from the previous step's currents. The Jacobian is the Hessian of $W'$ (symmetric incremental-inductance matrix). Parameter validation rejects sets where it is not positive definite over $|i_d|, |i_q| \le 3\,i_k$. The binding term is $\lambda_m\,|i_d|\,h''$, so a strong magnet with a low knee needs a smaller $c$ or a larger $L_\infty$ than the defaults (e.g. $\lambda_m = 30$ mWb, $L_q = 2.5$ mH, $i_k = 10$ A, $c = 0.15$ fails at $i_d \approx 30$ A). The solver uses damped Newton from the linear solution, so it is stateless and restores bit-identically from snapshots.
 - **Stored magnetic energy** (amplitude-invariant scaling, EQ-CONV-07): $W_{mag} = \tfrac32\big(\psi_d i_d + \psi_q i_q - W'\big)$. The linear case gives $\tfrac12 L_s\sum_x i_x^2$.
 - **Approximation:** d-axis self-saturation is neglected. Surface-mount magnets give a large effective d-axis air gap. Verified numerically: the energy residual of this model halves when the step size halves, so any residual comes from the integrator, not the model.
 

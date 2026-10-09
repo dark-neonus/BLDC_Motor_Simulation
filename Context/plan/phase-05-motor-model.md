@@ -56,7 +56,7 @@
   - **Verify:** Test: no-load spin-down deceleration matches the analytic integration of the drag law.
   - **Done when:** Passing.
 
-- [ ] **P05.T06** — Saturation (Detailed tier)
+- [x] **P05.T06** — Saturation (Detailed tier)
   - **Depends:** P05.T03
   - **Do:** Implement the energy-consistent saturation per EQ-MOT (e.g. ψq(iq) curve and the co-energy torque), with the inductance matrix/flux formulation as specified. Default curves: knee at ~1.5–2× rated current, based on the preset.
   - **Files:** `crates/sim-core/src/physics/motor/saturation.rs`

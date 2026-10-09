@@ -178,6 +178,60 @@ pub fn derive(m: &mut MotorParams, out: &mut Vec<Issue>) {
 }
 
 /// Run all Reject/Warn rules.
+/// EQ-MOT-10 validity: the incremental inductance matrix (Hessian of the co-energy) must
+/// be positive definite, or the flux → current inversion has no unique solution. Checked
+/// on a grid over |i_d|, |i_q| ≤ 3·i_knee, the range presets and tests reach.
+fn saturation_rules(
+    s: &crate::params::Saturation,
+    ld: f64,
+    lq: f64,
+    m: &MotorParams,
+    out: &mut Vec<Issue>,
+) {
+    let path = "motor.magnetic.saturation";
+    let Some(ik) = positive(&s.i_knee, Kind::Current, &format!("{path}.i_knee"), out) else {
+        return;
+    };
+    let Some(linf) = positive(&s.l_inf, Kind::Inductance, &format!("{path}.l_inf"), out) else {
+        return;
+    };
+    if linf > lq {
+        out.push(issue(
+            Severity::Reject,
+            &format!("{path}.l_inf"),
+            "L_∞ must not exceed L_q (saturation lowers the inductance)",
+        ));
+        return;
+    }
+    let Some(lambda) = lambda_from_entered(m, &mut Vec::new()) else {
+        return;
+    };
+    let c = s.cross;
+    let n = 40;
+    for a in 0..=n {
+        for b in 0..=n {
+            let id = ik * (6.0 * a as f64 / n as f64 - 3.0);
+            let u = 6.0 * b as f64 / n as f64 - 3.0;
+            let d = 1.0 + u * u;
+            let hp = c * 2.0 * u / (ik * d * d);
+            let hpp = c * 2.0 * (1.0 - 3.0 * u * u) / (ik * ik * d * d * d);
+            let jqq = linf + (lq - linf) / u.cosh().powi(2) - lambda * id * hpp;
+            let jdq = -lambda * hp;
+            if !(jqq > 0.0 && ld * jqq - jdq * jdq > 0.0) {
+                out.push(issue(
+                    Severity::Reject,
+                    path,
+                    format!(
+                        "the saturation curve is not energy-consistent at i_d = {id:.1} A, i_q = {:.1} A (incremental inductance not positive definite); lower `cross` or raise `i_knee`/`l_inf`",
+                        u * ik
+                    ),
+                ));
+                return;
+            }
+        }
+    }
+}
+
 pub fn validate(m: &MotorParams) -> Vec<Issue> {
     let mut out = Vec::new();
     let e = &m.electrical;
@@ -232,6 +286,9 @@ pub fn validate(m: &MotorParams) -> Vec<Issue> {
             "motor.geometry.magnet_arc",
             "magnet arc is a fraction of the pole pitch (0…1)",
         ));
+    }
+    if let (Some(s), Some(ld), Some(lq)) = (&m.magnetic.saturation, ld, lq) {
+        saturation_rules(s, ld, lq, m, &mut out);
     }
     if let Some(s) = &m.magnetic.saturation
         && !(0.0..1.0).contains(&s.cross)
@@ -590,7 +647,27 @@ mechanical: { j_rotor: 2.5e-4 }
                 Severity::Reject,
                 "motor.winding.slots",
             ),
+            // λ = 30 mWb, L = 2.5 mH: i_k = 1 A with c = 0.5 is not positive definite.
+            (
+                "motor.magnetic.saturation",
+                json!({"i_knee": "1 A", "l_inf": "0.75 mH", "cross": 0.5}),
+                Severity::Reject,
+                "motor.magnetic.saturation",
+            ),
+            (
+                "motor.magnetic.saturation",
+                json!({"i_knee": "10 A", "l_inf": "5 mH", "cross": 0.1}),
+                Severity::Reject,
+                "motor.magnetic.saturation.l_inf",
+            ),
         ];
+        // A consistent curve (the engine test's) is accepted.
+        let ok = apply_edit(
+            &motor(),
+            "motor.magnetic.saturation",
+            json!({"i_knee": "20 A", "l_inf": "0.75 mH", "cross": 0.05}),
+        );
+        assert!(!ok.rejected, "{:?}", ok.issues);
         for (path, value, sev, at) in cases {
             let r = apply_edit(&motor(), path, value);
             assert!(

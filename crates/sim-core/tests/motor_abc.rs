@@ -75,6 +75,7 @@ fn build(s: Setup) -> Engine {
         i_d0: 0.0,
         i_q0: s.i_q0,
         theta_e0: P * s.rotor.theta0,
+        saturation: None,
     };
     let motor = MotorElectrical::new(ep, inp, &mut bus).unwrap();
     let rotor = rotor.with_internal(bus.id("motor.torque_em").unwrap());

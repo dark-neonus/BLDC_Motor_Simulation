@@ -254,3 +254,8 @@
 ## 2026-10-09 — P05.T05 Iron loss
 - `physics::motor::iron_loss::IronLoss` (module `motor.magnetic` → params `motor.magnetic.k_hy/k_ed`): EQ-MOT-09 drag with tanh(ω/ω_ε), ω_ε = 0.01 rad/s; writes motor.torque_fe (new in signals.md) and motor.p_fe; `iron` Loss term = −T_fe·ω. Tests: spin-down vs analytic (a + bω) drag (rtol 1e-9), energy residual, dissipative through ω = 0.
 - Wired via `SkeletonOptions::iron`, gated by `enable_iron_loss` and present coefficients (none of the presets has them yet: k_hy/k_ed need spin-down data). Coefficients are bare SI numbers (no unit kind for W·s/rad).
+
+## 2026-10-09 — P05.T06 Saturation
+- EQ-MOT-10 co-energy model inside `MotorElectrical` (`SatParams`, Detailed tier via `SkeletonOptions::saturation`): ψ_dq(i), W', W_mag = 3/2(ψ·i − W'); damped Newton from the linear solution (stateless → snapshot-safe), Hessian Jacobian.
+- Debugging lesson: the first test curve (i_k = 10 A, c = 0.15) was not positive definite at reachable i_d, so Newton stalled and the energy residual was flat in dt (model error, not integrator). Added the missing validity rule in sim-model (`saturation_rules`: PD over ±3·i_k, L_∞ ≤ L_q, tested) and documented it in motor.md. A rustfmt-reflowed constant had silently kept the old curve: re-check edits after formatting.
+- Tests: Newton round trip (deep saturation), ψ = ∇W', below knee ≈ linear within 1 %, above knee torque = 3/2·p·λ(1−h)·i_q, energy residual < 1e-6 for a pulse into saturation on a free rotor.
