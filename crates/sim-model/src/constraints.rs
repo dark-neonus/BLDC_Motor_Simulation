@@ -496,6 +496,92 @@ mechanical: { j_rotor: 2.5e-4 }
         );
     }
 
+    /// One case per `validate` rule not covered above: (edit path, value, expected severity, issue path).
+    #[test]
+    fn every_rule_fires() {
+        use serde_json::json;
+        let th = |t_max: &str, r_ws: &str| json!({"r_ws": r_ws, "r_sh": "0.3 K/W", "r_ha": "4 K/W", "c_w": "10 J/K", "c_s": "20 J/K", "c_h": "50 J/K", "t_max": t_max});
+        let cases = [
+            (
+                "motor.electrical.l_q",
+                json!("20 mH"),
+                Severity::Warn,
+                "motor.electrical.l_q",
+            ),
+            (
+                "motor.electrical.lambda_m",
+                json!("0.000001 Wb"),
+                Severity::Warn,
+                "motor.electrical.kv",
+            ),
+            (
+                "motor.electrical.r_phase",
+                json!(1e-6),
+                Severity::Warn,
+                "motor.electrical.l_q",
+            ),
+            (
+                "motor.geometry.magnet_arc",
+                json!(1.5),
+                Severity::Reject,
+                "motor.geometry.magnet_arc",
+            ),
+            (
+                "motor.magnetic.saturation",
+                json!({"i_knee": "10 A", "l_inf": "1 mH", "cross": 1.2}),
+                Severity::Reject,
+                "motor.magnetic.saturation.cross",
+            ),
+            (
+                "motor.ratings",
+                json!({"current_continuous": "10 A", "current_peak": "5 A"}),
+                Severity::Warn,
+                "motor.ratings.current_peak",
+            ),
+            (
+                "motor.thermal",
+                th("10 degC", "0.5 K/W"),
+                Severity::Reject,
+                "motor.thermal.t_max",
+            ),
+            (
+                "motor.thermal",
+                th("100 degC", "-0.5 K/W"),
+                Severity::Reject,
+                "motor.thermal.r_ws",
+            ),
+            (
+                "motor.mechanical.j_rotor",
+                json!(0.0),
+                Severity::Reject,
+                "motor.mechanical.j_rotor",
+            ),
+            (
+                "motor.mechanical.friction",
+                json!({"static_torque": "0.01 N*m", "coulomb": "0.02 N*m", "viscous": 0.0}),
+                Severity::Reject,
+                "motor.mechanical.friction.coulomb",
+            ),
+            (
+                "motor.winding.pole_pairs",
+                json!(12),
+                Severity::Reject,
+                "motor.winding.slots",
+            ),
+        ];
+        for (path, value, sev, at) in cases {
+            let r = apply_edit(&motor(), path, value);
+            assert!(
+                r.issues.iter().any(|i| i.severity == sev && i.path == at),
+                "{path}: expected {sev:?} at {at}, got {:?}",
+                r.issues
+            );
+            assert_eq!(r.rejected, sev == Severity::Reject, "{path}");
+        }
+        // The fixture itself is clean.
+        assert!(validate(&motor()).is_empty(), "{:?}", validate(&motor()));
+    }
+
     proptest! {
         /// Any sequence of accepted edits leaves a model with no Reject issue.
         #[test]

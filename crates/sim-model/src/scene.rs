@@ -4,12 +4,14 @@
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+use crate::constraints::{Issue, Severity};
 use crate::library::Library;
 use crate::param::Param;
 use crate::params::{
-    BusParams, ControllerParams, FidelityParams, GearboxParams, InverterParams, LoadParams,
-    MotorParams, ProtectionParams, SensorsParams, SupplyParams,
+    BusParams, ControllerParams, EncoderParams, FidelityParams, GearboxParams, InverterParams,
+    LoadParams, MotorParams, ProtectionParams, SensorsParams, SupplyParams,
 };
+use crate::units::Kind;
 
 /// A library reference with overrides, or inline parameters.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -158,5 +160,97 @@ impl Scene {
             seed: self.seed,
             initial: self.initial.clone(),
         })
+    }
+}
+
+fn warn(path: &str, message: String) -> Issue {
+    Issue {
+        severity: Severity::Warn,
+        path: path.into(),
+        message,
+        help_id: format!("param:{path}"),
+    }
+}
+
+/// Cross-component rules (P04.T05 list): controller current limit vs the inverter rating,
+/// plausible encoder/ADC resolution. The PSU current limit is a DC-side limit and is not
+/// compared with the phase-current limit (phase current can exceed bus current at low speed).
+pub fn validate_scene(s: &ResolvedScene) -> Vec<Issue> {
+    let mut out = Vec::new();
+    let limits = match &s.controller {
+        ControllerParams::SixStep { limits, .. }
+        | ControllerParams::OpenLoop { limits, .. }
+        | ControllerParams::Foc { limits, .. }
+        | ControllerParams::Mit { limits, .. }
+        | ControllerParams::Custom { limits, .. } => limits,
+    };
+    let i_lim = limits.current.value.si(Kind::Current).ok();
+    let i_inv = s
+        .inverter
+        .i_max
+        .as_ref()
+        .and_then(|p| p.value.si(Kind::Current).ok());
+    if let (Some(a), Some(b)) = (i_lim, i_inv)
+        && a > b
+    {
+        out.push(warn(
+            "controller.limits.current",
+            format!("current limit {a} A is above the inverter rating {b} A"),
+        ));
+    }
+    if let Some(sensors) = &s.sensors {
+        match &sensors.encoder {
+            Some(EncoderParams::Magnetic { bits, .. }) if !(8..=24).contains(bits) => {
+                out.push(warn(
+                    "sensors.encoder.bits",
+                    format!("{bits}-bit encoder is unusual (magnetic encoders are 10…21 bits)"),
+                ))
+            }
+            Some(EncoderParams::Incremental { cpr, .. }) if *cpr < 16 => out.push(warn(
+                "sensors.encoder.cpr",
+                format!("{cpr} counts per revolution is very coarse"),
+            )),
+            _ => {}
+        }
+        if let Some(adc) = &sensors.adc
+            && !(8..=24).contains(&adc.bits)
+        {
+            out.push(warn(
+                "sensors.adc.bits",
+                format!("{}-bit ADC is unusual", adc.bits),
+            ));
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::io::parse_yaml;
+
+    #[test]
+    fn scene_rules_fire() {
+        let dir = std::env::temp_dir().join(format!("bldc-scr-{}", std::process::id()));
+        let lib = Library::new(None, dir.join("user"), vec![]).unwrap();
+        let scene: Scene =
+            parse_yaml(&lib.load("builtin:scenes/gimbal-hold").unwrap(), "s").unwrap();
+        let mut r = scene.resolve(&lib).unwrap();
+        assert!(validate_scene(&r).is_empty(), "{:?}", validate_scene(&r));
+        if let ControllerParams::Foc { limits, .. } = &mut r.controller {
+            limits.current = crate::param::Param {
+                value: crate::param::Raw::Text("50 A".into()),
+                source: crate::param::Source::Default,
+                note: None,
+            };
+        }
+        if let Some(EncoderParams::Magnetic { bits, .. }) =
+            r.sensors.as_mut().and_then(|s| s.encoder.as_mut())
+        {
+            *bits = 40;
+        }
+        let paths: Vec<_> = validate_scene(&r).into_iter().map(|i| i.path).collect();
+        assert_eq!(paths, ["controller.limits.current", "sensors.encoder.bits"]);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

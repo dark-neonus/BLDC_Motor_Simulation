@@ -35,10 +35,13 @@ fn library(n: &str) -> Result<Library, IoError> {
 /// Resolve every library reference and run the motor constraint rules.
 fn resolve(s: &Scene, n: &str) -> Result<(), IoError> {
     let r = s.resolve(&library(n)?).map_err(|e| msg(n, e))?;
-    let mut m = r.motor;
-    let mut issues = Vec::new();
+    let mut m = r.motor.clone();
+    let mut issues = sim_model::scene::validate_scene(&r);
     constraints::derive(&mut m, &mut issues);
     issues.extend(constraints::validate(&m));
+    for i in issues.iter().filter(|i| i.severity == Severity::Warn) {
+        println!("{n}: warn: {}: {}", i.path, i.message);
+    }
     match issues.iter().find(|i| i.severity == Severity::Reject) {
         Some(i) => Err(msg(n, format!("motor: {}: {}", i.path, i.message))),
         None => Ok(()),
