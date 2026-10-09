@@ -178,6 +178,7 @@ struct Out {
     v_n: SignalId,
     torque: SignalId,
     p_cu: SignalId,
+    open_phase: SignalId,
 }
 
 /// Currents and rotor-frame fluxes at one state.
@@ -199,6 +200,13 @@ pub struct MotorElectrical {
     jump: f64,
     last_theta_e: f64,
     last_lambda: f64,
+    /// Open-phase mode (EQ-MOT-11): the disconnected phase; state 0 is then the line
+    /// flux ψ_yz of the two connected phases (y = k+1, z = k+2 mod 3).
+    open: Option<usize>,
+    /// Requested open phase, entered when its current crosses zero (state event), and
+    /// the sign of that current at the request (so g starts positive: no false crossing).
+    pending: Option<usize>,
+    pending_sign: f64,
 }
 
 /// Amplitude-invariant Clarke of three phase values (EQ-CONV-01).
@@ -254,6 +262,12 @@ impl MotorElectrical {
             v_n: r("motor.v_n", "V", "neutral voltage", o)?,
             torque: r("motor.torque_em", "N*m", "electromagnetic torque", o)?,
             p_cu: r("motor.p_cu", "W", "copper loss", o)?,
+            open_phase: r(
+                "motor.open_phase",
+                "-",
+                "open phase: -1 none, 0/1/2 = a/b/c",
+                o,
+            )?,
         };
         let lambda = p.lambda;
         Ok(Self {
@@ -264,6 +278,9 @@ impl MotorElectrical {
             temp: None,
             jump: 0.0,
             last_lambda: lambda,
+            open: None,
+            pending: None,
+            pending_sign: 1.0,
         })
     }
 
@@ -341,7 +358,100 @@ impl MotorElectrical {
     fn state(&self, x: &[f64], off: usize, bus: &SignalBus) -> (Solved, f64, f64) {
         let th = bus.get(self.inp.theta_e);
         let lambda = self.lambda(bus);
-        (self.solve(x[off], x[off + 1], th, lambda), th, lambda)
+        let s = match self.open {
+            None => self.solve(x[off], x[off + 1], th, lambda),
+            Some(k) => self.solve_open(x[off], th, lambda, k),
+        };
+        (s, th, lambda)
+    }
+
+    /// Stator flux αβ for given rotor-frame currents (EQ-MOT-02 forward direction).
+    fn flux_ab(&self, i_d: f64, i_q: f64, th: f64, lambda: f64) -> (f64, f64, f64, f64) {
+        let (pd, pq) = self.magnetics(lambda).psi(i_d, i_q);
+        let (s, c) = th.sin_cos();
+        let (ha, hb) = self.harmonic_flux(th, lambda);
+        (c * pd - s * pq + ha, s * pd + c * pq + hb, pd, pq)
+    }
+
+    /// Single current path y → z with phase k open (EQ-MOT-11): state = ψ_yz.
+    pub fn solve_open(&self, psi_yz: f64, th: f64, lambda: f64, k: usize) -> Solved {
+        let (y, z) = ((k + 1) % 3, (k + 2) % 3);
+        let (sn, cs) = th.sin_cos();
+        let at = |i: f64| {
+            let mut ph = [0.0; 3];
+            ph[y] = i;
+            ph[z] = -i;
+            let (ia, ib) = clarke(ph[0], ph[1], ph[2]);
+            let (id, iq) = (cs * ia + sn * ib, -sn * ia + cs * ib);
+            let (fa, fb, pd, pq) = self.flux_ab(id, iq, th, lambda);
+            let f = inv_clarke(fa, fb);
+            (
+                f[y] - f[z],
+                Solved {
+                    i_alpha: ia,
+                    i_beta: ib,
+                    i_d: id,
+                    i_q: iq,
+                    psi_d: pd,
+                    psi_q: pq,
+                },
+            )
+        };
+        // Newton on the line flux, starting from the linear non-salient estimate
+        // ψ_yz ≈ 2·L·i + magnet part.
+        let l2 = self.p.ld + self.p.lq;
+        let (f0, _) = at(0.0);
+        let mut i = (psi_yz - f0) / l2;
+        for _ in 0..50 {
+            let (f, _) = at(i);
+            let h = 1e-6 * (1.0 + i.abs());
+            let slope = (at(i + h).0 - at(i - h).0) / (2.0 * h);
+            if !(slope.is_finite() && slope > 0.0) {
+                break;
+            }
+            let di = (f - psi_yz) / slope;
+            i -= di;
+            if di.abs() <= 1e-13 * (1.0 + i.abs()) {
+                break;
+            }
+        }
+        at(i).1
+    }
+
+    /// Phase k current from a solved state.
+    fn phase_current(s: &Solved, k: usize) -> f64 {
+        inv_clarke(s.i_alpha, s.i_beta)[k]
+    }
+
+    /// `motor.open_phase`: −1 reconnects, 0/1/2 opens a/b/c at its next current zero.
+    fn set_open_phase(&mut self, v: f64, x_own: &mut [f64]) -> Result<f64, String> {
+        let old = self.open.or(self.pending).map_or(-1.0, |k| k as f64);
+        if v == -1.0 {
+            self.pending = None;
+            if let Some(k) = self.open.take() {
+                // Rebuild ψαβ from the current state (continuous, EQ-MOT-12).
+                let (th, lam) = (self.last_theta_e, self.last_lambda);
+                let s = self.solve_open(x_own[0], th, lam, k);
+                let (pa, pb, _, _) = self.flux_ab(s.i_d, s.i_q, th, lam);
+                (x_own[0], x_own[1]) = (pa, pb);
+            }
+            return Ok(old);
+        }
+        if !matches!(v, 0.0 | 1.0 | 2.0) {
+            return Err(format!("open_phase must be -1, 0, 1 or 2, got {v}"));
+        }
+        if self.open.is_some() {
+            return Err("a phase is already open; reconnect it first".into());
+        }
+        let k = v as usize;
+        let s = self.solve(x_own[0], x_own[1], self.last_theta_e, self.last_lambda);
+        self.pending_sign = if Self::phase_current(&s, k) < 0.0 {
+            -1.0
+        } else {
+            1.0
+        };
+        self.pending = Some(k);
+        Ok(old)
     }
 
     fn v_alpha_beta(&self, bus: &SignalBus) -> (f64, f64) {
@@ -377,13 +487,19 @@ impl PlantModule for MotorElectrical {
         self.last_theta_e = th;
         self.last_lambda = lambda;
         let we = bus.get(self.inp.omega_e);
-        let i = inv_clarke(s.i_alpha, s.i_beta);
+        let mut i = inv_clarke(s.i_alpha, s.i_beta);
+        if let Some(k) = self.open {
+            // Exact single-path currents (the αβ round trip leaves ~1e-16 in phase k).
+            let (y, z) = ((k + 1) % 3, (k + 2) % 3);
+            (i[k], i[z]) = (0.0, -i[y]);
+        }
         let e: [f64; 3] =
             std::array::from_fn(|k| we * lambda * self.p.shape.k(th - k as f64 * TWO_PI_3));
         let vt = self.inp.v.map(|id| bus.get(id));
         let o = self.out;
-        bus.set(o.psi_alpha, x[off]);
-        bus.set(o.psi_beta, x[off + 1]);
+        let (pa, pb, _, _) = self.flux_ab(s.i_d, s.i_q, th, lambda);
+        bus.set(o.psi_alpha, pa);
+        bus.set(o.psi_beta, pb);
         for k in 0..3 {
             bus.set(o.i[k], i[k]);
             bus.set(o.e[k], e[k]);
@@ -392,11 +508,16 @@ impl PlantModule for MotorElectrical {
         bus.set(o.i_beta, s.i_beta);
         bus.set(o.i_d, s.i_d);
         bus.set(o.i_q, s.i_q);
-        // EQ-MOT-04 (display only).
-        bus.set(
-            o.v_n,
-            (vt.iter().sum::<f64>() - e.iter().sum::<f64>()) / 3.0,
-        );
+        // EQ-MOT-04 (display only); open phase: EQ-MOT-12 from the connected pair.
+        let v_n = match self.open {
+            None => (vt.iter().sum::<f64>() - e.iter().sum::<f64>()) / 3.0,
+            Some(k) => {
+                let (y, z) = ((k + 1) % 3, (k + 2) % 3);
+                0.5 * (vt[y] + vt[z] - e[y] - e[z])
+            }
+        };
+        bus.set(o.v_n, v_n);
+        bus.set(o.open_phase, self.open.map_or(-1.0, |k| k as f64));
         bus.set(o.torque, self.torque(&s, th, lambda));
         bus.set(
             o.p_cu,
@@ -405,6 +526,14 @@ impl PlantModule for MotorElectrical {
     }
     fn derivatives(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, dx: &mut [f64]) {
         let (s, _, _) = self.state(x, off, bus);
+        if let Some(k) = self.open {
+            // EQ-MOT-11: dψ_yz/dt = v_yT − v_zT − 2R·i.
+            let (y, z) = ((k + 1) % 3, (k + 2) % 3);
+            let i = Self::phase_current(&s, y);
+            dx[0] = bus.get(self.inp.v[y]) - bus.get(self.inp.v[z]) - 2.0 * self.p.r * i;
+            dx[1] = 0.0;
+            return;
+        }
         let (va, vb) = self.v_alpha_beta(bus);
         // EQ-MOT-01.
         dx[0] = va - self.p.r * s.i_alpha;
@@ -416,6 +545,7 @@ impl PlantModule for MotorElectrical {
             ("electrical.l_d", "H"),
             ("electrical.l_q", "H"),
             ("electrical.lambda_m", "Wb"),
+            ("open_phase", "-"),
         ]
         .iter()
         .map(|(n, u)| ((*n).into(), (*u).into()))
@@ -424,6 +554,7 @@ impl PlantModule for MotorElectrical {
     fn get_param(&self, name: &str) -> Option<f64> {
         let p = &self.p;
         Some(match name {
+            "open_phase" => self.open.or(self.pending).map_or(-1.0, |k| k as f64),
             "electrical.r_phase" => p.r,
             "electrical.l_d" => p.ld,
             "electrical.l_q" => p.lq,
@@ -432,6 +563,12 @@ impl PlantModule for MotorElectrical {
         })
     }
     fn set_param(&mut self, name: &str, v: f64, x_own: &mut [f64]) -> Result<f64, String> {
+        if name == "open_phase" {
+            return self.set_open_phase(v, x_own);
+        }
+        if self.open.is_some() {
+            return Err("reconnect the open phase before changing electrical parameters".into());
+        }
         if !(v.is_finite() && v > 0.0) {
             return Err(format!("`{name}` must be finite and positive, got {v}"));
         }
@@ -473,9 +610,40 @@ impl PlantModule for MotorElectrical {
     fn take_external_energy(&mut self) -> f64 {
         std::mem::take(&mut self.jump)
     }
+    fn n_events(&self) -> usize {
+        1
+    }
+    fn event_functions(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, g: &mut [f64]) {
+        // The pending phase's current; constant (no crossing) otherwise.
+        g[0] = match self.pending {
+            Some(k) => self.pending_sign * Self::phase_current(&self.state(x, off, bus).0, k),
+            None => 1.0,
+        };
+    }
+    fn on_event(
+        &mut self,
+        _idx: usize,
+        _rising: bool,
+        _t: f64,
+        x_own: &mut [f64],
+        _bus: &mut SignalBus,
+    ) {
+        let Some(k) = self.pending.take() else { return };
+        let (th, lam) = (self.last_theta_e, self.last_lambda);
+        let before = self.solve(x_own[0], x_own[1], th, lam);
+        // ψ_yz from the phase fluxes (zero sequence cancels in the difference).
+        let (y, z) = ((k + 1) % 3, (k + 2) % 3);
+        let f = inv_clarke(x_own[0], x_own[1]);
+        x_own[0] = f[y] - f[z];
+        x_own[1] = 0.0;
+        self.open = Some(k);
+        // i_k ≈ 0 at the event (bisection tolerance): book the tiny W_mag difference.
+        let after = self.solve_open(x_own[0], th, lam, k);
+        self.jump += self.w_mag(&after, lam) - self.w_mag(&before, lam);
+    }
     fn save(&self) -> serde_json::Value {
         let p = &self.p;
-        serde_json::json!({ "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda })
+        serde_json::json!({ "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda, "open": self.open, "pending": self.pending })
     }
     fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
         let f = |k: &str| {
@@ -484,7 +652,13 @@ impl PlantModule for MotorElectrical {
                 .ok_or(format!("missing `{k}`"))
         };
         let (r, ld, lq, lambda) = (f("r")?, f("ld")?, f("lq")?, f("lambda")?);
+        let k = |key: &str| -> Result<Option<usize>, String> {
+            serde_json::from_value(v.get(key).cloned().unwrap_or_default())
+                .map_err(|e| e.to_string())
+        };
+        let (open, pending) = (k("open")?, k("pending")?);
         (self.p.r, self.p.ld, self.p.lq, self.p.lambda) = (r, ld, lq, lambda);
+        (self.open, self.pending) = (open, pending);
         Ok(())
     }
 }

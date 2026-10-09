@@ -259,3 +259,8 @@
 - EQ-MOT-10 co-energy model inside `MotorElectrical` (`SatParams`, Detailed tier via `SkeletonOptions::saturation`): ψ_dq(i), W', W_mag = 3/2(ψ·i − W'); damped Newton from the linear solution (stateless → snapshot-safe), Hessian Jacobian.
 - Debugging lesson: the first test curve (i_k = 10 A, c = 0.15) was not positive definite at reachable i_d, so Newton stalled and the energy residual was flat in dt (model error, not integrator). Added the missing validity rule in sim-model (`saturation_rules`: PD over ±3·i_k, L_∞ ≤ L_q, tested) and documented it in motor.md. A rustfmt-reflowed constant had silently kept the old curve: re-check edits after formatting.
 - Tests: Newton round trip (deep saturation), ψ = ∇W', below knee ≈ linear within 1 %, above knee torque = 3/2·p·λ(1−h)·i_q, energy residual < 1e-6 for a pulse into saturation on a free rotor.
+
+## 2026-10-09 — P05.T07 Open phase
+- `MotorElectrical`: `motor.open_phase` param (−1 reconnect, 0/1/2 request) → state event on the phase current (g scaled by its sign at the request, so no false crossing) → single-path mode with state ψ_yz, dψ_yz/dt = v_yT − v_zT − 2R·i, i by 1-D Newton through the full magnetics (saturation/harmonics included); ΔW_mag at the switch booked as a jump; exact i_k = 0, i_z = −i_y outputs; v_n per EQ-MOT-12; reconnect rebuilds ψαβ from (i, θe). Snapshots carry open/pending.
+- Test: 30 Hz drive, open c mid-run (sinusoidal and trapezoidal): i_c ≡ 0, i_a = −i_b, no NaN, residual < 1e-6, continuous reconnect.
+- Not yet: diode-clamped zero-current mode and automatic reconnection when the floating terminal exceeds the rails (EQ-MOT-11/12 inverter part) — needs the real inverter (P07).

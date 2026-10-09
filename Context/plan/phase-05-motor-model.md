@@ -67,7 +67,7 @@
   - **Done when:** Passing.
   - **If stuck:** If the abc formulation with saturation is too complex, implement saturation in a dq-derived inductance for sinusoidal machines only. Record a decision and document it in the spec.
 
-- [ ] **P05.T07** — Open-phase support
+- [x] **P05.T07** — Open-phase support
   - **Depends:** P05.T01
   - **Do:** When a phase terminal is disconnected (fault, or a floating inverter leg with zero current after the diodes stop conducting), switch the model to a single-current-state mode (current flows only between the two connected phases) per EQ-MOT. Transitions are event-handled at current zero crossing.
   - **Files:** `crates/sim-core/src/physics/motor/electrical.rs`

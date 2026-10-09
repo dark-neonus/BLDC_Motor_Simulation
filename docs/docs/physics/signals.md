@@ -21,7 +21,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `motor.v_n` | V | neutral voltage | motor | EQ-MOT-04 |
 | `motor.torque_em`, `motor.torque_cog`, `motor.torque_fe` | N·m | electromagnetic / cogging / iron-drag torque | motor | EQ-MOT-07/08/09 |
 | `motor.p_cu`, `motor.p_fe` | W | copper / iron loss | motor | EQ-MOT-09/13 |
-| `motor.open_phase` | – | open-phase mode (none/a/b/c) | motor | EQ-MOT-11 |
+| `motor.open_phase` | – | open-phase mode: −1 none, 0/1/2 = a/b/c (also the parameter that requests it) | motor | EQ-MOT-11 |
 | `gearbox.delta`, `gearbox.torque_contact`, `gearbox.p_loss` | rad, N·m, W | backlash deflection, contact torque, loss | gearbox | EQ-MECH-03/04 |
 | `load.theta`, `load.omega` | rad, rad/s | load-side angle, speed | mech | EQ-MECH-02/04 |
 | `load.torque_gravity`, `load.torque_ext`, `load.disturbance` | N·m | load torques | load | EQ-MECH-06…08 |
