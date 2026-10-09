@@ -318,7 +318,12 @@ class _Sim:
 
     def fire_discrete(self, t: float, y: np.ndarray) -> None:
         d = self.d
-        # 1. controller tick (sensors bypass -> controller -> modulator -> inverter)
+        # 1. queued commands first (Q-17 answered: a command at t is seen by a tick at t,
+        #    matching the engine order apply_pending → fire_due, EQ-NUM-02)
+        while self.ai < len(self.actions) and self.actions[self.ai].t <= t + EPS_T:
+            self.apply_action(self.actions[self.ai], t, y)
+            self.ai += 1
+        # 2. controller tick (sensors bypass -> controller -> modulator -> inverter)
         if self.ctrl is not None and abs(self.tick_time(self.k_tick) - t) < EPS_T:
             s = self.sig(t, y)
             meas = {
@@ -339,10 +344,6 @@ class _Sim:
             d.ctrl_sig = dict(out["sig"])
             self.init_leg_modes(y, prev)
             self.k_tick += 1
-        # 2. queued commands  SPEC-AMBIGUITY: Q-17 (applied after the tick at the same instant)
-        while self.ai < len(self.actions) and self.actions[self.ai].t <= t + EPS_T:
-            self.apply_action(self.actions[self.ai], t, y)
-            self.ai += 1
         ended = [e for e in self.dist if e[0] <= t + EPS_T]
         if ended:
             self.dist = [e for e in self.dist if e[0] > t + EPS_T]

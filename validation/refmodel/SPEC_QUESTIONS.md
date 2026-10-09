@@ -1,6 +1,8 @@
 # Spec questions raised by the Python reference model
 
-Each question has the reading the refmodel implements (the most literal one). The code
+Each question has the reading the refmodel implements (the most literal one).
+
+**Status (2026-10-09): all answered in the spec.** Readings were adopted as written except: Q-05 (only switching legs), Q-08 (`energy.out` dropped), Q-14 (all setpoints load-side), Q-17 (commands *before* the tick), Q-18 (`gearbox.friction.*` dropped; gearbox loss via η only). The refmodel was updated for Q-05/Q-14/Q-17. The code
 marks the place with `# SPEC-AMBIGUITY: Q-xx`.
 
 | ID | Spec | Question | Reading implemented |

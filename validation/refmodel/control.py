@@ -156,7 +156,8 @@ class Controller:
         P = self.P
         c, f = P.ctrl, P.ctrl.foc
         sig: dict[str, Any] = {}
-        omega_ref = c.omega_ref
+        # Q-14 (answered): all setpoints are load-side; motor-side speed = N · ω*.
+        omega_ref = P.gearbox.ratio * c.omega_ref
         if f.mode == "position" and self.k % f.pos_div == 0:
             w_l = self.pi_p.step(c.theta_ref - meas["theta_l"])
             self.omega_ref_act = min(max(P.gearbox.ratio * w_l, -c.omega_max), c.omega_max)
@@ -186,7 +187,7 @@ class Controller:
         """EQ-CTRL-07: tau* = Kp (theta* - theta_L) + Kd (omega* - omega_L) + tau_ff."""
         c = self.P.ctrl
         mp = c.mit
-        # SPEC-AMBIGUITY: Q-14 (ctrl.omega_ref is the load-side omega* in MIT mode)
+        # Q-14 (answered): ctrl.omega_ref is load-side in every mode.
         tau = mp.kp * (c.theta_ref - meas["theta_l"]) + mp.kd * (c.omega_ref - meas["omega_l"])
         tau += mp.tau_ff
         iq = min(max(tau / (self.P.gearbox.ratio * self.kt), -c.i_max), c.i_max)

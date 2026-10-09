@@ -49,6 +49,8 @@ $$
 
 The default is $\omega_c = 2\pi f_{ctrl}/20$. The d axis uses $L_d$ and the q axis $L_q$. With the 1.5-period delay the loop keeps about 63° phase margin. **Measured quantity:** the step-response time constant $\tau_{63} \approx 1/\omega_c$ (the −3 dB bandwidth comes out at about $2.2\,\omega_c$ because of the delay, so it is not used as the metric).
 
+**Clarifications.** PI saturation and anti-windup apply to the **total** command (PI output plus decoupling feed-forward), after the d-priority limiter. Six-step reads the Halls and commutates at controller ticks (Hall edges are not asynchronous events). The MIT gains are explicit parameters; EQ-CTRL-12 only *suggests* them from $J_{tot,L}$.
+
 ### EQ-CTRL-04 — Velocity and position loops {/* #eq-ctrl-04 */}
 
 **Velocity PI → $i_q^*$** (clamped to the current limit). With $J$ the total reflected inertia:

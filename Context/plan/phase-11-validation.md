@@ -16,7 +16,7 @@
 > - The report is generated into the docs.
 > - CI runs `validate` (if a remote exists).
 
-- [~] **P11.T01** — 🤖 SUBAGENT: independent Python reference model
+- [x] **P11.T01** — 🤖 SUBAGENT: independent Python reference model
   - **Depends:** P02
   - **Do:** Spawn a **`general-purpose` subagent** (pre-approved) with the prompt below. Run it in the background and continue with other tasks if any are available. When it returns, the main agent reviews the code for isolation violations (`grep -r "crates/" validation/refmodel` must be empty, and the agent's report must list only docs files read) and runs its self-tests.
     > You are writing an **independent reference implementation** of a BLDC/PMSM motor drive simulation in Python, used to validate a separate Rust implementation that you must **never look at**.

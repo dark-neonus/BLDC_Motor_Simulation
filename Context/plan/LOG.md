@@ -152,3 +152,14 @@
   - dq model moved to `fixtures/dq_pmsm.rs` (cfg gate to be added when the skeleton is removed, P05.T11)
 - Verified: `just check` green; 60 Rust tests.
 - Next: P04.T01; also answer `validation/refmodel/SPEC_QUESTIONS.md` (P11.T01).
+
+## 2026-10-09 — P11.T01 closed: spec questions answered (agent: Claude)
+- All 20 refmodel SPEC_QUESTIONS were answered in the spec pages (signals, numerics, inverter, mechanical, thermal, control, energy); see the status line in `validation/refmodel/SPEC_QUESTIONS.md`.
+- Decisions that differ from the refmodel's literal reading:
+  - Q-05: switching loss only on switching legs
+  - Q-08: no `energy.out`
+  - Q-14: all setpoints load-side
+  - Q-17: commands before the tick
+  - Q-18: no gearbox friction
+- The refmodel was updated for Q-05/14/17; 47/47 self-tests green.
+- Follow-up for Rust (when the modules exist): `energy.loss.<term>` names (currently per module; switch to term names in P05/P10); setpoints load-side with N (P09).

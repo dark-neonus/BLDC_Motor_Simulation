@@ -40,12 +40,19 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `ctrl.foc.id_ref`, `ctrl.foc.iq_ref`, `ctrl.foc.v_d`, `ctrl.foc.v_q`, `ctrl.foc.saturated` | A, V, – | FOC internals | FOC | EQ-CTRL-03 |
 | `ctrl.six_step.sector`, `ctrl.open_loop.theta_ref` | –, rad | controller internals | controllers | EQ-CTRL-05/06 |
 | `fault.<id>.active`, `protect.<id>.tripped` | – | fault / protection flags | faults | P10 |
-| `energy.in`, `energy.out`, `energy.loss.<module>`, `energy.stored`, `energy.external`, `energy.residual`, `energy.ok` | J, J, J, J, J, –, – | energy accounting | engine | EQ-ENER |
+| `energy.in`, `energy.loss`, `energy.loss.<term>`, `energy.stored`, `energy.external`, `energy.residual`, `energy.ok` | J, J, J, J, J, –, – | energy accounting | engine | EQ-ENER |
+
+**Clarifications (spec Q&A, P11.T01):**
+- Parquet/CSV outputs use the column `t` [s] for time (the bus signal `sim.t` is the same value).
+- **All setpoints are load-side** (`ctrl.theta_ref`, `ctrl.omega_ref`, `ctrl.torque_ref`); controllers convert with the gear ratio $N$. Without a gearbox they equal motor-side values.
+- `energy.loss.<term>` uses these term names: `copper`, `iron`, `friction`, `gearbox`, `load`, `inverter`, `chopper`, `battery`. There is no `energy.out` signal.
+- `inverter.leg_x` reports H/L/O for switched legs and six-step; it is undefined (null) for averaged PWM legs.
+- `ctrl.six_step.sector` is 0…5 in the order of the EQ-INV-07 table (0 = 330°…30°), and −1 for an invalid Hall code.
 
 ## Parameter roots
 
 Parameter paths are `<component>.<group>.<name>` and live under these roots:
 
-`sim.*` (fidelity, seed), `motor.{identity,electrical,magnetic,winding,geometry,mechanical,thermal,ratings}.*`, `gearbox.*`, `load.*`, `inverter.*`, `supply.{psu,battery}.*`, `bus.*`, `sensors.{hall,encoder,adc,observer}.*`, `ctrl.{foc,six_step,open_loop,mit,custom,limits}.*`, `fault.*`, `protect.*`.
+`sim.*` (fidelity, seed), `motor.{identity,electrical,magnetic,winding,geometry,mechanical,thermal,ratings}.*`, `gearbox.*` (ratio, efficiency, backlash, stiffness, inertias; no separate gearbox friction: its loss is η), `load.*`, `inverter.*`, `supply.{psu,battery}.*`, `bus.*`, `sensors.{hall,encoder,adc,observer}.*`, `ctrl.{foc,six_step,open_loop,mit,custom,limits}.*`, `fault.*`, `protect.*`.
 
 The authoritative list of parameter fields is the generated JSON Schema (`schemas/*.schema.json`, P04.T07). Field names must match the paths used in the physics pages, e.g. `motor.electrical.lambda_m` and `motor.electrical.r_phase`.

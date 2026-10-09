@@ -35,7 +35,7 @@ def test_v_ctrl_001_current_loop_time_constant():
     df = simulate(P, [Action(t_s, "ctrl.foc.iq_ref", 1.0)], 4e-3, ["motor.i_q"], 2e-6)
     t = df["t"].to_numpy()
     iq = df["motor.i_q"].to_numpy()
-    t_step = t_s + 1 / 20e3  # actions are applied after the tick at t_s (EQ-NUM-02)
+    t_step = t_s  # commands at t_s are applied before the tick at t_s (EQ-NUM-02, Q-17)
     t63 = t[np.argmax(iq >= 1 - math.exp(-1))] - t_step
     wc = 2 * math.pi * 20e3 / 20
     assert close(t63, 1 / wc, rtol=0.15)

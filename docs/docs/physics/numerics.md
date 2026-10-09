@@ -29,6 +29,8 @@ loop:
 - Discrete outputs (duties, switch states, setpoints) are held constant between events (zero-order hold).
 - Each RK stage first evaluates the algebraic outputs of every module from the full state, in a fixed order, and then the derivatives (P03 design note). Modules are therefore coupled consistently within a step.
 
+**Same-instant ordering.** Queued commands (setpoints, parameter changes, scenario actions) at time $t$ are applied **before** the blocks that fire at $t$, so a controller tick at $t$ already sees them.
+
 ## EQ-NUM-03 — RK4 {/* #eq-num-03 */}
 
 Classic 4th order `[Hairer1993]`:

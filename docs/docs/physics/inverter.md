@@ -150,6 +150,8 @@ Six-step drives two phases: the phase with the most positive back-EMF goes High 
 - **Averaged six-step**, High leg with $i > 0$: $\bar v_{xT} = d(V_{bus} - R_{on}i) + (1-d)(-V_f)$ and $\bar i_{dc} \mathrel{+}= d\,i$. With $i < 0$ the diode clamps to $V_{bus} + V_f$ during O, so $\bar v_{xT} = d(V_{bus} - R_{on}i) + (1-d)(V_{bus} + V_f)$ and $\bar i_{dc} \mathrel{+}= i$. Off legs follow EQ-INV-01.
 - Hall sensors give these sectors directly (EQ-SENS).
 
+**Averaged six-step at $i \approx 0$.** The two branches above are blended with $w = (1+\sigma(i))/2$ (weight on the $i > 0$ form), the same smoothing as EQ-INV-03. $i_\epsilon$ is the parameter `inverter.i_eps` (default 0.01 A).
+
 ## Losses and DC-link current
 
 ### EQ-INV-08 — DC-link current {/* #eq-inv-08 */}
@@ -172,7 +174,7 @@ $$
 |---|---|---|
 | MOSFET conduction | $R_{on}\,i_x^2$ for each conducting switch | implicit in the terminal voltages |
 | diode conduction | $V_f\,\lvert i_x\rvert$ while a diode conducts; averaged: $2V_f\,\lvert i_x\rvert\,t_d/T_{pwm}$ | implicit in the terminal voltages |
-| switching | $\tfrac12 V_{bus}\lvert i_x\rvert(t_r + t_f)$ per leg per PWM period | an extra bus current $i_{sw} = f_{pwm}\sum_x \tfrac12\lvert i_x\rvert(t_r + t_f)$, the same in both modes |
+| switching | $\tfrac12 V_{bus}\lvert i_x\rvert(t_r + t_f)$ per leg per PWM period | an extra bus current $i_{sw} = f_{pwm}\sum_{x\ \text{switching}} \tfrac12\lvert i_x\rvert(t_r + t_f)$ over the legs that actually switch (all PWM legs; only the H/O leg in six-step), the same in both modes |
 
 The conduction terms follow automatically: with EQ-INV-01/08, $V_{bus}\,i_{dc} - \sum_x v_{xT}\,i_x$ is exactly the conduction plus diode loss. This was checked case by case for every leg state.
 

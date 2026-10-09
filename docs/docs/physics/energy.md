@@ -39,6 +39,8 @@ $W_{mag}$ is from EQ-MOT-10 (it reduces to $\tfrac12 L_s\sum i^2$ when linear). 
 
 **Temperature-dependent magnets.** A change of $\lambda_m(T)$ at fixed $\psi$ moves a small amount of energy that no term books. It is neglected: thermal time constants are seconds to minutes, and the effect is far below $r_{tol}$.
 
+**Throughput terms.** $E_{thr}$ integrates $|P|$ of the EQ-ENER-01 table terms only (input, external, every loss). The battery's internal flow $V_{bus}i_{src}$ is not included.
+
 ## EQ-ENER-03 — Residual {/* #eq-ener-03 */}
 
 $$

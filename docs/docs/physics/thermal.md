@@ -61,6 +61,8 @@ $P_{cu}$ is the copper loss of EQ-MOT-13 (evaluated with the temperature-depende
 
 The energy stored in the network ($\sum C_i T_i$) and the heat flow to ambient are reported to the energy balance (EQ-ENER).
 
+**Clarifications.** The stator heat from iron loss is $-T_{fe}\,\omega_m$, the same value booked as loss (EQ-MOT-09). $P_{fric}$ includes the viscous part of bearing and load friction.
+
 ### EQ-THERM-02 — Copper resistance vs temperature {/* #eq-therm-02 */}
 
 $$

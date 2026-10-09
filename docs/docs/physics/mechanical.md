@@ -132,6 +132,8 @@ Why a hybrid stick state instead of Karnopp's original velocity band `[Karnopp19
 
 Typical values: motor bearings $T_c \approx 0.1$–1 % of rated torque; gearboxes have much more ($T_c$ up to a few % of output torque).
 
+**Clarifications.** The rigid lumping combines motor and load friction only; gearbox losses are modelled by $\eta$ alone. In $\tau_{in}$ (EQ-MECH-03) the load's share of the lumped friction counts as part of $T_L$; while sticking $T_{gl} = 0$. The `brake` load uses $\omega_\epsilon = 10^{-3}$ rad/s. With $\eta < 1$ the smoothed gear loss acts as strong damping near standstill: equilibria (e.g. an MIT hold, EQ-CTRL-07) are unchanged but are approached more slowly.
+
 ## Loads
 
 ### EQ-MECH-06 — Arm with a point mass under gravity {/* #eq-mech-06 */}
