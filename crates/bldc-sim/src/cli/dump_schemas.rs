@@ -1,6 +1,6 @@
 //! `bldc-sim dump-schemas --out schemas/` (P04.T07): one JSON Schema per file type, used
 //! by editors (yaml-language-server modeline) and the CI schema check.
-//! `scene`/`scenario` join when their types land (P04.T11), `lesson` in P18.T09.
+//! `lesson` is added in P18.T09.
 
 use std::path::Path;
 
@@ -26,5 +26,7 @@ pub fn run(out: &Path) -> anyhow::Result<()> {
     write::<SupplyParams>(out, "supply")?;
     write::<SensorsParams>(out, "sensors")?;
     write::<ControllerParams>(out, "controller")?;
+    write::<sim_model::scene::Scene>(out, "scene")?;
+    write::<sim_model::scenario::Scenario>(out, "scenario")?;
     Ok(())
 }

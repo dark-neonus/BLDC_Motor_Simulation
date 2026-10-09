@@ -10,5 +10,7 @@ pub mod io;
 pub mod library;
 pub mod param;
 pub mod params;
+pub mod scenario;
+pub mod scene;
 pub mod units;
 pub mod winding;

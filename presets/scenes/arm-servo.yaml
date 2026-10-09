@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=../../schemas/scene.schema.json
+# A robot-arm joint: 8108 motor, 1:9 planetary, 2 kg at 15 cm, FOC position control.
+schema_version: 1
+name: Arm servo
+description: 8108 motor with a 1:9 planetary gearbox lifting 2 kg at 15 cm.
+motor: { preset: "builtin:motors/8108-outrunner" }
+gearbox: { preset: "builtin:gearboxes/planetary-9" }
+load: { preset: "builtin:loads/arm-15cm-2kg" }
+inverter: { preset: "builtin:inverters/medium-48v-40a" }
+supply: { preset: "builtin:supplies/lipo-6s" }
+sensors: { preset: "builtin:sensors/as5047p" }
+controller:
+  family: foc
+  current: { rate: 40 kHz, bandwidth: 1.5 kHz }
+  velocity: { rate: 8 kHz, bandwidth: 60 Hz }
+  position: { rate: 1 kHz, bandwidth: 8 Hz }
+  limits: { current: 20 A }
+seed: 1
+initial: { theta: -90 deg }

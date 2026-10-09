@@ -136,7 +136,7 @@ schemas-check: gen-schemas
 presets-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    for pair in motors:motor gearboxes:gearbox loads:load inverters:inverter supplies:supply sensors:sensors controllers:controller; do
+    for pair in motors:motor gearboxes:gearbox loads:load inverters:inverter supplies:supply sensors:sensors controllers:controller scenes:scene scenarios:scenario; do
         dir=${pair%%:*}; schema=${pair##*:}
         uvx -q check-jsonschema --schemafile schemas/$schema.schema.json presets/$dir/*.yaml
     done

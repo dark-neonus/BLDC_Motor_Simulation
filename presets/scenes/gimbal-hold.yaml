@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=../../schemas/scene.schema.json
+# A 4108 gimbal motor holds a small camera arm level against gravity (FOC position loop).
+schema_version: 1
+name: Gimbal hold
+description: 4108 gimbal motor, direct drive, holding a 0.3 kg camera at 5 cm.
+motor: { preset: "builtin:motors/4108-outrunner" }
+load:
+  kind: arm
+  arm_length: 5 cm
+  arm_mass: 30 g
+  mass: 0.3 kg
+  distance: 5 cm
+inverter: { preset: "builtin:inverters/small-24v-10a" }
+supply: { preset: "builtin:supplies/psu-24v-5a" }
+sensors: { preset: "builtin:sensors/as5600" }
+controller:
+  family: foc
+  current: { rate: 20 kHz, bandwidth: 500 Hz }
+  velocity: { rate: 5 kHz, bandwidth: 30 Hz }
+  position: { rate: 1 kHz, bandwidth: 5 Hz }
+  limits: { current: 2 A }
+seed: 1
+initial: { theta: 0 deg }

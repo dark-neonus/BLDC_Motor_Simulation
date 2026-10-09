@@ -133,7 +133,7 @@
   - **Verify:** `validate-file` on all files.
   - **Done when:** All validate, and the sources for chips/batteries are cited in `_sources.md` files.
 
-- [ ] **P04.T11** — Scene & scenario formats
+- [x] **P04.T11** — Scene & scenario formats
   - **Depends:** P04.T03
   - **Do:**
     - **Scene** = components (each a library reference *or* inline params, with overrides) + fidelity + seed + initial conditions.

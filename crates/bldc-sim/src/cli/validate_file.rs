@@ -4,11 +4,14 @@
 use std::path::Path;
 
 use sim_model::constraints::{self, Severity};
-use sim_model::io::{load_yaml, parse_yaml};
+use sim_model::io::{IoError, load_yaml, parse_yaml};
+use sim_model::library::Library;
 use sim_model::params::{
     ControllerParams, GearboxParams, InverterParams, LoadParams, MotorParams, SensorsParams,
     SupplyParams,
 };
+use sim_model::scenario::Scenario;
+use sim_model::scene::Scene;
 
 pub fn run(files: &[std::path::PathBuf]) -> bool {
     let mut ok = true;
@@ -16,6 +19,30 @@ pub fn run(files: &[std::path::PathBuf]) -> bool {
         ok &= check(f);
     }
     ok
+}
+
+fn msg(n: &str, e: impl std::fmt::Display) -> IoError {
+    IoError::Parse {
+        path: n.into(),
+        msg: e.to_string(),
+    }
+}
+
+fn library(n: &str) -> Result<Library, IoError> {
+    Library::open_default().map_err(|e| msg(n, e))
+}
+
+/// Resolve every library reference and run the motor constraint rules.
+fn resolve(s: &Scene, n: &str) -> Result<(), IoError> {
+    let r = s.resolve(&library(n)?).map_err(|e| msg(n, e))?;
+    let mut m = r.motor;
+    let mut issues = Vec::new();
+    constraints::derive(&mut m, &mut issues);
+    issues.extend(constraints::validate(&m));
+    match issues.iter().find(|i| i.severity == Severity::Reject) {
+        Some(i) => Err(msg(n, format!("motor: {}: {}", i.path, i.message))),
+        None => Ok(()),
+    }
 }
 
 fn check(f: &Path) -> bool {
@@ -54,6 +81,14 @@ fn check(f: &Path) -> bool {
         "supplies" => return typed(parse_yaml::<SupplyParams>(&text, &n).map(drop)),
         "sensors" => return typed(parse_yaml::<SensorsParams>(&text, &n).map(drop)),
         "controllers" => return typed(parse_yaml::<ControllerParams>(&text, &n).map(drop)),
+        "scenes" => return typed(parse_yaml::<Scene>(&text, &n).and_then(|s| resolve(&s, &n))),
+        "scenarios" => {
+            return typed(parse_yaml::<Scenario>(&text, &n).and_then(|s| {
+                let lib = library(&n)?;
+                let scene = s.scene.resolve(&lib, "scene").map_err(|e| msg(&n, e))?;
+                resolve(&scene, &n)
+            }));
+        }
         _ => {}
     }
     if !text.lines().any(|l| l.starts_with("electrical:")) {

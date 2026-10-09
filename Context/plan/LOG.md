@@ -196,3 +196,8 @@
 - 26 presets: 2 inverters, 3 PSUs + 5 batteries (LiPo 4S/6S, Li-ion 12S, LiFePO4 4S/16S), 5 gearboxes, 4 loads, 6 sensors, 1 placeholder FOC controller. Sources in `presets/{sensors,supplies}/_sources.md`.
 - Component files carry the schema modeline but **no `schema_version`** (types have no such field; `deny_unknown_fields`); a missing version is read as current. Revisit if a component format ever needs a migration.
 - `validate-file` picks the type from the folder name; non-motor files get a typed parse only (no unit-kind checks yet; those come with each module's constraint rules). `presets-check` runs check-jsonschema per kind.
+
+## 2026-10-09 — P04.T11 Scenes & scenarios
+- `scene.rs`: `Component<T>` = `{preset, overrides{dotted.path: value}}` | inline T (untagged); `Scene::resolve(&Library)` → `ResolvedScene` (overrides go through the typed parse, so unknown fields are still rejected). `initial` holds theta/omega/temperature/ambient.
+- `scenario.rs`: scene (ref or inline), `record`, `sample`, sequential `timeline` of externally tagged actions (`set`, `target`, `fault`, `disturbance`, `wait`, `assert{signal, op, value, tol, at?, window?}`, `snapshot`, `stop`).
+- Presets: scenes gimbal-hold, arm-servo, six-step-demo; scenario arm-step. `validate-file` resolves scene/scenario references and runs the motor rules; schemas scene/scenario added.

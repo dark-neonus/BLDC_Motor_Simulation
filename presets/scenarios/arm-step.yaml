@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=../../schemas/scenario.schema.json
+# Move the arm from hanging down to horizontal and check it settles.
+schema_version: 1
+name: Arm step
+scene: { preset: "builtin:scenes/arm-servo" }
+record: [load.theta, load.omega, motor.i_q, thermal.t_winding]
+timeline:
+  - target: { kind: position, value: 0 deg, ramp: 0.5 s }
+  - wait: 1.5 s
+  - assert: { signal: load.theta, op: eq, value: 0, tol: 0.02, window: 0.5 s, message: "arm holds horizontal" }
+  - disturbance: { torque: 2 N*m, duration: 50 ms }
+  - wait: 1 s
+  - assert: { signal: load.theta, op: eq, value: 0, tol: 0.02, message: "recovers from the push" }
+  - stop

@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../schemas/scene.schema.json
+# Classic six-step (trapezoidal) drive with Hall sensors spinning a flywheel.
+schema_version: 1
+name: Six-step demo
+description: 5010 motor on Hall sensors with six-step commutation and a flywheel load.
+motor: { preset: "builtin:motors/5010-outrunner" }
+load: { preset: "builtin:loads/flywheel" }
+inverter: { preset: "builtin:inverters/medium-48v-40a" }
+supply: { preset: "builtin:supplies/psu-24v-5a" }
+sensors: { preset: "builtin:sensors/hall-set" }
+controller:
+  family: six_step
+  rate: 20 kHz
+  speed_loop: { rate: 1 kHz, bandwidth: 10 Hz }
+  limits: { current: 5 A, speed: 3000 rpm }
+seed: 1
