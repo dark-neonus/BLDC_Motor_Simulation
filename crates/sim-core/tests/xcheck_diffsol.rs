@@ -2,9 +2,10 @@
 //! EQ-NUM-07 / V-NUM-002. Each test ODE is solved both ways and compared.
 
 use diffsol::{NalgebraLU, NalgebraMat, OdeBuilder, OdeSolverMethod};
-use sim_core::engine::integrate::Rk4;
+use sim_core::engine::engine::Engine;
 use sim_core::engine::plant::{Plant, PlantModule};
 use sim_core::engine::signals::SignalBus;
+use sim_core::engine::time::SimTime;
 
 type M = NalgebraMat<f64>;
 
@@ -41,9 +42,12 @@ fn rk4_solution(f: fn(&[f64], &mut [f64]), x0: &[f64], t_end: f64, h: f64) -> Ve
         f,
     }));
     let mut bus = SignalBus::new();
-    let mut x = p.initial_state();
-    Rk4::new(x0.len()).integrate(&mut p, &mut bus, &mut x, 0.0, t_end, h);
-    x
+    // Through the engine's advance path (not bare Rk4::integrate) — P03.T20.
+    let _ = &mut bus;
+    let mut e = Engine::new(p, SignalBus::new(), vec![], h);
+    e.step_until(SimTime::from_secs_f64(t_end))
+        .expect("engine run");
+    e.x[..x0.len()].to_vec()
 }
 
 /// Finite-difference Jacobian-vector product (diffsol needs J·v; only used by its

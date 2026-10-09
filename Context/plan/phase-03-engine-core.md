@@ -198,13 +198,13 @@
   - **Verify:** `just bench` (record the new sim/real ratio in LOG; target ≥ the 16× baseline); all tests.
   - **Done when:** all pass and no regression.
 
-- [~] **P03.T20** — Review fixes: missing tests and commands
+- [x] **P03.T20** — Review fixes: missing tests and commands
   - **Depends:** P03.T18
   - **Do:** tests for simultaneous crossings in two modules, crossing at a substep end and at `t1`; tighten bouncing-ball tolerance to ≤ 1 ns per impact; oscillator 1e4 periods (release-only test or justified reduction); xcheck through `Engine::advance`; energy tests for `External` terms, jumps, `E_FLOOR` branch; benchmarks for plant steps/s and 3-rate events/s; `EngineCommand`/`RunnerCommand` gain Snapshot save/restore (Fault/LoadScene/Subscribe stay for P04/P10/P12 — note it).
   - **Verify:** `cargo nextest run -p sim-core`; `just bench`.
   - **Done when:** all pass.
 
-- [ ] **P03.T14** — Phase gate
+- [~] **P03.T14** — Phase gate
   - **Depends:** P03.T01, P03.T02, P03.T03, P03.T04, P03.T05, P03.T06, P03.T07, P03.T08, P03.T09, P03.T10, P03.T11, P03.T12, P03.T13, P03.T15, P03.T16, P03.T17, P03.T18, P03.T19, P03.T20
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-03-done`.

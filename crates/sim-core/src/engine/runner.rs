@@ -33,6 +33,10 @@ pub enum RunnerCommand {
     /// Sim seconds per wall second; `f64::INFINITY` = as fast as possible.
     TimeScale(f64),
     Engine(EngineCommand),
+    /// Save a named in-memory snapshot of the full engine state.
+    SnapshotSave(String),
+    /// Restore a named snapshot (pauses the runner).
+    SnapshotRestore(String),
     Shutdown,
 }
 
@@ -93,6 +97,7 @@ impl RunnerHandle {
                     lagging: false,
                     error: None,
                     iterations: 0,
+                    snapshots: Default::default(),
                     shared,
                     events,
                 }
@@ -148,6 +153,7 @@ struct Runner {
     lagging: bool,
     error: Option<String>,
     iterations: u64,
+    snapshots: std::collections::HashMap<String, super::snapshot::Snapshot>,
     shared: Arc<Mutex<RunnerStatus>>,
     events: Option<SyncSender<EngineEvent>>,
 }
@@ -221,6 +227,20 @@ impl Runner {
                     self.engine.apply_pending();
                 }
             }
+            RunnerCommand::SnapshotSave(name) => {
+                let snap = self.engine.snapshot();
+                self.snapshots.insert(name, snap);
+            }
+            RunnerCommand::SnapshotRestore(name) => match self.snapshots.get(&name) {
+                Some(s) => {
+                    let s = s.clone();
+                    self.running = false;
+                    if let Err(e) = self.engine.restore(&s) {
+                        self.error = Some(e.to_string());
+                    }
+                }
+                None => self.error = Some(format!("no snapshot named `{name}`")),
+            },
             RunnerCommand::Shutdown => return (false, false),
         }
         self.publish();
@@ -402,6 +422,20 @@ mod tests {
         let a = h.request(RunnerCommand::Pause).unwrap().iterations;
         std::thread::sleep(Duration::from_millis(150));
         assert_eq!(h.status().iterations, a, "paced loop iterated while paused");
+    }
+
+    #[test]
+    fn snapshot_commands_round_trip() {
+        let h = RunnerHandle::spawn(factory(), None).unwrap();
+        h.request(RunnerCommand::StepTime(SimTime::from_secs_f64(0.2)));
+        h.request(RunnerCommand::SnapshotSave("a".into()));
+        let at = h.status().values.clone();
+        h.request(RunnerCommand::StepTime(SimTime::from_secs_f64(0.3)));
+        let s = h
+            .request(RunnerCommand::SnapshotRestore("a".into()))
+            .unwrap();
+        assert!((s.t - 0.2).abs() < 1e-12 && s.error.is_none());
+        assert_eq!(s.values, at);
     }
 
     #[test]
