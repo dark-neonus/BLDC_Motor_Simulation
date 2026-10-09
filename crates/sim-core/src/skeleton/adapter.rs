@@ -15,6 +15,7 @@ use crate::physics::mech::rotor::{RotorParams, RotorRigid};
 use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::{Cogging, CoggingParams};
 use crate::physics::motor::electrical::{ElectricalInputs, ElectricalParams, MotorElectrical};
+use crate::physics::motor::iron_loss::{IronLoss, IronLossParams};
 
 /// Signals the FOC block reads and writes.
 #[derive(Debug, Clone, Copy)]
@@ -100,6 +101,8 @@ pub struct SkeletonOptions {
     pub ratio: f64,
     /// Cogging (EQ-MOT-08), when the fidelity tier enables it.
     pub cogging: Option<CoggingParams>,
+    /// Iron loss (EQ-MOT-09), when the fidelity tier enables it.
+    pub iron: Option<IronLossParams>,
 }
 
 impl Default for SkeletonOptions {
@@ -111,6 +114,7 @@ impl Default for SkeletonOptions {
             extra_j: 0.0,
             ratio: 1.0,
             cogging: None,
+            iron: None,
         }
     }
 }
@@ -205,6 +209,15 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         }
         None => None,
     };
+    let iron = match opts.iron {
+        Some(p) => {
+            let m = IronLoss::new(p, id(&bus, "motor.omega"), &mut bus)
+                .expect("unique skeleton signal");
+            rotor = rotor.with_internal(m.torque_id());
+            Some(m)
+        }
+        None => None,
+    };
     let s = FocSignals {
         v_d,
         v_q,
@@ -221,6 +234,9 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
     plant.add(Box::new(motor));
     if let Some(c) = cogging {
         plant.add(Box::new(c));
+    }
+    if let Some(m) = iron {
+        plant.add(Box::new(m));
     }
     let period = period_from_hz(1.0 / cfg.dt)
         .map(|p| p.period)

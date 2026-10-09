@@ -19,7 +19,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `motor.i_alpha`, `motor.i_beta`, `motor.i_d`, `motor.i_q` | A | transformed currents | motor | EQ-CONV-01/03 |
 | `motor.e_a`, `motor.e_b`, `motor.e_c` | V | back-EMF | motor | EQ-MOT-03 |
 | `motor.v_n` | V | neutral voltage | motor | EQ-MOT-04 |
-| `motor.torque_em`, `motor.torque_cog` | N·m | electromagnetic / cogging torque | motor | EQ-MOT-07/08 |
+| `motor.torque_em`, `motor.torque_cog`, `motor.torque_fe` | N·m | electromagnetic / cogging / iron-drag torque | motor | EQ-MOT-07/08/09 |
 | `motor.p_cu`, `motor.p_fe` | W | copper / iron loss | motor | EQ-MOT-09/13 |
 | `motor.open_phase` | – | open-phase mode (none/a/b/c) | motor | EQ-MOT-11 |
 | `gearbox.delta`, `gearbox.torque_contact`, `gearbox.p_loss` | rad, N·m, W | backlash deflection, contact torque, loss | gearbox | EQ-MECH-03/04 |

@@ -49,7 +49,7 @@
   - **Verify:** Tests: period = 2π/N_c; zero average over a period; energy conservation of the unpowered rotor with cogging and no friction (`energy.residual` < 1e-6 over 1 s).
   - **Done when:** Passing.
 
-- [ ] **P05.T05** — Iron losses
+- [x] **P05.T05** — Iron losses
   - **Depends:** P05.T02
   - **Do:** P_iron = k_h·|ωe| + k_e·ωe², applied as a drag torque P_iron/|ω_m| with a smooth regularization near ω = 0 per EQ-MOT. Loss heat goes to the stator thermal node (P06). Enabled by fidelity flag.
   - **Files:** `crates/sim-core/src/physics/motor/iron_loss.rs`

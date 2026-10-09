@@ -250,3 +250,7 @@
 - `physics::motor::cogging::Cogging` (module `motor.cogging`, stateless): reads motor.theta, writes motor.torque_cog (rotor internal input), U_cog as stored energy (EQ-MOT-08). Tests: period 2π/N_c, zero mean, T = −dU/dθ, unpowered cogging rotor energy residual < 1e-6 over 1 s.
 - Wired via `SkeletonOptions::cogging`; `build::tier()` maps the scene tier; added when `FidelityConfig::preset(tier).enable_cogging` (Standard/Detailed) and the motor lists terms. N_c from `winding::cogging_periods`.
 - Presets: one estimated harmonic at 2 % of Kt·I_peak each (`_sources.md`, [HendershotMiller2010] range 0.5–5 %).
+
+## 2026-10-09 — P05.T05 Iron loss
+- `physics::motor::iron_loss::IronLoss` (module `motor.magnetic` → params `motor.magnetic.k_hy/k_ed`): EQ-MOT-09 drag with tanh(ω/ω_ε), ω_ε = 0.01 rad/s; writes motor.torque_fe (new in signals.md) and motor.p_fe; `iron` Loss term = −T_fe·ω. Tests: spin-down vs analytic (a + bω) drag (rtol 1e-9), energy residual, dissipative through ω = 0.
+- Wired via `SkeletonOptions::iron`, gated by `enable_iron_loss` and present coefficients (none of the presets has them yet: k_hy/k_ed need spin-down data). Coefficients are bare SI numbers (no unit kind for W·s/rad).

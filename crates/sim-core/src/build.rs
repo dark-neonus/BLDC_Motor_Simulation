@@ -17,6 +17,7 @@ use crate::engine::engine::Engine;
 use crate::engine::fidelity::{FidelityConfig, Tier};
 use crate::fixtures::dq_pmsm::PmsmParams;
 use crate::physics::motor::cogging::CoggingParams;
+use crate::physics::motor::iron_loss::IronLossParams;
 use crate::skeleton::adapter::{SkeletonOptions, build_engine_with};
 use crate::skeleton::foc::FocConfig;
 
@@ -236,6 +237,29 @@ fn cogging(scene: &ResolvedScene) -> Result<Option<CoggingParams>, BuildError> {
     Ok(Some(CoggingParams { n_c, terms }))
 }
 
+/// Iron-loss coefficients (EQ-MOT-09) if the tier enables them and the motor has any.
+/// No unit kind exists for W·s/rad, so they are bare SI numbers.
+fn iron(scene: &ResolvedScene) -> Result<Option<IronLossParams>, BuildError> {
+    let m = &scene.motor.magnetic;
+    if !FidelityConfig::preset(tier(scene)).enable_iron_loss
+        || (m.k_hy.is_none() && m.k_ed.is_none())
+    {
+        return Ok(None);
+    }
+    let k = |p: &Option<Param>, path: &str| {
+        p.as_ref().map_or(Ok(0.0), |p| {
+            p.value
+                .si(Kind::Dimensionless)
+                .map_err(|e| BuildError::Param(path.into(), e.to_string()))
+        })
+    };
+    Ok(Some(IronLossParams {
+        k_hy: k(&m.k_hy, "motor.magnetic.k_hy")?,
+        k_ed: k(&m.k_ed, "motor.magnetic.k_ed")?,
+        pole_pairs: f64::from(scene.motor.winding.pole_pairs),
+    }))
+}
+
 pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
     // Derive (so motor-constant overrides reach λ) and refuse anything with a Reject.
     let mut scene = scene.clone();
@@ -284,6 +308,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             extra_j,
             ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
             cogging: cogging(scene)?,
+            iron: iron(scene)?,
         },
     );
     Ok(BuiltScene {
