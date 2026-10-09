@@ -50,7 +50,7 @@
   - **Verify:** `cargo build -p sim-model`; a test that serializes defaults to YAML and back.
   - **Done when:** It covers POLISHED_IDEA §3–§5 fully.
 
-- [ ] **P04.T04** — Winding/topology computations
+- [x] **P04.T04** — Winding/topology computations
   - **Depends:** P04.T03
   - **Do:** Implement and test:
     - Slot/pole validity for 3-phase (slots divisible by 3; q = slots/(3·2p) rules; gcd condition for balanced windings).

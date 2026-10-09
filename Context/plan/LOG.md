@@ -171,4 +171,5 @@
   - T03: parameter types for motor, gearbox, loads, inverter, supply, bus/chopper, sensors, controllers, protection, fidelity (serde, deny_unknown_fields, tagged enums). JSON Schema derivation moved to P04.T07 (noted in the task).
 - CI for the phase-03 push: **all 5 jobs green** (37903922496). This confirms the rustfmt-component and needs_binary fixes.
 - Stopped at ~45 % usage (user limit for this window: 50 %).
-- Next: P04.T04 (winding/topology computations).
+- P04.T04 also done: star-of-slots layout + winding factor (6 published values incl. 12N14P 0.933, 9N8P 0.945), balance, validity, cogging LCM.
+- Next: P04.T05 (constraint graph & apply_edit).
