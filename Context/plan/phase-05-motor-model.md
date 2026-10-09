@@ -94,7 +94,7 @@
   - **Verify:** `just test && just validate && just e2e` all green (the same P01 behaviors now on the abc model).
   - **Done when:** Green.
 
-- [~] **P05.T12** — P04 review carry-overs
+- [x] **P05.T12** — P04 review carry-overs
   - **Depends:** P05.T11
   - **Do:**
     1. The server loads a **scene** (default: `builtin:scenes/gimbal-hold`) through `sim_core::build`, and live `SetParam` for `motor.*` goes through `SceneModel::edit` → `apply_edit` (API and MCP), so the constraint rules also apply at runtime.

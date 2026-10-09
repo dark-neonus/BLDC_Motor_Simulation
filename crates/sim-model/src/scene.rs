@@ -194,6 +194,7 @@ fn warn(path: &str, message: String) -> Issue {
         path: path.into(),
         message,
         help_id: format!("param:{path}"),
+        rule: path.into(),
     }
 }
 

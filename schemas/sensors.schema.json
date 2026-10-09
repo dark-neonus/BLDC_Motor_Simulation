@@ -4,6 +4,7 @@
   "type": "object",
   "properties": {
     "adc": {
+      "description": "Current-sense ADC (optional).",
       "anyOf": [
         {
           "$ref": "#/$defs/AdcParams"
@@ -14,6 +15,7 @@
       ]
     },
     "encoder": {
+      "description": "Angle encoder (optional).",
       "anyOf": [
         {
           "$ref": "#/$defs/EncoderParams"
@@ -24,6 +26,7 @@
       ]
     },
     "hall": {
+      "description": "Hall sensors (optional).",
       "anyOf": [
         {
           "$ref": "#/$defs/HallParams"
@@ -34,6 +37,7 @@
       ]
     },
     "observer_gamma": {
+      "description": "Gain γ of the sensorless flux observer (EQ-CTRL-09).",
       "anyOf": [
         {
           "$ref": "#/$defs/Param"
@@ -50,23 +54,28 @@
       "type": "object",
       "properties": {
         "bits": {
+          "description": "ADC resolution in bits.",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
         },
         "bypass": {
+          "description": "Use the true value instead of the sensor model.",
           "type": "boolean",
           "default": false
         },
         "full_scale": {
+          "description": "Current at full scale (±).",
           "$ref": "#/$defs/Param"
         },
         "gain_error": {
+          "description": "Relative gain error.",
           "type": "number",
           "format": "double",
           "default": 0.0
         },
         "latency": {
+          "description": "Delay from measurement to output.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -77,6 +86,7 @@
           ]
         },
         "noise": {
+          "description": "Noise standard deviation (in the sensor unit).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -87,6 +97,7 @@
           ]
         },
         "offset": {
+          "description": "Offset current.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -103,6 +114,7 @@
           "minimum": 0
         },
         "update_rate": {
+          "description": "Sample rate.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -126,6 +138,7 @@
           "type": "object",
           "properties": {
             "air_gap": {
+              "description": "Magnet-to-chip distance.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -136,21 +149,25 @@
               ]
             },
             "bits": {
+              "description": "Resolution in bits.",
               "type": "integer",
               "format": "uint32",
               "minimum": 0
             },
             "bypass": {
+              "description": "Use the true value instead of the sensor model.",
               "type": "boolean",
               "default": false
             },
             "chip": {
+              "description": "Chip name (informational).",
               "type": [
                 "string",
                 "null"
               ]
             },
             "eccentricity": {
+              "description": "Magnet eccentricity.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -161,6 +178,7 @@
               ]
             },
             "gap_max": {
+              "description": "Maximum allowed air gap.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -171,6 +189,7 @@
               ]
             },
             "gap_min": {
+              "description": "Minimum allowed air gap.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -181,6 +200,7 @@
               ]
             },
             "inl": {
+              "description": "Integral nonlinearity (peak angle error).",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -195,6 +215,7 @@
               "const": "magnetic"
             },
             "latency": {
+              "description": "Delay from measurement to output.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -205,6 +226,7 @@
               ]
             },
             "mount_offset": {
+              "description": "Angular mounting offset.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -215,6 +237,7 @@
               ]
             },
             "noise": {
+              "description": "Noise standard deviation (in the sensor unit).",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -225,6 +248,7 @@
               ]
             },
             "update_rate": {
+              "description": "Sample rate.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -245,15 +269,18 @@
           "type": "object",
           "properties": {
             "bypass": {
+              "description": "Use the true value instead of the sensor model.",
               "type": "boolean",
               "default": false
             },
             "cpr": {
+              "description": "Counts per revolution (before ×4 decoding).",
               "type": "integer",
               "format": "uint32",
               "minimum": 0
             },
             "index_angle": {
+              "description": "Angle of the index pulse.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -268,6 +295,7 @@
               "const": "incremental"
             },
             "latency": {
+              "description": "Delay from measurement to output.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -278,6 +306,7 @@
               ]
             },
             "noise": {
+              "description": "Noise standard deviation (in the sensor unit).",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -288,6 +317,7 @@
               ]
             },
             "update_rate": {
+              "description": "Sample rate.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -310,10 +340,12 @@
       "type": "object",
       "properties": {
         "bypass": {
+          "description": "Use the true value instead of the sensor model.",
           "type": "boolean",
           "default": false
         },
         "hysteresis": {
+          "description": "Switching hysteresis (fraction of the field amplitude).",
           "type": [
             "number",
             "null"
@@ -321,6 +353,7 @@
           "format": "double"
         },
         "latency": {
+          "description": "Delay from measurement to output.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -331,6 +364,7 @@
           ]
         },
         "noise": {
+          "description": "Noise standard deviation (in the sensor unit).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -349,6 +383,7 @@
           }
         },
         "update_rate": {
+          "description": "Sample rate.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"

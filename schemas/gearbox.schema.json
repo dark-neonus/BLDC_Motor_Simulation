@@ -4,6 +4,7 @@
   "type": "object",
   "properties": {
     "backlash": {
+      "description": "Total backlash at the output (EQ-MECH-04).",
       "anyOf": [
         {
           "$ref": "#/$defs/Param"
@@ -14,6 +15,7 @@
       ]
     },
     "damping": {
+      "description": "Torsional damping at the output [N·m·s/rad].",
       "anyOf": [
         {
           "$ref": "#/$defs/Param"
@@ -24,10 +26,12 @@
       ]
     },
     "efficiency": {
+      "description": "Efficiency η (0 < η ≤ 1), the same both ways (EQ-MECH-03).",
       "type": "number",
       "format": "double"
     },
     "j_in": {
+      "description": "Inertia on the motor side [kg·m²].",
       "anyOf": [
         {
           "$ref": "#/$defs/Param"
@@ -38,6 +42,7 @@
       ]
     },
     "j_out": {
+      "description": "Inertia on the output side [kg·m²].",
       "anyOf": [
         {
           "$ref": "#/$defs/Param"
@@ -48,13 +53,16 @@
       ]
     },
     "name": {
+      "description": "Display name.",
       "type": "string"
     },
     "ratio": {
+      "description": "Ratio N = motor turns per output turn (N > 1 reduces speed).",
       "type": "number",
       "format": "double"
     },
     "stiffness": {
+      "description": "Torsional stiffness at the output [N·m/rad].",
       "anyOf": [
         {
           "$ref": "#/$defs/Param"

@@ -33,6 +33,23 @@ pub struct Issue {
     pub message: String,
     /// Help registry id (`param:<path>`).
     pub help_id: String,
+    /// Stable id of the rule that produced the issue (e.g. `motor.kv_range`); the path
+    /// for rules that are the only one on their parameter (D-014).
+    #[serde(default)]
+    pub rule: String,
+}
+
+/// An issue from a named rule.
+pub(crate) fn rule_issue(rule: &str, sev: Severity, path: &str, msg: impl Into<String>) -> Issue {
+    issue(sev, path, msg).with_rule(rule)
+}
+
+impl Issue {
+    /// Name the rule (for paths that carry several rules).
+    pub(crate) fn with_rule(mut self, rule: &str) -> Self {
+        self.rule = rule.into();
+        self
+    }
 }
 
 pub(crate) fn issue(sev: Severity, path: &str, msg: impl Into<String>) -> Issue {
@@ -41,6 +58,7 @@ pub(crate) fn issue(sev: Severity, path: &str, msg: impl Into<String>) -> Issue 
         path: path.into(),
         message: msg.into(),
         help_id: format!("param:{path}"),
+        rule: path.into(),
     }
 }
 
@@ -59,15 +77,14 @@ pub(crate) fn si(p: &Param, kind: Kind, path: &str, out: &mut Vec<Issue>) -> Opt
     match p.si(kind) {
         Ok(v) if v.is_finite() => Some(v),
         Ok(_) => {
-            out.push(issue(
-                Severity::Reject,
-                path,
-                "value must be a finite number",
-            ));
+            out.push(
+                issue(Severity::Reject, path, "value must be a finite number")
+                    .with_rule("value.finite"),
+            );
             None
         }
         Err(e) => {
-            out.push(issue(Severity::Reject, path, e.to_string()));
+            out.push(issue(Severity::Reject, path, e.to_string()).with_rule("value.unit"));
             None
         }
     }
@@ -76,7 +93,9 @@ pub(crate) fn si(p: &Param, kind: Kind, path: &str, out: &mut Vec<Issue>) -> Opt
 fn positive(p: &Param, kind: Kind, path: &str, out: &mut Vec<Issue>) -> Option<f64> {
     let v = si(p, kind, path, out)?;
     if v <= 0.0 {
-        out.push(issue(Severity::Reject, path, "must be greater than zero"));
+        out.push(
+            issue(Severity::Reject, path, "must be greater than zero").with_rule("value.positive"),
+        );
         return None;
     }
     Some(v)
@@ -89,11 +108,14 @@ fn lambda_from_entered(m: &MotorParams, out: &mut Vec<Issue>) -> Option<f64> {
     let s3 = 3f64.sqrt();
     let need = |o: &Option<Param>, name: &str, out: &mut Vec<Issue>| {
         if o.is_none() {
-            out.push(issue(
-                Severity::Reject,
-                &format!("motor.electrical.{name}"),
-                format!("`entered_as: {name}` but no {name} value given"),
-            ));
+            out.push(
+                issue(
+                    Severity::Reject,
+                    &format!("motor.electrical.{name}"),
+                    format!("`entered_as: {name}` but no {name} value given"),
+                )
+                .with_rule("motor.entered_constant_present"),
+            );
         }
         o.clone()
     };
@@ -196,7 +218,8 @@ fn saturation_rules(
         return;
     };
     if linf > lq {
-        out.push(issue(
+        out.push(rule_issue(
+            "motor.saturation_l_inf_le_l_q",
             Severity::Reject,
             &format!("{path}.l_inf"),
             "L_∞ must not exceed L_q (saturation lowers the inductance)",
@@ -218,7 +241,7 @@ fn saturation_rules(
             let jqq = linf + (lq - linf) / u.cosh().powi(2) - lambda * id * hpp;
             let jdq = -lambda * hp;
             if !(jqq > 0.0 && ld * jqq - jdq * jdq > 0.0) {
-                out.push(issue(
+                out.push(rule_issue("motor.saturation_positive_definite", 
                     Severity::Reject,
                     path,
                     format!(
@@ -246,14 +269,16 @@ pub fn validate(m: &MotorParams) -> Vec<Issue> {
     if let (Some(ld), Some(lq)) = (ld, lq)
         && (ld / lq > 3.0 || lq / ld > 3.0)
     {
-        out.push(issue(
+        out.push(rule_issue(
+            "motor.saliency_ratio",
             Severity::Warn,
             "motor.electrical.l_q",
             "L_d and L_q differ by more than 3×; unusual for surface-magnet motors",
         ));
     }
     if let Err(err) = winding::check(m.winding.slots, m.winding.pole_pairs) {
-        out.push(issue(
+        out.push(rule_issue(
+            "motor.winding_valid",
             Severity::Reject,
             "motor.winding.slots",
             format!("{err}. Common combinations: 9N12P, 12N14P, 24N28P, 36N42P."),
@@ -268,7 +293,8 @@ pub fn validate(m: &MotorParams) -> Vec<Issue> {
         if let (Some(r), Some(lq)) = (r, lq) {
             let tau = lq / r;
             if !(1e-5..=0.1).contains(&tau) {
-                out.push(issue(
+                out.push(rule_issue(
+                    "motor.time_constant",
                     Severity::Warn,
                     "motor.electrical.l_q",
                     format!(
@@ -281,7 +307,8 @@ pub fn validate(m: &MotorParams) -> Vec<Issue> {
     if let Some(arc) = m.geometry.magnet_arc
         && !(0.0..=1.0).contains(&arc)
     {
-        out.push(issue(
+        out.push(rule_issue(
+            "motor.magnet_arc_range",
             Severity::Reject,
             "motor.geometry.magnet_arc",
             "magnet arc is a fraction of the pole pitch (0…1)",
@@ -293,7 +320,8 @@ pub fn validate(m: &MotorParams) -> Vec<Issue> {
     if let Some(s) = &m.magnetic.saturation
         && !(0.0..1.0).contains(&s.cross)
     {
-        out.push(issue(
+        out.push(rule_issue(
+            "motor.saturation_cross_range",
             Severity::Reject,
             "motor.magnetic.saturation.cross",
             "cross-saturation fraction must be in [0, 1)",
@@ -313,7 +341,8 @@ pub fn validate(m: &MotorParams) -> Vec<Issue> {
         if let (Some(c), Some(pk)) = (c, pk)
             && pk < c
         {
-            out.push(issue(
+            out.push(rule_issue(
+                "motor.peak_above_continuous",
                 Severity::Warn,
                 "motor.ratings.current_peak",
                 "peak current is below the continuous current",
@@ -333,7 +362,8 @@ pub fn validate(m: &MotorParams) -> Vec<Issue> {
         if let (Some(a), Some(b)) = (tmax, tref)
             && a <= b
         {
-            out.push(issue(
+            out.push(rule_issue(
+                "motor.t_max_above_ref",
                 Severity::Reject,
                 "motor.thermal.t_max",
                 "maximum winding temperature must be above the reference temperature",
@@ -378,7 +408,8 @@ pub fn validate(m: &MotorParams) -> Vec<Issue> {
         if let (Some(ts), Some(tc)) = (ts, tc)
             && tc > ts
         {
-            out.push(issue(
+            out.push(rule_issue(
+                "mech.coulomb_le_static",
                 Severity::Reject,
                 "motor.mechanical.friction.coulomb",
                 "Coulomb friction cannot exceed static friction (EQ-MECH-05)",
@@ -677,6 +708,18 @@ mechanical: { j_rotor: 2.5e-4 }
             );
             assert_eq!(r.rejected, sev == Severity::Reject, "{path}");
         }
+        // Rules on the same path have distinct stable ids (D-014).
+        let both = apply_edit(&motor(), "motor.electrical.l_q", json!("200 mH"));
+        let ids: Vec<&str> = both
+            .issues
+            .iter()
+            .filter(|i| i.path == "motor.electrical.l_q")
+            .map(|i| i.rule.as_str())
+            .collect();
+        assert!(
+            ids.contains(&"motor.saliency_ratio") && ids.contains(&"motor.time_constant"),
+            "{ids:?}"
+        );
         // Sub-fields of a derived constant are locked.
         assert!(apply_edit(&motor(), "motor.electrical.kv.source", json!("measured")).rejected);
         // No duplicate issues: an invalid entered constant is reported once.

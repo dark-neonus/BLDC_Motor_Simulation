@@ -7,15 +7,19 @@
       "type": "object",
       "properties": {
         "arm_length": {
+          "description": "Length of the arm (rod).",
           "$ref": "#/$defs/Param"
         },
         "arm_mass": {
+          "description": "Mass of the arm itself (uniform rod).",
           "$ref": "#/$defs/Param"
         },
         "distance": {
+          "description": "Distance of the point mass from the axis.",
           "$ref": "#/$defs/Param"
         },
         "friction": {
+          "description": "Load-side friction.",
           "anyOf": [
             {
               "$ref": "#/$defs/Friction"
@@ -30,9 +34,11 @@
           "const": "arm"
         },
         "mass": {
+          "description": "Point mass on the arm.",
           "$ref": "#/$defs/Param"
         },
         "on_change": {
+          "description": "What a live mass change keeps: speed (default) or momentum (D-007).",
           "$ref": "#/$defs/OnChange",
           "default": "keep_speed"
         }
@@ -54,6 +60,7 @@
           "const": "constant"
         },
         "torque": {
+          "description": "Torque [N·m].",
           "$ref": "#/$defs/Param"
         }
       },
@@ -71,6 +78,7 @@
           "const": "brake"
         },
         "torque": {
+          "description": "Torque [N·m].",
           "$ref": "#/$defs/Param"
         }
       },
@@ -84,6 +92,7 @@
       "type": "object",
       "properties": {
         "coefficient": {
+          "description": "Viscous coefficient [N·m·s/rad].",
           "$ref": "#/$defs/Param"
         },
         "kind": {
@@ -101,6 +110,7 @@
       "type": "object",
       "properties": {
         "inertia": {
+          "description": "Flywheel inertia [kg·m²].",
           "$ref": "#/$defs/Param"
         },
         "kind": {
@@ -120,12 +130,15 @@
       "type": "object",
       "properties": {
         "coulomb": {
+          "description": "Coulomb (kinetic) friction torque [N·m], ≤ static.",
           "$ref": "#/$defs/Param"
         },
         "static_torque": {
+          "description": "Breakaway (static) friction torque [N·m] (EQ-MECH-05).",
           "$ref": "#/$defs/Param"
         },
         "viscous": {
+          "description": "Viscous friction coefficient [N·m·s/rad].",
           "$ref": "#/$defs/Param"
         }
       },

@@ -4,9 +4,11 @@
   "type": "object",
   "properties": {
     "electrical": {
+      "description": "Resistance, inductances and the motor constant.",
       "$ref": "#/$defs/MotorElectrical"
     },
     "geometry": {
+      "description": "Dimensions (optional; used by estimates and the 3D view).",
       "$ref": "#/$defs/MotorGeometry",
       "default": {
         "air_gap": null,
@@ -19,15 +21,19 @@
       }
     },
     "identity": {
+      "description": "Name and topology.",
       "$ref": "#/$defs/MotorIdentity"
     },
     "magnetic": {
+      "description": "Back-EMF shape, cogging, iron loss, saturation.",
       "$ref": "#/$defs/MotorMagnetic"
     },
     "mechanical": {
+      "description": "Inertia, mass and bearing friction.",
       "$ref": "#/$defs/MotorMechanical"
     },
     "ratings": {
+      "description": "Datasheet ratings (for checks and limits).",
       "$ref": "#/$defs/MotorRatings",
       "default": {
         "current_continuous": null,
@@ -38,11 +44,13 @@
       }
     },
     "schema_version": {
+      "description": "File format version (currently 1).",
       "type": "integer",
       "format": "uint32",
       "minimum": 0
     },
     "thermal": {
+      "description": "Three-node thermal network (EQ-THERM-01).",
       "anyOf": [
         {
           "$ref": "#/$defs/MotorThermal"
@@ -53,6 +61,7 @@
       ]
     },
     "winding": {
+      "description": "Slot / pole combination.",
       "$ref": "#/$defs/MotorWinding"
     }
   },
@@ -70,9 +79,11 @@
       "type": "object",
       "properties": {
         "amplitude": {
+          "description": "Cogging amplitude A_k [N·m] of harmonic k (EQ-MOT-08).",
           "$ref": "#/$defs/Param"
         },
         "phase": {
+          "description": "Phase φ_k [rad].",
           "type": "number",
           "format": "double",
           "default": 0.0
@@ -120,6 +131,7 @@
           "type": "object",
           "properties": {
             "flat_top": {
+              "description": "Flat-top width per half period [rad or \"120 deg\"], 0 … π (EQ-MOT-03).",
               "$ref": "#/$defs/Param"
             },
             "kind": {
@@ -142,6 +154,7 @@
               "const": "harmonics"
             },
             "terms": {
+              "description": "Harmonics in addition to the fundamental.",
               "type": "array",
               "items": {
                 "$ref": "#/$defs/Harmonic"
@@ -160,12 +173,15 @@
       "type": "object",
       "properties": {
         "coulomb": {
+          "description": "Coulomb (kinetic) friction torque [N·m], ≤ static.",
           "$ref": "#/$defs/Param"
         },
         "static_torque": {
+          "description": "Breakaway (static) friction torque [N·m] (EQ-MECH-05).",
           "$ref": "#/$defs/Param"
         },
         "viscous": {
+          "description": "Viscous friction coefficient [N·m·s/rad].",
           "$ref": "#/$defs/Param"
         }
       },
@@ -180,15 +196,18 @@
       "type": "object",
       "properties": {
         "b": {
+          "description": "Amplitude relative to the fundamental.",
           "type": "number",
           "format": "double"
         },
         "n": {
+          "description": "Harmonic order (odd).",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
         },
         "phase": {
+          "description": "Phase φ_n [rad].",
           "type": "number",
           "format": "double",
           "default": 0.0
@@ -204,6 +223,7 @@
       "type": "object",
       "properties": {
         "connection": {
+          "description": "Winding connection (`star` or `delta`); the model always uses star-equivalent values (EQ-CONV-14).",
           "$ref": "#/$defs/Connection"
         },
         "entered_as": {
@@ -274,6 +294,7 @@
       "type": "object",
       "properties": {
         "air_gap": {
+          "description": "Mechanical air gap between stator and magnets.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -292,6 +313,7 @@
           "format": "double"
         },
         "magnet_thickness": {
+          "description": "Radial magnet thickness.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -302,6 +324,7 @@
           ]
         },
         "rotor_od": {
+          "description": "Rotor outer diameter (the can for an outrunner).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -312,6 +335,7 @@
           ]
         },
         "stack_length": {
+          "description": "Axial length of the stator stack.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -322,6 +346,7 @@
           ]
         },
         "stator_id": {
+          "description": "Stator inner diameter.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -332,6 +357,7 @@
           ]
         },
         "stator_od": {
+          "description": "Stator outer diameter.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -348,6 +374,7 @@
       "type": "object",
       "properties": {
         "name": {
+          "description": "Display name of the motor (e.g. \"Generic 8108 outrunner\").",
           "type": "string"
         },
         "size_class": {
@@ -358,6 +385,7 @@
           ]
         },
         "topology": {
+          "description": "Rotor position: `inrunner` (rotor inside) or `outrunner` (rotating can outside).",
           "$ref": "#/$defs/Topology"
         }
       },
@@ -390,9 +418,11 @@
           }
         },
         "emf_shape": {
+          "description": "Back-EMF shape (EQ-MOT-03).",
           "$ref": "#/$defs/EmfShape"
         },
         "k_ed": {
+          "description": "Eddy-current iron-loss coefficient k_ed [W·s²/rad²] (EQ-MOT-09).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -414,6 +444,7 @@
           ]
         },
         "saturation": {
+          "description": "Co-energy saturation curve (EQ-MOT-10, Detailed tier).",
           "anyOf": [
             {
               "$ref": "#/$defs/Saturation"
@@ -433,6 +464,7 @@
       "type": "object",
       "properties": {
         "friction": {
+          "description": "Bearing friction (EQ-MECH-05).",
           "anyOf": [
             {
               "$ref": "#/$defs/Friction"
@@ -443,9 +475,11 @@
           ]
         },
         "j_rotor": {
+          "description": "Rotor inertia [kg·m²].",
           "$ref": "#/$defs/Param"
         },
         "mass": {
+          "description": "Motor mass.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -465,6 +499,7 @@
       "type": "object",
       "properties": {
         "current_continuous": {
+          "description": "Continuous phase current (peak per phase).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -475,6 +510,7 @@
           ]
         },
         "current_peak": {
+          "description": "Peak phase current (short-term).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -485,6 +521,7 @@
           ]
         },
         "speed": {
+          "description": "Rated or maximum speed.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -495,6 +532,7 @@
           ]
         },
         "torque_peak": {
+          "description": "Datasheet peak torque [N·m].",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -505,6 +543,7 @@
           ]
         },
         "voltage": {
+          "description": "Rated supply voltage.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -521,12 +560,15 @@
       "type": "object",
       "properties": {
         "c_h": {
+          "description": "Heat capacity of the housing / can [J/K].",
           "$ref": "#/$defs/Param"
         },
         "c_s": {
+          "description": "Heat capacity of the stator iron [J/K].",
           "$ref": "#/$defs/Param"
         },
         "c_w": {
+          "description": "Heat capacity of the winding [J/K].",
           "$ref": "#/$defs/Param"
         },
         "kappa": {
@@ -541,18 +583,23 @@
           ]
         },
         "r_ha": {
+          "description": "Thermal resistance housing → ambient [K/W].",
           "$ref": "#/$defs/Param"
         },
         "r_sh": {
+          "description": "Thermal resistance stator → housing [K/W].",
           "$ref": "#/$defs/Param"
         },
         "r_ws": {
+          "description": "Thermal resistance winding → stator [K/W] (EQ-THERM-01).",
           "$ref": "#/$defs/Param"
         },
         "t_max": {
+          "description": "Maximum winding temperature.",
           "$ref": "#/$defs/Param"
         },
         "t_ref": {
+          "description": "Reference temperature of R and λ (default 20 °C).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -578,11 +625,13 @@
       "type": "object",
       "properties": {
         "pole_pairs": {
+          "description": "Pole pairs p = magnets / 2 (e.g. 7 in \"12N14P\").",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
         },
         "slots": {
+          "description": "Number of stator slots Q (e.g. 12 in \"12N14P\").",
           "type": "integer",
           "format": "uint32",
           "minimum": 0

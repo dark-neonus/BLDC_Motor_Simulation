@@ -501,7 +501,7 @@ impl WizardState {
                     format!(
                         "datasheet Kt {kt:.4} N·m/A differs from the Kt derived from Kv ({kt_si:.4}) by more than 15 %; Kv was used"
                     ),
-                ));
+                ).with_rule("wizard.kt_matches_kv"));
             }
         }
         constraints::derive(&mut motor, &mut issues);

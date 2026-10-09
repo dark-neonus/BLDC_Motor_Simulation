@@ -6,6 +6,7 @@
       "type": "object",
       "properties": {
         "advance": {
+          "description": "Commutation advance angle.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -20,12 +21,15 @@
           "const": "six_step"
         },
         "limits": {
+          "description": "Current, speed and voltage limits.",
           "$ref": "#/$defs/Limits"
         },
         "rate": {
+          "description": "Controller rate.",
           "$ref": "#/$defs/Param"
         },
         "speed_loop": {
+          "description": "Optional speed loop around the six-step drive.",
           "anyOf": [
             {
               "$ref": "#/$defs/LoopParams"
@@ -47,6 +51,7 @@
       "type": "object",
       "properties": {
         "accel": {
+          "description": "Open-loop acceleration [rad/s²].",
           "$ref": "#/$defs/Param"
         },
         "family": {
@@ -54,15 +59,19 @@
           "const": "open_loop"
         },
         "k_vf": {
+          "description": "Voltage per electrical speed (V/f slope) [V·s/rad].",
           "$ref": "#/$defs/Param"
         },
         "limits": {
+          "description": "Current, speed and voltage limits.",
           "$ref": "#/$defs/Limits"
         },
         "rate": {
+          "description": "Controller rate.",
           "$ref": "#/$defs/Param"
         },
         "v0": {
+          "description": "Voltage at standstill (boost).",
           "$ref": "#/$defs/Param"
         }
       },
@@ -80,6 +89,7 @@
       "type": "object",
       "properties": {
         "current": {
+          "description": "Current loop (EQ-CTRL-03).",
           "$ref": "#/$defs/LoopParams"
         },
         "family": {
@@ -87,9 +97,11 @@
           "const": "foc"
         },
         "limits": {
+          "description": "Current, speed and voltage limits.",
           "$ref": "#/$defs/Limits"
         },
         "position": {
+          "description": "Position loop (EQ-CTRL-04).",
           "anyOf": [
             {
               "$ref": "#/$defs/LoopParams"
@@ -100,14 +112,17 @@
           ]
         },
         "prefilter": {
+          "description": "Setpoint prefilter.",
           "type": "boolean",
           "default": false
         },
         "sensorless": {
+          "description": "Use the flux observer instead of a sensor.",
           "type": "boolean",
           "default": false
         },
         "velocity": {
+          "description": "Velocity loop (EQ-CTRL-04).",
           "anyOf": [
             {
               "$ref": "#/$defs/LoopParams"
@@ -129,6 +144,7 @@
       "type": "object",
       "properties": {
         "current": {
+          "description": "Current loop (EQ-CTRL-03).",
           "$ref": "#/$defs/LoopParams"
         },
         "family": {
@@ -136,18 +152,23 @@
           "const": "mit"
         },
         "kd": {
+          "description": "MIT damping K_d [N·m·s/rad].",
           "$ref": "#/$defs/Param"
         },
         "kp": {
+          "description": "MIT stiffness K_p [N·m/rad] (EQ-CTRL-07).",
           "$ref": "#/$defs/Param"
         },
         "limits": {
+          "description": "Current, speed and voltage limits.",
           "$ref": "#/$defs/Limits"
         },
         "rate": {
+          "description": "Controller rate.",
           "$ref": "#/$defs/Param"
         },
         "tau_ff": {
+          "description": "MIT feed-forward torque [N·m].",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -177,24 +198,29 @@
           "const": "custom"
         },
         "inputs": {
+          "description": "Signal paths the script reads.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "limits": {
+          "description": "Current, speed and voltage limits.",
           "$ref": "#/$defs/Limits"
         },
         "outputs": {
+          "description": "Signal paths the script writes.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "rate": {
+          "description": "Controller rate.",
           "$ref": "#/$defs/Param"
         },
         "script": {
+          "description": "Luau script source (P09.T10).",
           "type": "string"
         }
       },
@@ -214,9 +240,11 @@
       "type": "object",
       "properties": {
         "current": {
+          "description": "Phase current limit.",
           "$ref": "#/$defs/Param"
         },
         "ramp": {
+          "description": "Setpoint ramp rate.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -227,6 +255,7 @@
           ]
         },
         "speed": {
+          "description": "Speed limit.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -237,6 +266,7 @@
           ]
         },
         "voltage_fraction": {
+          "description": "Usable fraction of the available voltage (0 … 1].",
           "type": [
             "number",
             "null"
@@ -264,10 +294,12 @@
           ]
         },
         "enabled": {
+          "description": "Run this loop (default true).",
           "type": "boolean",
           "default": true
         },
         "ki": {
+          "description": "Integral gain (overrides the bandwidth design).",
           "type": [
             "number",
             "null"
@@ -275,6 +307,7 @@
           "format": "double"
         },
         "kp": {
+          "description": "Proportional gain (overrides the bandwidth design).",
           "type": [
             "number",
             "null"
@@ -282,6 +315,7 @@
           "format": "double"
         },
         "rate": {
+          "description": "Loop rate.",
           "$ref": "#/$defs/Param"
         }
       },

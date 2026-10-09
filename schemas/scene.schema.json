@@ -119,23 +119,28 @@
       "type": "object",
       "properties": {
         "bits": {
+          "description": "ADC resolution in bits.",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
         },
         "bypass": {
+          "description": "Use the true value instead of the sensor model.",
           "type": "boolean",
           "default": false
         },
         "full_scale": {
+          "description": "Current at full scale (±).",
           "$ref": "#/$defs/Param"
         },
         "gain_error": {
+          "description": "Relative gain error.",
           "type": "number",
           "format": "double",
           "default": 0.0
         },
         "latency": {
+          "description": "Delay from measurement to output.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -146,6 +151,7 @@
           ]
         },
         "noise": {
+          "description": "Noise standard deviation (in the sensor unit).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -156,6 +162,7 @@
           ]
         },
         "offset": {
+          "description": "Offset current.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -172,6 +179,7 @@
           "minimum": 0
         },
         "update_rate": {
+          "description": "Sample rate.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -193,9 +201,11 @@
       "type": "object",
       "properties": {
         "capacitance": {
+          "description": "DC-link capacitance.",
           "$ref": "#/$defs/Param"
         },
         "chopper": {
+          "description": "Brake chopper (optional).",
           "anyOf": [
             {
               "$ref": "#/$defs/ChopperParams"
@@ -223,6 +233,7 @@
       "type": "object",
       "properties": {
         "power_rating": {
+          "description": "Resistor power rating (for warnings).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -233,12 +244,15 @@
           ]
         },
         "r_brake": {
+          "description": "Brake resistor.",
           "$ref": "#/$defs/Param"
         },
         "v_off": {
+          "description": "Bus voltage that switches it off (hysteresis).",
           "$ref": "#/$defs/Param"
         },
         "v_on": {
+          "description": "Bus voltage that switches the chopper on.",
           "$ref": "#/$defs/Param"
         }
       },
@@ -253,9 +267,11 @@
       "type": "object",
       "properties": {
         "amplitude": {
+          "description": "Cogging amplitude A_k [N·m] of harmonic k (EQ-MOT-08).",
           "$ref": "#/$defs/Param"
         },
         "phase": {
+          "description": "Phase φ_k [rad].",
           "type": "number",
           "format": "double",
           "default": 0.0
@@ -366,6 +382,7 @@
           "type": "object",
           "properties": {
             "advance": {
+              "description": "Commutation advance angle.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -380,12 +397,15 @@
               "const": "six_step"
             },
             "limits": {
+              "description": "Current, speed and voltage limits.",
               "$ref": "#/$defs/Limits"
             },
             "rate": {
+              "description": "Controller rate.",
               "$ref": "#/$defs/Param"
             },
             "speed_loop": {
+              "description": "Optional speed loop around the six-step drive.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/LoopParams"
@@ -407,6 +427,7 @@
           "type": "object",
           "properties": {
             "accel": {
+              "description": "Open-loop acceleration [rad/s²].",
               "$ref": "#/$defs/Param"
             },
             "family": {
@@ -414,15 +435,19 @@
               "const": "open_loop"
             },
             "k_vf": {
+              "description": "Voltage per electrical speed (V/f slope) [V·s/rad].",
               "$ref": "#/$defs/Param"
             },
             "limits": {
+              "description": "Current, speed and voltage limits.",
               "$ref": "#/$defs/Limits"
             },
             "rate": {
+              "description": "Controller rate.",
               "$ref": "#/$defs/Param"
             },
             "v0": {
+              "description": "Voltage at standstill (boost).",
               "$ref": "#/$defs/Param"
             }
           },
@@ -440,6 +465,7 @@
           "type": "object",
           "properties": {
             "current": {
+              "description": "Current loop (EQ-CTRL-03).",
               "$ref": "#/$defs/LoopParams"
             },
             "family": {
@@ -447,9 +473,11 @@
               "const": "foc"
             },
             "limits": {
+              "description": "Current, speed and voltage limits.",
               "$ref": "#/$defs/Limits"
             },
             "position": {
+              "description": "Position loop (EQ-CTRL-04).",
               "anyOf": [
                 {
                   "$ref": "#/$defs/LoopParams"
@@ -460,14 +488,17 @@
               ]
             },
             "prefilter": {
+              "description": "Setpoint prefilter.",
               "type": "boolean",
               "default": false
             },
             "sensorless": {
+              "description": "Use the flux observer instead of a sensor.",
               "type": "boolean",
               "default": false
             },
             "velocity": {
+              "description": "Velocity loop (EQ-CTRL-04).",
               "anyOf": [
                 {
                   "$ref": "#/$defs/LoopParams"
@@ -489,6 +520,7 @@
           "type": "object",
           "properties": {
             "current": {
+              "description": "Current loop (EQ-CTRL-03).",
               "$ref": "#/$defs/LoopParams"
             },
             "family": {
@@ -496,18 +528,23 @@
               "const": "mit"
             },
             "kd": {
+              "description": "MIT damping K_d [N·m·s/rad].",
               "$ref": "#/$defs/Param"
             },
             "kp": {
+              "description": "MIT stiffness K_p [N·m/rad] (EQ-CTRL-07).",
               "$ref": "#/$defs/Param"
             },
             "limits": {
+              "description": "Current, speed and voltage limits.",
               "$ref": "#/$defs/Limits"
             },
             "rate": {
+              "description": "Controller rate.",
               "$ref": "#/$defs/Param"
             },
             "tau_ff": {
+              "description": "MIT feed-forward torque [N·m].",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -537,24 +574,29 @@
               "const": "custom"
             },
             "inputs": {
+              "description": "Signal paths the script reads.",
               "type": "array",
               "items": {
                 "type": "string"
               }
             },
             "limits": {
+              "description": "Current, speed and voltage limits.",
               "$ref": "#/$defs/Limits"
             },
             "outputs": {
+              "description": "Signal paths the script writes.",
               "type": "array",
               "items": {
                 "type": "string"
               }
             },
             "rate": {
+              "description": "Controller rate.",
               "$ref": "#/$defs/Param"
             },
             "script": {
+              "description": "Luau script source (P09.T10).",
               "type": "string"
             }
           },
@@ -590,6 +632,7 @@
           "type": "object",
           "properties": {
             "flat_top": {
+              "description": "Flat-top width per half period [rad or \"120 deg\"], 0 … π (EQ-MOT-03).",
               "$ref": "#/$defs/Param"
             },
             "kind": {
@@ -612,6 +655,7 @@
               "const": "harmonics"
             },
             "terms": {
+              "description": "Harmonics in addition to the fundamental.",
               "type": "array",
               "items": {
                 "$ref": "#/$defs/Harmonic"
@@ -632,6 +676,7 @@
           "type": "object",
           "properties": {
             "air_gap": {
+              "description": "Magnet-to-chip distance.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -642,21 +687,25 @@
               ]
             },
             "bits": {
+              "description": "Resolution in bits.",
               "type": "integer",
               "format": "uint32",
               "minimum": 0
             },
             "bypass": {
+              "description": "Use the true value instead of the sensor model.",
               "type": "boolean",
               "default": false
             },
             "chip": {
+              "description": "Chip name (informational).",
               "type": [
                 "string",
                 "null"
               ]
             },
             "eccentricity": {
+              "description": "Magnet eccentricity.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -667,6 +716,7 @@
               ]
             },
             "gap_max": {
+              "description": "Maximum allowed air gap.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -677,6 +727,7 @@
               ]
             },
             "gap_min": {
+              "description": "Minimum allowed air gap.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -687,6 +738,7 @@
               ]
             },
             "inl": {
+              "description": "Integral nonlinearity (peak angle error).",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -701,6 +753,7 @@
               "const": "magnetic"
             },
             "latency": {
+              "description": "Delay from measurement to output.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -711,6 +764,7 @@
               ]
             },
             "mount_offset": {
+              "description": "Angular mounting offset.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -721,6 +775,7 @@
               ]
             },
             "noise": {
+              "description": "Noise standard deviation (in the sensor unit).",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -731,6 +786,7 @@
               ]
             },
             "update_rate": {
+              "description": "Sample rate.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -751,15 +807,18 @@
           "type": "object",
           "properties": {
             "bypass": {
+              "description": "Use the true value instead of the sensor model.",
               "type": "boolean",
               "default": false
             },
             "cpr": {
+              "description": "Counts per revolution (before ×4 decoding).",
               "type": "integer",
               "format": "uint32",
               "minimum": 0
             },
             "index_angle": {
+              "description": "Angle of the index pulse.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -774,6 +833,7 @@
               "const": "incremental"
             },
             "latency": {
+              "description": "Delay from measurement to output.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -784,6 +844,7 @@
               ]
             },
             "noise": {
+              "description": "Noise standard deviation (in the sensor unit).",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -794,6 +855,7 @@
               ]
             },
             "update_rate": {
+              "description": "Sample rate.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Param"
@@ -816,6 +878,7 @@
       "type": "object",
       "properties": {
         "dt_max": {
+          "description": "Override the maximum integration step.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -826,12 +889,14 @@
           ]
         },
         "inverter_mode": {
+          "description": "Override the tier's inverter mode (averaged / switching).",
           "type": [
             "string",
             "null"
           ]
         },
         "tier": {
+          "description": "Model detail: ideal, standard (default) or detailed (EQ-NUM-07).",
           "$ref": "#/$defs/TierParam",
           "default": "standard"
         }
@@ -842,12 +907,15 @@
       "type": "object",
       "properties": {
         "coulomb": {
+          "description": "Coulomb (kinetic) friction torque [N·m], ≤ static.",
           "$ref": "#/$defs/Param"
         },
         "static_torque": {
+          "description": "Breakaway (static) friction torque [N·m] (EQ-MECH-05).",
           "$ref": "#/$defs/Param"
         },
         "viscous": {
+          "description": "Viscous friction coefficient [N·m·s/rad].",
           "$ref": "#/$defs/Param"
         }
       },
@@ -862,6 +930,7 @@
       "type": "object",
       "properties": {
         "backlash": {
+          "description": "Total backlash at the output (EQ-MECH-04).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -872,6 +941,7 @@
           ]
         },
         "damping": {
+          "description": "Torsional damping at the output [N·m·s/rad].",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -882,10 +952,12 @@
           ]
         },
         "efficiency": {
+          "description": "Efficiency η (0 < η ≤ 1), the same both ways (EQ-MECH-03).",
           "type": "number",
           "format": "double"
         },
         "j_in": {
+          "description": "Inertia on the motor side [kg·m²].",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -896,6 +968,7 @@
           ]
         },
         "j_out": {
+          "description": "Inertia on the output side [kg·m²].",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -906,13 +979,16 @@
           ]
         },
         "name": {
+          "description": "Display name.",
           "type": "string"
         },
         "ratio": {
+          "description": "Ratio N = motor turns per output turn (N > 1 reduces speed).",
           "type": "number",
           "format": "double"
         },
         "stiffness": {
+          "description": "Torsional stiffness at the output [N·m/rad].",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -934,10 +1010,12 @@
       "type": "object",
       "properties": {
         "bypass": {
+          "description": "Use the true value instead of the sensor model.",
           "type": "boolean",
           "default": false
         },
         "hysteresis": {
+          "description": "Switching hysteresis (fraction of the field amplitude).",
           "type": [
             "number",
             "null"
@@ -945,6 +1023,7 @@
           "format": "double"
         },
         "latency": {
+          "description": "Delay from measurement to output.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -955,6 +1034,7 @@
           ]
         },
         "noise": {
+          "description": "Noise standard deviation (in the sensor unit).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -973,6 +1053,7 @@
           }
         },
         "update_rate": {
+          "description": "Sample rate.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -989,15 +1070,18 @@
       "type": "object",
       "properties": {
         "b": {
+          "description": "Amplitude relative to the fundamental.",
           "type": "number",
           "format": "double"
         },
         "n": {
+          "description": "Harmonic order (odd).",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
         },
         "phase": {
+          "description": "Phase φ_n [rad].",
           "type": "number",
           "format": "double",
           "default": 0.0
@@ -1062,12 +1146,15 @@
       "type": "object",
       "properties": {
         "dead_time": {
+          "description": "Dead time per switching edge.",
           "$ref": "#/$defs/Param"
         },
         "f_pwm": {
+          "description": "PWM frequency.",
           "$ref": "#/$defs/Param"
         },
         "i_eps": {
+          "description": "Current smoothing for the dead-time sign (EQ-INV-03, default 10 mA).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1078,6 +1165,7 @@
           ]
         },
         "i_max": {
+          "description": "Maximum phase current of the stage.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1088,21 +1176,27 @@
           ]
         },
         "name": {
+          "description": "Display name.",
           "type": "string"
         },
         "r_on": {
+          "description": "Switch on-resistance (incl. board traces).",
           "$ref": "#/$defs/Param"
         },
         "t_fall": {
+          "description": "Switching fall time.",
           "$ref": "#/$defs/Param"
         },
         "t_rise": {
+          "description": "Switching rise time (switching loss, EQ-INV-09).",
           "$ref": "#/$defs/Param"
         },
         "v_f": {
+          "description": "Body-diode forward voltage.",
           "$ref": "#/$defs/Param"
         },
         "v_max": {
+          "description": "Maximum bus voltage of the stage.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1128,9 +1222,11 @@
       "type": "object",
       "properties": {
         "current": {
+          "description": "Phase current limit.",
           "$ref": "#/$defs/Param"
         },
         "ramp": {
+          "description": "Setpoint ramp rate.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1141,6 +1237,7 @@
           ]
         },
         "speed": {
+          "description": "Speed limit.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1151,6 +1248,7 @@
           ]
         },
         "voltage_fraction": {
+          "description": "Usable fraction of the available voltage (0 … 1].",
           "type": [
             "number",
             "null"
@@ -1170,15 +1268,19 @@
           "type": "object",
           "properties": {
             "arm_length": {
+              "description": "Length of the arm (rod).",
               "$ref": "#/$defs/Param"
             },
             "arm_mass": {
+              "description": "Mass of the arm itself (uniform rod).",
               "$ref": "#/$defs/Param"
             },
             "distance": {
+              "description": "Distance of the point mass from the axis.",
               "$ref": "#/$defs/Param"
             },
             "friction": {
+              "description": "Load-side friction.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/Friction"
@@ -1193,9 +1295,11 @@
               "const": "arm"
             },
             "mass": {
+              "description": "Point mass on the arm.",
               "$ref": "#/$defs/Param"
             },
             "on_change": {
+              "description": "What a live mass change keeps: speed (default) or momentum (D-007).",
               "$ref": "#/$defs/OnChange",
               "default": "keep_speed"
             }
@@ -1217,6 +1321,7 @@
               "const": "constant"
             },
             "torque": {
+              "description": "Torque [N·m].",
               "$ref": "#/$defs/Param"
             }
           },
@@ -1234,6 +1339,7 @@
               "const": "brake"
             },
             "torque": {
+              "description": "Torque [N·m].",
               "$ref": "#/$defs/Param"
             }
           },
@@ -1247,6 +1353,7 @@
           "type": "object",
           "properties": {
             "coefficient": {
+              "description": "Viscous coefficient [N·m·s/rad].",
               "$ref": "#/$defs/Param"
             },
             "kind": {
@@ -1264,6 +1371,7 @@
           "type": "object",
           "properties": {
             "inertia": {
+              "description": "Flywheel inertia [kg·m²].",
               "$ref": "#/$defs/Param"
             },
             "kind": {
@@ -1294,10 +1402,12 @@
           ]
         },
         "enabled": {
+          "description": "Run this loop (default true).",
           "type": "boolean",
           "default": true
         },
         "ki": {
+          "description": "Integral gain (overrides the bandwidth design).",
           "type": [
             "number",
             "null"
@@ -1305,6 +1415,7 @@
           "format": "double"
         },
         "kp": {
+          "description": "Proportional gain (overrides the bandwidth design).",
           "type": [
             "number",
             "null"
@@ -1312,6 +1423,7 @@
           "format": "double"
         },
         "rate": {
+          "description": "Loop rate.",
           "$ref": "#/$defs/Param"
         }
       },
@@ -1324,6 +1436,7 @@
       "type": "object",
       "properties": {
         "connection": {
+          "description": "Winding connection (`star` or `delta`); the model always uses star-equivalent values (EQ-CONV-14).",
           "$ref": "#/$defs/Connection"
         },
         "entered_as": {
@@ -1394,6 +1507,7 @@
       "type": "object",
       "properties": {
         "air_gap": {
+          "description": "Mechanical air gap between stator and magnets.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1412,6 +1526,7 @@
           "format": "double"
         },
         "magnet_thickness": {
+          "description": "Radial magnet thickness.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1422,6 +1537,7 @@
           ]
         },
         "rotor_od": {
+          "description": "Rotor outer diameter (the can for an outrunner).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1432,6 +1548,7 @@
           ]
         },
         "stack_length": {
+          "description": "Axial length of the stator stack.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1442,6 +1559,7 @@
           ]
         },
         "stator_id": {
+          "description": "Stator inner diameter.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1452,6 +1570,7 @@
           ]
         },
         "stator_od": {
+          "description": "Stator outer diameter.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1468,6 +1587,7 @@
       "type": "object",
       "properties": {
         "name": {
+          "description": "Display name of the motor (e.g. \"Generic 8108 outrunner\").",
           "type": "string"
         },
         "size_class": {
@@ -1478,6 +1598,7 @@
           ]
         },
         "topology": {
+          "description": "Rotor position: `inrunner` (rotor inside) or `outrunner` (rotating can outside).",
           "$ref": "#/$defs/Topology"
         }
       },
@@ -1510,9 +1631,11 @@
           }
         },
         "emf_shape": {
+          "description": "Back-EMF shape (EQ-MOT-03).",
           "$ref": "#/$defs/EmfShape"
         },
         "k_ed": {
+          "description": "Eddy-current iron-loss coefficient k_ed [W·s²/rad²] (EQ-MOT-09).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1534,6 +1657,7 @@
           ]
         },
         "saturation": {
+          "description": "Co-energy saturation curve (EQ-MOT-10, Detailed tier).",
           "anyOf": [
             {
               "$ref": "#/$defs/Saturation"
@@ -1553,6 +1677,7 @@
       "type": "object",
       "properties": {
         "friction": {
+          "description": "Bearing friction (EQ-MECH-05).",
           "anyOf": [
             {
               "$ref": "#/$defs/Friction"
@@ -1563,9 +1688,11 @@
           ]
         },
         "j_rotor": {
+          "description": "Rotor inertia [kg·m²].",
           "$ref": "#/$defs/Param"
         },
         "mass": {
+          "description": "Motor mass.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1585,9 +1712,11 @@
       "type": "object",
       "properties": {
         "electrical": {
+          "description": "Resistance, inductances and the motor constant.",
           "$ref": "#/$defs/MotorElectrical"
         },
         "geometry": {
+          "description": "Dimensions (optional; used by estimates and the 3D view).",
           "$ref": "#/$defs/MotorGeometry",
           "default": {
             "air_gap": null,
@@ -1600,15 +1729,19 @@
           }
         },
         "identity": {
+          "description": "Name and topology.",
           "$ref": "#/$defs/MotorIdentity"
         },
         "magnetic": {
+          "description": "Back-EMF shape, cogging, iron loss, saturation.",
           "$ref": "#/$defs/MotorMagnetic"
         },
         "mechanical": {
+          "description": "Inertia, mass and bearing friction.",
           "$ref": "#/$defs/MotorMechanical"
         },
         "ratings": {
+          "description": "Datasheet ratings (for checks and limits).",
           "$ref": "#/$defs/MotorRatings",
           "default": {
             "current_continuous": null,
@@ -1619,11 +1752,13 @@
           }
         },
         "schema_version": {
+          "description": "File format version (currently 1).",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
         },
         "thermal": {
+          "description": "Three-node thermal network (EQ-THERM-01).",
           "anyOf": [
             {
               "$ref": "#/$defs/MotorThermal"
@@ -1634,6 +1769,7 @@
           ]
         },
         "winding": {
+          "description": "Slot / pole combination.",
           "$ref": "#/$defs/MotorWinding"
         }
       },
@@ -1651,6 +1787,7 @@
       "type": "object",
       "properties": {
         "current_continuous": {
+          "description": "Continuous phase current (peak per phase).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1661,6 +1798,7 @@
           ]
         },
         "current_peak": {
+          "description": "Peak phase current (short-term).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1671,6 +1809,7 @@
           ]
         },
         "speed": {
+          "description": "Rated or maximum speed.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1681,6 +1820,7 @@
           ]
         },
         "torque_peak": {
+          "description": "Datasheet peak torque [N·m].",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1691,6 +1831,7 @@
           ]
         },
         "voltage": {
+          "description": "Rated supply voltage.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1707,12 +1848,15 @@
       "type": "object",
       "properties": {
         "c_h": {
+          "description": "Heat capacity of the housing / can [J/K].",
           "$ref": "#/$defs/Param"
         },
         "c_s": {
+          "description": "Heat capacity of the stator iron [J/K].",
           "$ref": "#/$defs/Param"
         },
         "c_w": {
+          "description": "Heat capacity of the winding [J/K].",
           "$ref": "#/$defs/Param"
         },
         "kappa": {
@@ -1727,18 +1871,23 @@
           ]
         },
         "r_ha": {
+          "description": "Thermal resistance housing → ambient [K/W].",
           "$ref": "#/$defs/Param"
         },
         "r_sh": {
+          "description": "Thermal resistance stator → housing [K/W].",
           "$ref": "#/$defs/Param"
         },
         "r_ws": {
+          "description": "Thermal resistance winding → stator [K/W] (EQ-THERM-01).",
           "$ref": "#/$defs/Param"
         },
         "t_max": {
+          "description": "Maximum winding temperature.",
           "$ref": "#/$defs/Param"
         },
         "t_ref": {
+          "description": "Reference temperature of R and λ (default 20 °C).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1764,11 +1913,13 @@
       "type": "object",
       "properties": {
         "pole_pairs": {
+          "description": "Pole pairs p = magnets / 2 (e.g. 7 in \"12N14P\").",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
         },
         "slots": {
+          "description": "Number of stator slots Q (e.g. 12 in \"12N14P\").",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
@@ -1845,6 +1996,7 @@
       "type": "object",
       "properties": {
         "over_current": {
+          "description": "Over-current trip.",
           "anyOf": [
             {
               "$ref": "#/$defs/Threshold"
@@ -1855,6 +2007,7 @@
           ]
         },
         "over_temperature": {
+          "description": "Winding over-temperature trip.",
           "anyOf": [
             {
               "$ref": "#/$defs/Threshold"
@@ -1865,6 +2018,7 @@
           ]
         },
         "over_voltage": {
+          "description": "Bus over-voltage trip.",
           "anyOf": [
             {
               "$ref": "#/$defs/Threshold"
@@ -1875,6 +2029,7 @@
           ]
         },
         "under_voltage": {
+          "description": "Bus under-voltage trip.",
           "anyOf": [
             {
               "$ref": "#/$defs/Threshold"
@@ -1927,6 +2082,7 @@
       "type": "object",
       "properties": {
         "adc": {
+          "description": "Current-sense ADC (optional).",
           "anyOf": [
             {
               "$ref": "#/$defs/AdcParams"
@@ -1937,6 +2093,7 @@
           ]
         },
         "encoder": {
+          "description": "Angle encoder (optional).",
           "anyOf": [
             {
               "$ref": "#/$defs/EncoderParams"
@@ -1947,6 +2104,7 @@
           ]
         },
         "hall": {
+          "description": "Hall sensors (optional).",
           "anyOf": [
             {
               "$ref": "#/$defs/HallParams"
@@ -1957,6 +2115,7 @@
           ]
         },
         "observer_gamma": {
+          "description": "Gain γ of the sensorless flux observer (EQ-CTRL-09).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1998,6 +2157,7 @@
               "const": "ideal"
             },
             "voltage": {
+              "description": "Output voltage.",
               "$ref": "#/$defs/Param"
             }
           },
@@ -2011,6 +2171,7 @@
           "type": "object",
           "properties": {
             "current_limit": {
+              "description": "Current limit (constant-current mode above it).",
               "$ref": "#/$defs/Param"
             },
             "kind": {
@@ -2018,9 +2179,11 @@
               "const": "psu"
             },
             "r_out": {
+              "description": "Output resistance.",
               "$ref": "#/$defs/Param"
             },
             "voltage": {
+              "description": "Output voltage.",
               "$ref": "#/$defs/Param"
             }
           },
@@ -2036,12 +2199,15 @@
           "type": "object",
           "properties": {
             "c1_cell": {
+              "description": "RC-pair capacitance per cell.",
               "$ref": "#/$defs/Param"
             },
             "capacity_cell": {
+              "description": "Capacity per cell.",
               "$ref": "#/$defs/Param"
             },
             "chemistry": {
+              "description": "Cell chemistry (sets the OCV curve meaning).",
               "$ref": "#/$defs/Chemistry"
             },
             "kind": {
@@ -2068,22 +2234,27 @@
               }
             },
             "parallel": {
+              "description": "Cells in parallel.",
               "type": "integer",
               "format": "uint32",
               "minimum": 0
             },
             "r0_cell": {
+              "description": "Series resistance per cell (Thevenin R0, EQ-SUP-03).",
               "$ref": "#/$defs/Param"
             },
             "r1_cell": {
+              "description": "RC-pair resistance per cell.",
               "$ref": "#/$defs/Param"
             },
             "series": {
+              "description": "Cells in series.",
               "type": "integer",
               "format": "uint32",
               "minimum": 0
             },
             "soc_init": {
+              "description": "Initial state of charge (0 … 1).",
               "type": "number",
               "format": "double"
             }
@@ -2108,14 +2279,17 @@
       "type": "object",
       "properties": {
         "action": {
+          "description": "What a trip does.",
           "$ref": "#/$defs/ProtectAction",
           "default": "disable_pwm"
         },
         "enabled": {
+          "description": "Enable this protection (default true).",
           "type": "boolean",
           "default": true
         },
         "filter": {
+          "description": "Filter time before tripping.",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -2126,10 +2300,12 @@
           ]
         },
         "latch": {
+          "description": "Stay tripped until reset.",
           "type": "boolean",
           "default": false
         },
         "level": {
+          "description": "Trip level (in the watched quantity's unit).",
           "$ref": "#/$defs/Param"
         }
       },

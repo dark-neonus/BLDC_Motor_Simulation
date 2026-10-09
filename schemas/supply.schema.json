@@ -10,6 +10,7 @@
           "const": "ideal"
         },
         "voltage": {
+          "description": "Output voltage.",
           "$ref": "#/$defs/Param"
         }
       },
@@ -23,6 +24,7 @@
       "type": "object",
       "properties": {
         "current_limit": {
+          "description": "Current limit (constant-current mode above it).",
           "$ref": "#/$defs/Param"
         },
         "kind": {
@@ -30,9 +32,11 @@
           "const": "psu"
         },
         "r_out": {
+          "description": "Output resistance.",
           "$ref": "#/$defs/Param"
         },
         "voltage": {
+          "description": "Output voltage.",
           "$ref": "#/$defs/Param"
         }
       },
@@ -48,12 +52,15 @@
       "type": "object",
       "properties": {
         "c1_cell": {
+          "description": "RC-pair capacitance per cell.",
           "$ref": "#/$defs/Param"
         },
         "capacity_cell": {
+          "description": "Capacity per cell.",
           "$ref": "#/$defs/Param"
         },
         "chemistry": {
+          "description": "Cell chemistry (sets the OCV curve meaning).",
           "$ref": "#/$defs/Chemistry"
         },
         "kind": {
@@ -80,22 +87,27 @@
           }
         },
         "parallel": {
+          "description": "Cells in parallel.",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
         },
         "r0_cell": {
+          "description": "Series resistance per cell (Thevenin R0, EQ-SUP-03).",
           "$ref": "#/$defs/Param"
         },
         "r1_cell": {
+          "description": "RC-pair resistance per cell.",
           "$ref": "#/$defs/Param"
         },
         "series": {
+          "description": "Cells in series.",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
         },
         "soc_init": {
+          "description": "Initial state of charge (0 … 1).",
           "type": "number",
           "format": "double"
         }

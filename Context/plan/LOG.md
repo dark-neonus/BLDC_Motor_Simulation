@@ -273,3 +273,7 @@
 - Server: `default_app_state()` loads `builtin:scenes/gimbal-hold` (derived + checked), keeps it in `AppState.scene` (Arc<Mutex>); the runner factory builds from it, so resets keep edits; falls back to the skeleton if the scene cannot load. `AppState::apply_param` → `SceneModel::edit` (apply_edit) → engine commands; REST `POST /api/param {path, value}` (422 + reason on reject) and MCP `set_param`. Only `motor.*` live so far. `SceneModel::edit` takes the ChangeSource.
 - `Assert.value`/`tol` are `Param`s resolved with the signal's registered unit (`units::kind_of_unit`); test with rpm against rad/s.
 - e2e still green with the gimbal scene as the live default.
+
+## 2026-10-09 — P05.T12 (part 2/2): field docs, rule ids
+- Doc comments on all 168 `sim-model::params` fields (units, EQ refs; `gearbox.ratio` = motor turns per output turn) → schema descriptions.
+- `Issue.rule`: stable rule id (default = the path when it is the only rule there; named ids `value.unit/finite/positive/range`, `motor.kv_range`, `motor.saliency_ratio`, `motor.time_constant`, `motor.winding_valid`, `motor.saturation_*`, `motor.peak_above_continuous`, `motor.t_max_above_ref`, `mech.coulomb_le_static`, `motor.entered_constant_present`, `wizard.kt_matches_kv`). Test: two rules on one path keep distinct ids.

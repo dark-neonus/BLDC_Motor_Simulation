@@ -4,12 +4,15 @@
   "type": "object",
   "properties": {
     "dead_time": {
+      "description": "Dead time per switching edge.",
       "$ref": "#/$defs/Param"
     },
     "f_pwm": {
+      "description": "PWM frequency.",
       "$ref": "#/$defs/Param"
     },
     "i_eps": {
+      "description": "Current smoothing for the dead-time sign (EQ-INV-03, default 10 mA).",
       "anyOf": [
         {
           "$ref": "#/$defs/Param"
@@ -20,6 +23,7 @@
       ]
     },
     "i_max": {
+      "description": "Maximum phase current of the stage.",
       "anyOf": [
         {
           "$ref": "#/$defs/Param"
@@ -30,21 +34,27 @@
       ]
     },
     "name": {
+      "description": "Display name.",
       "type": "string"
     },
     "r_on": {
+      "description": "Switch on-resistance (incl. board traces).",
       "$ref": "#/$defs/Param"
     },
     "t_fall": {
+      "description": "Switching fall time.",
       "$ref": "#/$defs/Param"
     },
     "t_rise": {
+      "description": "Switching rise time (switching loss, EQ-INV-09).",
       "$ref": "#/$defs/Param"
     },
     "v_f": {
+      "description": "Body-diode forward voltage.",
       "$ref": "#/$defs/Param"
     },
     "v_max": {
+      "description": "Maximum bus voltage of the stage.",
       "anyOf": [
         {
           "$ref": "#/$defs/Param"

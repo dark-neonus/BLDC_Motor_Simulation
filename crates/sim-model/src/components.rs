@@ -31,8 +31,9 @@ impl V {
             } else {
                 "zero or more"
             };
-            self.out
-                .push(issue(Severity::Reject, path, format!("must be {what}")));
+            self.out.push(
+                issue(Severity::Reject, path, format!("must be {what}")).with_rule("value.range"),
+            );
             return None;
         }
         Some(v)
