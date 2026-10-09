@@ -14,3 +14,4 @@ pub mod scenario;
 pub mod scene;
 pub mod units;
 pub mod winding;
+pub mod wizard;

@@ -201,3 +201,8 @@
 - `scene.rs`: `Component<T>` = `{preset, overrides{dotted.path: value}}` | inline T (untagged); `Scene::resolve(&Library)` → `ResolvedScene` (overrides go through the typed parse, so unknown fields are still rejected). `initial` holds theta/omega/temperature/ambient.
 - `scenario.rs`: scene (ref or inline), `record`, `sample`, sequential `timeline` of externally tagged actions (`set`, `target`, `fault`, `disturbance`, `wait`, `assert{signal, op, value, tol, at?, window?}`, `snapshot`, `stop`).
 - Presets: scenes gimbal-hold, arm-servo, six-step-demo; scenario arm-step. `validate-file` resolves scene/scenario references and runs the motor rules; schemas scene/scenario added.
+
+## 2026-10-09 — P04.T12 Datasheet wizard
+- `wizard::{start, WizardState::{questions, answer, accept_suggestions, finish}}`. Slots are a required input; questions only when relevant (poles meaning — auto-resolved by plausibility q ≥ 1/4; Kv definition; Kt basis; R/L LL vs phase; star/delta). Provenance: datasheet / derived / estimated, `Estimate{path, rule, confidence}`.
+- New rules EQ-EST-04 (mass from envelope) and EQ-EST-05 (envelope from size class). Test uses the CubeMars AK10-9 V2 spec table: derived Kt 0.0827 vs listed 0.095 (−13 %, within 20 %), Kt·50 A = 4.13 N·m vs 38/9 = 4.22 N·m (−2 %).
+- Lesson: Python heredocs writing LaTeX must use raw strings (`\r`, `\f`, `\a` became control chars).

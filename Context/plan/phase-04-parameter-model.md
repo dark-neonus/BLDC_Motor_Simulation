@@ -147,7 +147,7 @@
   - **Verify:** Round-trip tests. 3 example scenes (gimbal-hold, arm-servo, six-step-demo) validate.
   - **Done when:** Passing.
 
-- [ ] **P04.T12** — Datasheet wizard logic (backend)
+- [x] **P04.T12** — Datasheet wizard logic (backend)
   - **Depends:** P04.T05, P04.T09
   - **Do:**
     - `wizard::start(inputs) -> WizardState` with a list of **convention questions** where inputs are ambiguous (Kv definition variant; R line-to-line or phase; star/delta; "poles" means pole count or pole pairs?).
