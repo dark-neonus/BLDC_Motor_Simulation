@@ -16,8 +16,12 @@ pub struct Snapshot {
     pub next_fire: Vec<SimTime>,
     /// (block id, saved data), in engine order.
     pub blocks: Vec<(String, serde_json::Value)>,
-    /// (module name, saved data), in plant order.
+    /// (module name, saved data), in plant order. Modules/blocks must include their
+    /// live parameters in `save()` so a restore into a fresh engine is complete.
     pub modules: Vec<(String, serde_json::Value)>,
+    pub energy_book: Option<crate::energy::EnergyBook>,
+    pub dt_max: f64,
+    pub fidelity: Option<super::fidelity::FidelityConfig>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -59,6 +63,9 @@ impl Engine {
                 .iter()
                 .map(|m| (m.name().to_string(), m.save()))
                 .collect(),
+            energy_book: self.energy_book().cloned(),
+            dt_max: self.dt_max,
+            fidelity: self.fidelity,
         }
     }
 
@@ -94,6 +101,11 @@ impl Engine {
         self.bus.values_mut().copy_from_slice(&s.bus);
         self.set_next_fire_times(&s.next_fire);
         self.clear_queues();
+        if let Some(b) = &s.energy_book {
+            self.set_energy_book(b);
+        }
+        self.dt_max = s.dt_max;
+        self.fidelity = s.fidelity;
         Ok(())
     }
 }

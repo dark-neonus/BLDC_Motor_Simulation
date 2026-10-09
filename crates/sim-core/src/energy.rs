@@ -25,7 +25,7 @@ pub const R_TOL_DETAILED: f64 = 5e-3;
 const E_FLOOR: f64 = 1e-6;
 
 /// Energy signals on the bus.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct EnergySignals {
     pub e_in: SignalId,
     pub e_loss: SignalId,
@@ -33,10 +33,27 @@ pub struct EnergySignals {
     pub e_stored: SignalId,
     pub residual: SignalId,
     pub ok: SignalId,
+    /// `energy.loss.<module>` per module with loss terms: (module index, signal).
+    pub per_module_loss: Vec<(usize, SignalId)>,
 }
 
 impl EnergySignals {
-    pub fn register(bus: &mut SignalBus) -> Result<Self, SignalError> {
+    pub fn register(bus: &mut SignalBus, plant: &Plant) -> Result<Self, SignalError> {
+        let mut per_module_loss = Vec::new();
+        for (mi, m) in plant.modules().iter().enumerate() {
+            if m.power_terms().iter().any(|(_, k)| *k == PowerKind::Loss) {
+                let path = format!("energy.loss.{}", m.name());
+                per_module_loss.push((
+                    mi,
+                    bus.register(
+                        &path,
+                        "J",
+                        "energy dissipated in this module",
+                        SignalKind::Diagnostic,
+                    )?,
+                ));
+            }
+        }
         let mut r = |p: &str, u: &str, d: &str| bus.register(p, u, d, SignalKind::Diagnostic);
         Ok(Self {
             e_in: r("energy.in", "J", "energy delivered by sources")?,
@@ -49,12 +66,13 @@ impl EnergySignals {
             )?,
             residual: r("energy.residual", "-", "normalised energy-balance residual")?,
             ok: r("energy.ok", "-", "1 when |residual| < tolerance")?,
+            per_module_loss,
         })
     }
 }
 
 /// Running totals not held in the ODE state.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct EnergyBook {
     pub e_st0: f64,
     /// Discrete external energy (param changes, resets).
@@ -75,11 +93,19 @@ impl EnergyBook {
         let (mut e_in, mut e_loss, mut e_ext) = (0.0, 0.0, self.e_jump);
         let eo = plant.energy_offset();
         let terms = plant.energy_terms();
-        for (j, (_, kind)) in terms.iter().enumerate() {
+        for &(_, id) in &sig.per_module_loss {
+            bus.set(id, 0.0);
+        }
+        for (j, (mi, kind)) in terms.iter().enumerate() {
             let e = x[eo + j];
             match kind {
                 PowerKind::Input => e_in += e,
-                PowerKind::Loss => e_loss += e,
+                PowerKind::Loss => {
+                    e_loss += e;
+                    if let Some(&(_, id)) = sig.per_module_loss.iter().find(|(m, _)| m == mi) {
+                        bus.set(id, bus.get(id) + e);
+                    }
+                }
                 PowerKind::External => e_ext += e,
             }
         }

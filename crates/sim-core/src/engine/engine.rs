@@ -6,6 +6,7 @@
 
 use super::block::{DiscreteBlock, SimError, StepCtx};
 use super::commands::{EngineCommand, EngineEvent};
+use super::fidelity::{FidelityConfig, StepLimits, Tier};
 use super::integrate::Rk4;
 use super::plant::Plant;
 use super::recorder::Recorder;
@@ -29,6 +30,9 @@ pub struct Engine {
     pub dt_max: f64,
     /// Scratch: indices of blocks due now (no allocation per event).
     due: Vec<usize>,
+    /// Fidelity configuration (set via `set_fidelity`).
+    pub fidelity: Option<FidelityConfig>,
+    fid_sig: Option<(super::signals::SignalId, super::signals::SignalId)>,
     /// Commands waiting for the next event boundary.
     pending: Vec<EngineCommand>,
     /// Events produced since the last `drain_events`.
@@ -52,10 +56,39 @@ impl Engine {
         dt_max: f64,
     ) -> Self {
         plant.finalize_energy();
+        let mut init_events = Vec::new();
         let energy_sig = if plant.modules().is_empty() {
             None
         } else {
-            EnergySignals::register(&mut bus).ok()
+            match EnergySignals::register(&mut bus, &plant) {
+                Ok(s) => Some(s),
+                Err(err) => {
+                    init_events.push(EngineEvent::Warning {
+                        t: SimTime::ZERO,
+                        source: "engine".into(),
+                        msg: format!("energy accounting disabled: {err}"),
+                    });
+                    None
+                }
+            }
+        };
+        // Fidelity status signals (EQ-NUM-04); absent only if a module already claimed the paths.
+        let fid_sig = match (
+            bus.register(
+                "sim.dt_max",
+                "s",
+                "integration step limit",
+                SignalKind::Diagnostic,
+            ),
+            bus.register(
+                "sim.tier",
+                "-",
+                "fidelity tier (0 ideal, 1 standard, 2 detailed)",
+                SignalKind::Diagnostic,
+            ),
+        ) {
+            (Ok(a), Ok(b)) => Some((a, b)),
+            _ => None,
         };
         bus.freeze();
         let x = plant.initial_state();
@@ -72,7 +105,9 @@ impl Engine {
             integrator: Rk4::new(n),
             dt_max,
             pending: Vec::new(),
-            events: Vec::new(),
+            events: init_events,
+            fidelity: None,
+            fid_sig,
             recorder: None,
             energy: energy_sig.map(|s| {
                 (
@@ -139,12 +174,24 @@ impl Engine {
             let b = &self.blocks[i];
             self.next_fire[i] = match b.period() {
                 Some(p) => self.time + p,
-                None => b
-                    .next_event(self.time)
-                    .filter(|&t| t > self.time)
-                    .unwrap_or(NEVER),
+                None => {
+                    match b.next_event(self.time) {
+                        Some(t) if t > self.time => t,
+                        Some(t) => {
+                            self.events.push(EngineEvent::Warning {
+                            t: self.time,
+                            source: b.id().to_string(),
+                            msg: format!("next_event returned {t}, not after now; block idle until re-polled"),
+                        });
+                            NEVER
+                        }
+                        None => NEVER,
+                    }
+                }
             };
         }
+        // Other blocks' outputs may have changed variable-event schedules: re-poll them.
+        self.repoll_variable(self.time);
         Ok(())
     }
 
@@ -308,6 +355,7 @@ impl Engine {
         self.plant
             .outputs(self.time.as_secs_f64(), &self.x, &mut self.bus);
         self.update_energy();
+        self.repoll_variable(SimTime(self.time.nanos() - 1));
     }
 
     fn apply(&mut self, cmd: EngineCommand) -> EngineEvent {
@@ -388,6 +436,48 @@ impl Engine {
 
     pub(crate) fn set_next_fire_times(&mut self, t: &[SimTime]) {
         self.next_fire.copy_from_slice(t);
+    }
+
+    /// Re-query `next_event` of every variable-event block (events strictly after `after`).
+    fn repoll_variable(&mut self, after: SimTime) {
+        for (i, b) in self.blocks.iter().enumerate() {
+            if b.period().is_none() {
+                self.next_fire[i] = b.next_event(after).filter(|&t| t > after).unwrap_or(NEVER);
+            }
+        }
+    }
+
+    /// Apply a fidelity configuration: step limit (EQ-NUM-04), energy tolerance (EQ-ENER-03),
+    /// `sim.dt_max` / `sim.tier` signals.
+    pub fn set_fidelity(&mut self, cfg: FidelityConfig, limits: &StepLimits) {
+        self.dt_max = super::fidelity::dt_max(&cfg, limits);
+        self.set_energy_tolerance(if cfg.tier == Tier::Detailed {
+            crate::energy::R_TOL_DETAILED
+        } else {
+            R_TOL_STANDARD
+        });
+        if let Some((a, b)) = self.fid_sig {
+            self.bus.set(a, self.dt_max);
+            self.bus.set(
+                b,
+                match cfg.tier {
+                    Tier::Ideal => 0.0,
+                    Tier::Standard => 1.0,
+                    Tier::Detailed => 2.0,
+                },
+            );
+        }
+        self.fidelity = Some(cfg);
+    }
+
+    pub(crate) fn energy_book(&self) -> Option<&crate::energy::EnergyBook> {
+        self.energy.as_ref().map(|(_, b)| b)
+    }
+
+    pub(crate) fn set_energy_book(&mut self, book: &crate::energy::EnergyBook) {
+        if let Some((_, b)) = &mut self.energy {
+            *b = book.clone();
+        }
     }
 
     /// Drop queued commands and undelivered events (used by snapshot restore).

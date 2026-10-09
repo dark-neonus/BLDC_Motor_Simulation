@@ -48,6 +48,12 @@ pub enum EngineEvent {
         new: f64,
         source: ChangeSource,
     },
+    /// Non-fatal diagnostic from the engine or a block.
+    Warning {
+        t: SimTime,
+        source: String,
+        msg: String,
+    },
     CommandRejected {
         t: SimTime,
         reason: String,

@@ -181,7 +181,7 @@
   - **Verify:** new tests: NaN injection pauses with an error; corrupted snapshot returns `Err`, no panic; `cargo nextest run -p sim-core`.
   - **Done when:** all pass.
 
-- [ ] **P03.T18** — Review fixes: snapshot completeness, variable-event re-polling, fidelity wiring
+- [x] **P03.T18** — Review fixes: snapshot completeness, variable-event re-polling, fidelity wiring
   - **Depends:** P03.T17
   - **Do:**
     - Snapshot also stores `EnergyBook`, `dt_max`, `FidelityConfig`; document that module/block `save()` must include live params.

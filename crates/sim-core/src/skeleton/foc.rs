@@ -98,6 +98,27 @@ impl Foc {
         }
     }
 
+    /// Internal state for snapshots: [int_v, int_d, int_q, iq_ref, omega_ref].
+    pub fn save_state(&self) -> [f64; 5] {
+        [
+            self.int_v,
+            self.int_d,
+            self.int_q,
+            self.iq_ref,
+            self.omega_ref,
+        ]
+    }
+
+    pub fn restore_state(&mut self, s: [f64; 5]) {
+        [
+            self.int_v,
+            self.int_d,
+            self.int_q,
+            self.iq_ref,
+            self.omega_ref,
+        ] = s;
+    }
+
     pub fn reset(&mut self) {
         self.iq_ref = 0.0;
         self.int_v = 0.0;

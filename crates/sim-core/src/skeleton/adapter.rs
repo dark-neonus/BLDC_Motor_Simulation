@@ -32,6 +32,17 @@ struct DqMotor {
 }
 
 impl PlantModule for DqMotor {
+    fn save(&self) -> serde_json::Value {
+        // Live parameters belong in snapshots (Snapshot doc).
+        serde_json::json!({ "locked": self.locked })
+    }
+    fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
+        self.locked = v
+            .get("locked")
+            .and_then(serde_json::Value::as_bool)
+            .ok_or("missing `locked`")?;
+        Ok(())
+    }
     fn name(&self) -> &str {
         "motor"
     }
@@ -135,6 +146,16 @@ struct FocBlock {
 }
 
 impl DiscreteBlock for FocBlock {
+    fn save(&self) -> serde_json::Value {
+        serde_json::json!({ "foc": self.foc.save_state(), "open_loop_vq": self.open_loop_vq })
+    }
+    fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
+        let st: [f64; 5] = serde_json::from_value(v["foc"].clone()).map_err(|e| e.to_string())?;
+        self.foc.restore_state(st);
+        self.open_loop_vq =
+            serde_json::from_value(v["open_loop_vq"].clone()).map_err(|e| e.to_string())?;
+        Ok(())
+    }
     fn id(&self) -> &str {
         "ctrl"
     }
