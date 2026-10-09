@@ -268,3 +268,8 @@
 ## 2026-10-09 — P05.T08 Energy terms & V-MOT sweep
 - `tests/v_mot.rs`: V-MOT-001…013 each a named test with the catalog tolerances (005 = the P05.T03 equivalence test, moved to `tests/support/abc_dq.rs` and included). "Open circuit"/"unpowered" cases drive the terminals with the back-EMF so no current flows. Six-step ripple (012/013) uses ideal block currents through the new `MotorElectrical::from_currents` + `torque`.
 - Energy terms: copper (`energy.loss.copper`), iron (`energy.loss.iron`), magnetic W_mag and U_cog (stored), electrical input. Air-gap power T_e·ω is an internal transfer between motor and rotor, so it has no term of its own (the balance closes without it).
+
+## 2026-10-09 — P05.T12 (part 1/2): live scene + quantity asserts
+- Server: `default_app_state()` loads `builtin:scenes/gimbal-hold` (derived + checked), keeps it in `AppState.scene` (Arc<Mutex>); the runner factory builds from it, so resets keep edits; falls back to the skeleton if the scene cannot load. `AppState::apply_param` → `SceneModel::edit` (apply_edit) → engine commands; REST `POST /api/param {path, value}` (422 + reason on reject) and MCP `set_param`. Only `motor.*` live so far. `SceneModel::edit` takes the ChangeSource.
+- `Assert.value`/`tol` are `Param`s resolved with the signal's registered unit (`units::kind_of_unit`); test with rpm against rad/s.
+- e2e still green with the gimbal scene as the live default.

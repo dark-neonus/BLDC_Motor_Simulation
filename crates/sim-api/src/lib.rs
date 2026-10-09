@@ -9,20 +9,28 @@ pub mod ws;
 
 use std::future::Future;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use axum::Router;
+use sim_core::build::{SceneModel, build_engine as build_scene, reflected_inertia};
+use sim_core::engine::commands::{ChangeSource, EngineCommand};
 use sim_core::engine::runner::{RunnerCommand, RunnerHandle, RunnerStatus};
 use sim_core::skeleton::adapter::{SkeletonOptions, build_engine};
+use sim_model::scene::ResolvedScene;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 
-/// Shared server state: the one live simulation.
+/// Shared server state: the one live simulation and the scene it was built from.
 #[derive(Clone)]
 pub struct AppState {
     pub sim: Arc<RunnerHandle>,
+    /// The live scene (edits update it, so a reset keeps them). `None`: skeleton defaults.
+    pub scene: Option<Arc<Mutex<ResolvedScene>>>,
 }
+
+/// Default scene of the live server (P05.T12).
+pub const DEFAULT_SCENE: &str = "builtin:scenes/gimbal-hold";
 
 impl AppState {
     /// Run a command on the engine thread and return the status right after it.
@@ -35,7 +43,86 @@ impl AppState {
     }
 }
 
-/// Spawn the default live simulation (skeleton scene until P04 scenes land).
+impl AppState {
+    /// A live parameter edit. `motor.*` goes through the constraint rules (`apply_edit`)
+    /// first; on success the scene is updated and the engine commands are returned.
+    pub fn apply_param(
+        &self,
+        path: &str,
+        value: serde_json::Value,
+        source: ChangeSource,
+    ) -> Result<Vec<EngineCommand>, String> {
+        let Some(scene) = &self.scene else {
+            return Err("no scene is loaded; parameters cannot be edited".into());
+        };
+        if !path.starts_with("motor.") {
+            return Err(format!(
+                "`{path}`: only motor.* parameters are editable live so far"
+            ));
+        }
+        let mut sc = scene
+            .lock()
+            .map_err(|_| "scene lock poisoned".to_string())?;
+        let extra_j =
+            reflected_inertia(sc.gearbox.as_ref(), sc.load.as_ref()).map_err(|e| e.to_string())?;
+        let mut model = SceneModel {
+            motor: sc.motor.clone(),
+            extra_j,
+        };
+        let cmds = model.edit(path, value, source)?;
+        sc.motor = model.motor;
+        Ok(cmds)
+    }
+}
+
+/// Resolve the default scene from the library (derived, checked).
+fn load_default_scene() -> Result<ResolvedScene, String> {
+    use sim_model::io::parse_yaml;
+    use sim_model::library::Library;
+    let lib = Library::open_default().map_err(|e| e.to_string())?;
+    let scene: sim_model::scene::Scene = parse_yaml(
+        &lib.load(DEFAULT_SCENE).map_err(|e| e.to_string())?,
+        DEFAULT_SCENE,
+    )
+    .map_err(|e| e.to_string())?;
+    let mut r = scene.resolve(&lib).map_err(|e| e.to_string())?;
+    r.check(); // derive the motor constants; build_engine re-checks and rejects
+    build_scene(&r).map_err(|e| e.to_string())?;
+    Ok(r)
+}
+
+/// Spawn the default live simulation: the default scene, or the skeleton defaults if it
+/// cannot be loaded.
+pub fn default_app_state() -> std::io::Result<AppState> {
+    match load_default_scene() {
+        Ok(scene) => {
+            let shared = Arc::new(Mutex::new(scene));
+            let s2 = Arc::clone(&shared);
+            // INVARIANT: the scene built once above, and edits pass the constraint rules
+            // before they reach it, so rebuilding on reset cannot fail; fall back anyway.
+            let factory = Box::new(move || {
+                let sc = s2.lock().map(|g| g.clone());
+                match sc.ok().map(|s| build_scene(&s)) {
+                    Some(Ok(b)) => b.engine,
+                    _ => build_engine(SkeletonOptions::default()),
+                }
+            });
+            Ok(AppState {
+                sim: Arc::new(RunnerHandle::spawn(factory, None)?),
+                scene: Some(shared),
+            })
+        }
+        Err(e) => {
+            tracing::warn!("default scene unavailable ({e}); using the skeleton defaults");
+            Ok(AppState {
+                sim: Arc::new(default_runner()?),
+                scene: None,
+            })
+        }
+    }
+}
+
+/// Spawn the skeleton live simulation (fallback and tests).
 pub fn default_runner() -> std::io::Result<RunnerHandle> {
     RunnerHandle::spawn(Box::new(|| build_engine(SkeletonOptions::default())), None)
 }
@@ -87,9 +174,7 @@ pub fn run_blocking(addr: SocketAddr, open_browser: bool) -> std::io::Result<()>
         if open_browser && let Err(e) = open::that(&url) {
             tracing::warn!("could not open a browser: {e}");
         }
-        let state = AppState {
-            sim: Arc::new(default_runner()?),
-        };
+        let state = default_app_state()?;
         serve(listener, state).await
     })
 }

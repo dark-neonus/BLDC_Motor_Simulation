@@ -29,6 +29,39 @@ pub fn api() -> Router<AppState> {
         .route("/api/sim/reset", post(reset))
         .route("/api/sim/time_scale", post(time_scale))
         .route("/api/ctrl/target_speed", post(target_speed))
+        .route("/api/param", post(set_param))
+}
+
+/// Body of `POST /api/param`: a dotted parameter path and a value (number or quantity
+/// string such as "0.2 ohm").
+#[derive(Debug, Deserialize)]
+pub struct ParamEdit {
+    pub path: String,
+    pub value: Json_,
+}
+
+/// Live parameter edit through the constraint rules; 422 with the reason if rejected.
+async fn set_param(
+    State(s): State<AppState>,
+    Json(p): Json<ParamEdit>,
+) -> Result<Json<Map<String, Json_>>, (StatusCode, Json<Json_>)> {
+    let cmds = s
+        .apply_param(&p.path, p.value, ChangeSource::Ui)
+        .map_err(|e| {
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({ "error": e })),
+            )
+        })?;
+    let mut last = None;
+    for c in cmds {
+        last = s.command(RunnerCommand::Engine(c)).await;
+    }
+    let st = match last {
+        Some(st) => st,
+        None => s.sim.status(),
+    };
+    Ok(Json(state_map(&s.sim, &st)))
 }
 
 async fn health() -> Json<Json_> {

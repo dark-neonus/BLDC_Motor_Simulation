@@ -40,6 +40,15 @@ pub struct TargetSpeedArgs {
     pub rad_per_s: f64,
 }
 
+/// Arguments of `set_param`.
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SetParamArgs {
+    /// Dotted parameter path, e.g. `motor.electrical.r_phase`.
+    pub path: String,
+    /// A number (SI) or a quantity string such as "0.2 ohm".
+    pub value: serde_json::Value,
+}
+
 /// MCP tool server bound to the live simulation.
 #[derive(Clone)]
 pub struct BldcMcp {
@@ -85,6 +94,23 @@ impl BldcMcp {
             ClockAction::Reset => RunnerCommand::Reset,
         };
         self.command(cmd).await
+    }
+
+    #[tool(
+        description = "Edit a live parameter by its dotted path (e.g. motor.electrical.r_phase) with a number (SI) or a quantity string (\"0.2 ohm\"). Edits pass the constraint rules first; a rejected edit returns the reason and changes nothing. Only motor.* is editable live so far."
+    )]
+    async fn set_param(
+        &self,
+        Parameters(SetParamArgs { path, value }): Parameters<SetParamArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let cmds = self
+            .app
+            .apply_param(&path, value, ChangeSource::Mcp)
+            .map_err(|e| ErrorData::invalid_params(e, None))?;
+        for c in cmds {
+            self.app.command(RunnerCommand::Engine(c)).await;
+        }
+        structured(&state_map(&self.app.sim, &self.app.sim.status()))
     }
 
     #[tool(

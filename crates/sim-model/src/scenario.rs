@@ -47,10 +47,10 @@ pub enum Op {
 pub struct Assert {
     pub signal: String,
     pub op: Op,
-    /// SI value.
-    pub value: f64,
-    #[serde(default)]
-    pub tol: f64,
+    /// A number (SI) or a quantity string ("90 deg"), resolved with the signal's unit.
+    pub value: Param,
+    /// Tolerance in the same unit (default 0).
+    pub tol: Option<Param>,
     /// Absolute check time (default: the current timeline time).
     pub at: Option<Param>,
     /// The condition must hold over [t, t + window].

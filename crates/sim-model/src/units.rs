@@ -192,6 +192,19 @@ pub fn parse_quantity(input: &str, expected: Kind) -> Result<f64, UnitError> {
     Ok(value * scale + offset)
 }
 
+/// The kind of a registered signal unit (`"rad/s"`, `"N*m"`, `"-"` …); `None` if the
+/// unit is not in the table.
+pub fn kind_of_unit(unit: &str) -> Option<Kind> {
+    if matches!(unit.trim(), "-" | "") {
+        return Some(Kind::Dimensionless);
+    }
+    let key = normalize(unit)?;
+    TABLE
+        .iter()
+        .find(|(u, _, _, _)| *u == key)
+        .map(|&(_, k, _, _)| k)
+}
+
 /// Format an SI value in `unit` (one of the table's canonical keys), e.g. `"2.5 mH"`.
 pub fn format_quantity(si_value: f64, unit: &str) -> Option<String> {
     let key = normalize(unit)?;

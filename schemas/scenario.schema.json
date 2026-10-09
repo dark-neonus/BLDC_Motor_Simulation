@@ -314,14 +314,19 @@
           "type": "string"
         },
         "tol": {
-          "type": "number",
-          "format": "double",
-          "default": 0.0
+          "description": "Tolerance in the same unit (default 0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "value": {
-          "description": "SI value.",
-          "type": "number",
-          "format": "double"
+          "description": "A number (SI) or a quantity string (\"90 deg\"), resolved with the signal's unit.",
+          "$ref": "#/$defs/Param"
         },
         "window": {
           "description": "The condition must hold over [t, t + window].",

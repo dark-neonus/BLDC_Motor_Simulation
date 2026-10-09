@@ -149,6 +149,7 @@ impl SceneModel {
         &mut self,
         path: &str,
         value: serde_json::Value,
+        source: ChangeSource,
     ) -> Result<Vec<EngineCommand>, String> {
         let before = pmsm_from(&self.motor, self.extra_j).map_err(|e| e.to_string())?;
         let r = constraints::apply_edit(&self.motor, path, value);
@@ -184,7 +185,7 @@ impl SceneModel {
             .map(|(n, _, v)| EngineCommand::SetParam {
                 path: format!("motor.{n}"),
                 value: *v,
-                source: ChangeSource::Scenario,
+                source,
             })
             .collect())
     }

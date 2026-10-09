@@ -22,6 +22,7 @@ async fn start() -> (
     let addr = listener.local_addr().unwrap();
     let state = AppState {
         sim: Arc::new(default_runner().unwrap()),
+        scene: None,
     };
     let (stop_tx, stop_rx) = oneshot::channel::<()>();
     let server = tokio::spawn(serve_until(listener, state, async {

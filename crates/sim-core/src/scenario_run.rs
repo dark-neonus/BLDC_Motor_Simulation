@@ -6,7 +6,7 @@
 
 use sim_model::param::Param;
 use sim_model::scenario::{Action, Assert, Op, Scenario, TargetKind};
-use sim_model::units::Kind;
+use sim_model::units::{Kind, kind_of_unit};
 
 use crate::build::BuiltScene;
 use crate::engine::commands::{ChangeSource, EngineCommand, EngineEvent};
@@ -250,6 +250,27 @@ pub fn run(sc: &Scenario, mut b: BuiltScene, asserts: bool) -> Result<RunOutput,
         .iter()
         .map(|a| e.bus.id(&a.signal).map_err(|err| format!("assert: {err}")))
         .collect::<Result<Vec<_>, _>>()?;
+    // Assert values and tolerances in the signal's own unit kind (CONVENTIONS §4).
+    let resolved: Vec<(f64, f64)> = checks
+        .iter()
+        .zip(&check_ids)
+        .map(|(a, &id)| {
+            let kind = kind_of_unit(&e.bus.meta(id).unit).unwrap_or(Kind::Dimensionless);
+            let v = a
+                .value
+                .value
+                .si(kind)
+                .map_err(|err| format!("assert `{}` value: {err}", a.signal))?;
+            let tol = match &a.tol {
+                Some(t) => t
+                    .value
+                    .si(kind)
+                    .map_err(|err| format!("assert `{}` tol: {err}", a.signal))?,
+                None => 0.0,
+            };
+            Ok((v, tol))
+        })
+        .collect::<Result<_, String>>()?;
 
     let mut out = RunOutput {
         columns: std::iter::once("t".to_owned()).chain(names).collect(),
@@ -260,12 +281,13 @@ pub fn run(sc: &Scenario, mut b: BuiltScene, asserts: bool) -> Result<RunOutput,
     let mut active: Vec<usize> = Vec::new();
     let eval = |i: usize, t: f64, v: f64, results: &mut Vec<Option<AssertResult>>| {
         let a = &checks[i];
-        let ok = holds(a.op, v, a.value, a.tol);
+        let (value, tol) = resolved[i];
+        let ok = holds(a.op, v, value, tol);
         let r = results[i].get_or_insert_with(|| AssertResult {
             signal: a.signal.clone(),
             op: a.op,
-            value: a.value,
-            tol: a.tol,
+            value,
+            tol,
             t_start: t,
             t_end: t,
             passed: true,
@@ -302,7 +324,7 @@ pub fn run(sc: &Scenario, mut b: BuiltScene, asserts: bool) -> Result<RunOutput,
                             source: ChangeSource::Scenario,
                         }]
                     } else {
-                        b.model.edit(&path, value)?
+                        b.model.edit(&path, value, ChangeSource::Scenario)?
                     };
                     cmds.into_iter().for_each(|c| e.queue(c));
                 }
@@ -354,8 +376,8 @@ pub fn run(sc: &Scenario, mut b: BuiltScene, asserts: bool) -> Result<RunOutput,
             let mut r = r.unwrap_or_else(|| AssertResult {
                 signal: a.signal.clone(),
                 op: a.op,
-                value: a.value,
-                tol: a.tol,
+                value: resolved[i].0,
+                tol: resolved[i].1,
                 t_start: t0,
                 t_end: t1,
                 passed: false,
@@ -504,5 +526,17 @@ mod tests {
                 .is_err()
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn assert_values_take_quantities_in_the_signal_unit() {
+        // motor.omega is rad/s: 5 rad/s = 47.746 rpm; the tolerance is in rpm too.
+        let o = go(&format!(
+            "{HEAD}sample: 1 ms\ntimeline:\n  - target: {{ kind: velocity, value: 5 rad/s, ramp: 0.1 s }}\n  - wait: 0.6 s\n  - assert: {{ signal: motor.omega, op: eq, value: 47.746 rpm, tol: 2 rpm }}\n  - assert: {{ signal: motor.omega, op: gt, value: 100 rpm }}\n"
+        ));
+        assert!(o.asserts[0].passed, "{:?}", o.asserts[0]);
+        assert!((o.asserts[0].value - 5.0).abs() < 1e-4, "converted to SI");
+        assert!((o.asserts[0].tol - 2.0 * std::f64::consts::PI / 30.0).abs() < 1e-12);
+        assert!(!o.asserts[1].passed, "100 rpm is not reached");
     }
 }
