@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InverterParams",
+  "type": "object",
+  "properties": {
+    "dead_time": {
+      "$ref": "#/$defs/Param"
+    },
+    "f_pwm": {
+      "$ref": "#/$defs/Param"
+    },
+    "i_eps": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Param"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "i_max": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Param"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "r_on": {
+      "$ref": "#/$defs/Param"
+    },
+    "t_fall": {
+      "$ref": "#/$defs/Param"
+    },
+    "t_rise": {
+      "$ref": "#/$defs/Param"
+    },
+    "v_f": {
+      "$ref": "#/$defs/Param"
+    },
+    "v_max": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Param"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "f_pwm",
+    "dead_time",
+    "r_on",
+    "v_f",
+    "t_rise",
+    "t_fall"
+  ],
+  "$defs": {
+    "Param": {
+      "description": "A parameter value with provenance.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/Source",
+              "default": "default"
+            },
+            "value": {
+              "$ref": "#/$defs/Raw"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Raw"
+        }
+      ]
+    },
+    "Raw": {
+      "description": "A raw value as written: a number (SI) or a quantity string.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Source": {
+      "description": "Where a value came from.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "measured",
+            "datasheet",
+            "estimated",
+            "default"
+          ]
+        },
+        {
+          "description": "Computed from other parameters by a constraint rule (locked in the UI).",
+          "type": "string",
+          "const": "derived"
+        }
+      ]
+    }
+  }
+}

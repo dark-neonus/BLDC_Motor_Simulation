@@ -177,3 +177,8 @@
 ## 2026-10-09 — P04.T06 YAML IO
 - `sim_model::io`: load/save/parse_yaml (serde-saphyr, line/col errors prefixed with file), schema modeline on save, `schema_version` with TooNew error and a `migrate()` hook (v1 identity).
 - `bldc-sim validate-file`: motor files only for now (detected by `electrical:` key); other types join in T10/T11. Unknown-field errors list the expected fields (serde), no extra fuzzy matcher.
+
+## 2026-10-09 — P04.T07 JSON Schemas
+- schemars 1.2 derives on all params types; `Param` uses `#[schemars(with = "ParamRepr")]` → anyOf(number|string, {value, source, note}).
+- `bldc-sim dump-schemas` writes motor/gearbox/load/inverter/supply/sensors/controller; scene/scenario join in T11. `just gen-schemas`, `just schemas-check` (in `just check`) and a CI step.
+- `check-jsonschema` on presets is wired when presets exist (P04.T09). Sanity-checked: valid sample passes, unknown field rejected.

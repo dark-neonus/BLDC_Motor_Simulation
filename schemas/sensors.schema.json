@@ -1,0 +1,425 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SensorsParams",
+  "type": "object",
+  "properties": {
+    "adc": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AdcParams"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "encoder": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EncoderParams"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "hall": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HallParams"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "observer_gamma": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Param"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "AdcParams": {
+      "type": "object",
+      "properties": {
+        "bits": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "bypass": {
+          "type": "boolean",
+          "default": false
+        },
+        "full_scale": {
+          "$ref": "#/$defs/Param"
+        },
+        "gain_error": {
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noise": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shunts": {
+          "description": "2 or 3 shunts.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "update_rate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "bits",
+        "full_scale",
+        "shunts"
+      ]
+    },
+    "EncoderParams": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "air_gap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bits": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "bypass": {
+              "type": "boolean",
+              "default": false
+            },
+            "chip": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "eccentricity": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "gap_max": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "gap_min": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "inl": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "magnetic"
+            },
+            "latency": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "mount_offset": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "noise": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "update_rate": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "bits"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bypass": {
+              "type": "boolean",
+              "default": false
+            },
+            "cpr": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "index_angle": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "incremental"
+            },
+            "latency": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "noise": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "update_rate": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "cpr"
+          ]
+        }
+      ]
+    },
+    "HallParams": {
+      "type": "object",
+      "properties": {
+        "bypass": {
+          "type": "boolean",
+          "default": false
+        },
+        "hysteresis": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noise": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offsets": {
+          "description": "Per-sensor placement errors [rad electrical].",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Param"
+          }
+        },
+        "update_rate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Param": {
+      "description": "A parameter value with provenance.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/Source",
+              "default": "default"
+            },
+            "value": {
+              "$ref": "#/$defs/Raw"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Raw"
+        }
+      ]
+    },
+    "Raw": {
+      "description": "A raw value as written: a number (SI) or a quantity string.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Source": {
+      "description": "Where a value came from.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "measured",
+            "datasheet",
+            "estimated",
+            "default"
+          ]
+        },
+        {
+          "description": "Computed from other parameters by a constraint rule (locked in the UI).",
+          "type": "string",
+          "const": "derived"
+        }
+      ]
+    }
+  }
+}

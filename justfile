@@ -100,7 +100,7 @@ fmt-check:
 check-fast: fmt-check lint test-rust test-web plan-check
 
 # Full gate, run at phase gates
-check: check-fast validate e2e
+check: check-fast validate e2e schemas-check
     pnpm -C web build
     pnpm -C docs build
 
@@ -123,3 +123,11 @@ next:
 # Validate plan task format and dependencies
 plan-check:
     python3 Context/plan/progress.py --check
+
+# Regenerate JSON Schemas for parameter files (P04.T07)
+gen-schemas:
+    cargo run -q -p bldc-sim -- dump-schemas --out schemas
+
+# Fail if committed schemas differ from the generated ones
+schemas-check: gen-schemas
+    git diff --exit-code schemas/

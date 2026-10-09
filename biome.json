@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/graphify-out", "!**/target", "!**/.claude"]
+    "includes": ["**", "!**/graphify-out", "!**/target", "!**/.claude", "!schemas/*.schema.json"]
   },
   "formatter": {
     "enabled": true,

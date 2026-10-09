@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 pub use uom::si::f64 as si;
 
 /// Physical kind of a quantity (what a parameter expects).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
     Dimensionless,

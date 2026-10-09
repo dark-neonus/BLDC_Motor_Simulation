@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub enum Phase {
     A,
     B,
@@ -12,7 +12,7 @@ pub enum Phase {
 }
 
 /// One tooth coil: wound around tooth `tooth`, sides in slots `tooth` and `tooth+1 (mod Q)`.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Coil {
     pub tooth: u32,
     pub slot_a: u32,

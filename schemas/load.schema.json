@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LoadParams",
+  "oneOf": [
+    {
+      "description": "Arm + point mass under gravity (EQ-MECH-06).",
+      "type": "object",
+      "properties": {
+        "arm_length": {
+          "$ref": "#/$defs/Param"
+        },
+        "arm_mass": {
+          "$ref": "#/$defs/Param"
+        },
+        "distance": {
+          "$ref": "#/$defs/Param"
+        },
+        "friction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Friction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "arm"
+        },
+        "mass": {
+          "$ref": "#/$defs/Param"
+        },
+        "on_change": {
+          "$ref": "#/$defs/OnChange",
+          "default": "keep_speed"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "arm_length",
+        "arm_mass",
+        "mass",
+        "distance"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "constant"
+        },
+        "torque": {
+          "$ref": "#/$defs/Param"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "torque"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "brake"
+        },
+        "torque": {
+          "$ref": "#/$defs/Param"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "torque"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "coefficient": {
+          "$ref": "#/$defs/Param"
+        },
+        "kind": {
+          "type": "string",
+          "const": "viscous"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "coefficient"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "inertia": {
+          "$ref": "#/$defs/Param"
+        },
+        "kind": {
+          "type": "string",
+          "const": "flywheel"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "inertia"
+      ]
+    }
+  ],
+  "$defs": {
+    "Friction": {
+      "type": "object",
+      "properties": {
+        "coulomb": {
+          "$ref": "#/$defs/Param"
+        },
+        "static_torque": {
+          "$ref": "#/$defs/Param"
+        },
+        "viscous": {
+          "$ref": "#/$defs/Param"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "static_torque",
+        "coulomb",
+        "viscous"
+      ]
+    },
+    "OnChange": {
+      "type": "string",
+      "enum": [
+        "keep_speed",
+        "conserve_momentum"
+      ]
+    },
+    "Param": {
+      "description": "A parameter value with provenance.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/Source",
+              "default": "default"
+            },
+            "value": {
+              "$ref": "#/$defs/Raw"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Raw"
+        }
+      ]
+    },
+    "Raw": {
+      "description": "A raw value as written: a number (SI) or a quantity string.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Source": {
+      "description": "Where a value came from.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "measured",
+            "datasheet",
+            "estimated",
+            "default"
+          ]
+        },
+        {
+          "description": "Computed from other parameters by a constraint rule (locked in the UI).",
+          "type": "string",
+          "const": "derived"
+        }
+      ]
+    }
+  }
+}

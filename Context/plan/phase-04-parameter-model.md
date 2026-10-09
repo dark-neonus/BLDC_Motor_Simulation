@@ -93,7 +93,7 @@
   - **Verify:** Tests: a malformed file gives a line/col error; an unknown field is rejected (`deny_unknown_fields`) with a "did you mean" suggestion if cheap; `validate-file` exit codes are correct.
   - **Done when:** Passing.
 
-- [ ] **P04.T07** — JSON Schema generation
+- [x] **P04.T07** — JSON Schema generation
   - **Depends:** P04.T06
   - **Do:** First derive/implement `schemars::JsonSchema` for all `sim-model::params` types (deferred from P04.T03; `Param` needs a manual impl accepting number | quantity string | `{value, source, note}`). Then `bldc-sim dump-schemas --out schemas/` writes one schema per file type (motor, gearbox, load, inverter, supply, sensors, controller, scene, scenario; `lesson` is added in P18.T09). Add the `just gen-schemas` recipe. CI check: regenerating produces no diff.
   - **Files:** `crates/bldc-sim/src/cli/dump_schemas.rs`, `schemas/*.schema.json`

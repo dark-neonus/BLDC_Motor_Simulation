@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SupplyParams",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "ideal"
+        },
+        "voltage": {
+          "$ref": "#/$defs/Param"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "voltage"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "current_limit": {
+          "$ref": "#/$defs/Param"
+        },
+        "kind": {
+          "type": "string",
+          "const": "psu"
+        },
+        "r_out": {
+          "$ref": "#/$defs/Param"
+        },
+        "voltage": {
+          "$ref": "#/$defs/Param"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "voltage",
+        "current_limit",
+        "r_out"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "c1_cell": {
+          "$ref": "#/$defs/Param"
+        },
+        "capacity_cell": {
+          "$ref": "#/$defs/Param"
+        },
+        "chemistry": {
+          "$ref": "#/$defs/Chemistry"
+        },
+        "kind": {
+          "type": "string",
+          "const": "battery"
+        },
+        "ocv_cell": {
+          "description": "Per-cell OCV table: (SoC, volts) pairs, ascending SoC.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "number",
+                "format": "double"
+              }
+            ]
+          }
+        },
+        "parallel": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "r0_cell": {
+          "$ref": "#/$defs/Param"
+        },
+        "r1_cell": {
+          "$ref": "#/$defs/Param"
+        },
+        "series": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "soc_init": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "chemistry",
+        "series",
+        "parallel",
+        "capacity_cell",
+        "r0_cell",
+        "r1_cell",
+        "c1_cell",
+        "soc_init",
+        "ocv_cell"
+      ]
+    }
+  ],
+  "$defs": {
+    "Chemistry": {
+      "type": "string",
+      "enum": [
+        "li_ion",
+        "lipo",
+        "lifepo4"
+      ]
+    },
+    "Param": {
+      "description": "A parameter value with provenance.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/Source",
+              "default": "default"
+            },
+            "value": {
+              "$ref": "#/$defs/Raw"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Raw"
+        }
+      ]
+    },
+    "Raw": {
+      "description": "A raw value as written: a number (SI) or a quantity string.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Source": {
+      "description": "Where a value came from.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "measured",
+            "datasheet",
+            "estimated",
+            "default"
+          ]
+        },
+        {
+          "description": "Computed from other parameters by a constraint rule (locked in the UI).",
+          "type": "string",
+          "const": "derived"
+        }
+      ]
+    }
+  }
+}

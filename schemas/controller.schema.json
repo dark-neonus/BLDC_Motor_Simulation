@@ -1,0 +1,354 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ControllerParams",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "advance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "family": {
+          "type": "string",
+          "const": "six_step"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "rate": {
+          "$ref": "#/$defs/Param"
+        },
+        "speed_loop": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoopParams"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "rate",
+        "limits"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "accel": {
+          "$ref": "#/$defs/Param"
+        },
+        "family": {
+          "type": "string",
+          "const": "open_loop"
+        },
+        "k_vf": {
+          "$ref": "#/$defs/Param"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "rate": {
+          "$ref": "#/$defs/Param"
+        },
+        "v0": {
+          "$ref": "#/$defs/Param"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "rate",
+        "v0",
+        "k_vf",
+        "accel",
+        "limits"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "current": {
+          "$ref": "#/$defs/LoopParams"
+        },
+        "family": {
+          "type": "string",
+          "const": "foc"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoopParams"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prefilter": {
+          "type": "boolean",
+          "default": false
+        },
+        "sensorless": {
+          "type": "boolean",
+          "default": false
+        },
+        "velocity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoopParams"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "current",
+        "limits"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "current": {
+          "$ref": "#/$defs/LoopParams"
+        },
+        "family": {
+          "type": "string",
+          "const": "mit"
+        },
+        "kd": {
+          "$ref": "#/$defs/Param"
+        },
+        "kp": {
+          "$ref": "#/$defs/Param"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "rate": {
+          "$ref": "#/$defs/Param"
+        },
+        "tau_ff": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "current",
+        "rate",
+        "kp",
+        "kd",
+        "limits"
+      ]
+    },
+    {
+      "description": "User Luau script (P09.T10).",
+      "type": "object",
+      "properties": {
+        "family": {
+          "type": "string",
+          "const": "custom"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rate": {
+          "$ref": "#/$defs/Param"
+        },
+        "script": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "script",
+        "rate",
+        "inputs",
+        "outputs",
+        "limits"
+      ]
+    }
+  ],
+  "$defs": {
+    "Limits": {
+      "type": "object",
+      "properties": {
+        "current": {
+          "$ref": "#/$defs/Param"
+        },
+        "ramp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "speed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "voltage_fraction": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "current"
+      ]
+    },
+    "LoopParams": {
+      "type": "object",
+      "properties": {
+        "bandwidth": {
+          "description": "Target bandwidth [rad/s] (gains derived, EQ-CTRL-03/04) or explicit gains.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "ki": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "kp": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "rate": {
+          "$ref": "#/$defs/Param"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "rate"
+      ]
+    },
+    "Param": {
+      "description": "A parameter value with provenance.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/Source",
+              "default": "default"
+            },
+            "value": {
+              "$ref": "#/$defs/Raw"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Raw"
+        }
+      ]
+    },
+    "Raw": {
+      "description": "A raw value as written: a number (SI) or a quantity string.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Source": {
+      "description": "Where a value came from.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "measured",
+            "datasheet",
+            "estimated",
+            "default"
+          ]
+        },
+        {
+          "description": "Computed from other parameters by a constraint rule (locked in the UI).",
+          "type": "string",
+          "const": "derived"
+        }
+      ]
+    }
+  }
+}

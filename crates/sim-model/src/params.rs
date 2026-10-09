@@ -13,14 +13,14 @@ use crate::param::Param;
 
 // ------------------------------------------------------------------ motor
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Topology {
     Inrunner,
     Outrunner,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Connection {
     Star,
@@ -28,7 +28,7 @@ pub enum Connection {
 }
 
 /// Which motor constant the user entered (the others are derived, EQ-CONV-13).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ConstantForm {
     Kv,
@@ -37,7 +37,7 @@ pub enum ConstantForm {
     LambdaM,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MotorIdentity {
     pub name: String,
@@ -46,7 +46,7 @@ pub struct MotorIdentity {
     pub topology: Topology,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MotorElectrical {
     /// Phase resistance, star-equivalent [Ω] at `thermal.t_ref`.
@@ -68,7 +68,7 @@ pub struct MotorElectrical {
     pub connection: Connection,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum EmfShape {
     Sinusoidal,
@@ -82,7 +82,7 @@ pub enum EmfShape {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Harmonic {
     pub n: u32,
@@ -91,7 +91,7 @@ pub struct Harmonic {
     pub phase: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Saturation {
     /// Knee current [A] (EQ-MOT-10).
@@ -102,7 +102,7 @@ pub struct Saturation {
     pub cross: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MotorMagnetic {
     pub emf_shape: EmfShape,
@@ -117,7 +117,7 @@ pub struct MotorMagnetic {
     pub alpha_br: Option<Param>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CoggingTerm {
     pub amplitude: Param,
@@ -125,14 +125,14 @@ pub struct CoggingTerm {
     pub phase: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MotorWinding {
     pub slots: u32,
     pub pole_pairs: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MotorGeometry {
     pub stator_od: Option<Param>,
@@ -145,7 +145,7 @@ pub struct MotorGeometry {
     pub rotor_od: Option<Param>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Friction {
     pub static_torque: Param,
@@ -153,7 +153,7 @@ pub struct Friction {
     pub viscous: Param,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MotorMechanical {
     pub j_rotor: Param,
@@ -161,7 +161,7 @@ pub struct MotorMechanical {
     pub friction: Option<Friction>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MotorThermal {
     pub r_ws: Param,
@@ -176,7 +176,7 @@ pub struct MotorThermal {
     pub kappa: Option<Param>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MotorRatings {
     pub voltage: Option<Param>,
@@ -186,7 +186,7 @@ pub struct MotorRatings {
     pub torque_peak: Option<Param>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MotorParams {
     pub schema_version: u32,
@@ -225,7 +225,7 @@ fn empty_ratings() -> MotorRatings {
 
 // ------------------------------------------------------------------ drivetrain & loads
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GearboxParams {
     pub name: String,
@@ -238,7 +238,9 @@ pub struct GearboxParams {
     pub j_out: Option<Param>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum OnChange {
     #[default]
@@ -246,7 +248,7 @@ pub enum OnChange {
     ConserveMomentum,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum LoadParams {
     /// Arm + point mass under gravity (EQ-MECH-06).
@@ -275,7 +277,7 @@ pub enum LoadParams {
 
 // ------------------------------------------------------------------ power
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct InverterParams {
     pub name: String,
@@ -290,7 +292,7 @@ pub struct InverterParams {
     pub i_max: Option<Param>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Chemistry {
     LiIon,
@@ -298,7 +300,7 @@ pub enum Chemistry {
     Lifepo4,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SupplyParams {
     Ideal {
@@ -323,14 +325,14 @@ pub enum SupplyParams {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BusParams {
     pub capacitance: Param,
     pub chopper: Option<ChopperParams>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ChopperParams {
     pub r_brake: Param,
@@ -341,7 +343,7 @@ pub struct ChopperParams {
 
 // ------------------------------------------------------------------ sensors
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SensorCommon {
     #[serde(default)]
@@ -351,7 +353,7 @@ pub struct SensorCommon {
     pub noise: Option<Param>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum EncoderParams {
     Magnetic {
@@ -374,7 +376,7 @@ pub enum EncoderParams {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HallParams {
     /// Per-sensor placement errors [rad electrical].
@@ -385,7 +387,7 @@ pub struct HallParams {
     pub common: SensorCommon,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AdcParams {
     pub bits: u32,
@@ -399,7 +401,7 @@ pub struct AdcParams {
     pub common: SensorCommon,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SensorsParams {
     pub hall: Option<HallParams>,
@@ -410,7 +412,7 @@ pub struct SensorsParams {
 
 // ------------------------------------------------------------------ control
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LoopParams {
     #[serde(default = "yes")]
@@ -426,7 +428,7 @@ fn yes() -> bool {
     true
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Limits {
     pub current: Param,
@@ -435,7 +437,7 @@ pub struct Limits {
     pub ramp: Option<Param>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "family", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ControllerParams {
     SixStep {
@@ -481,7 +483,7 @@ pub enum ControllerParams {
 
 // ------------------------------------------------------------------ faults, protection, fidelity
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProtectionParams {
     pub over_current: Option<Threshold>,
@@ -490,7 +492,9 @@ pub struct ProtectionParams {
     pub over_temperature: Option<Threshold>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ProtectAction {
     #[default]
@@ -498,7 +502,7 @@ pub enum ProtectAction {
     Brake,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Threshold {
     #[serde(default = "yes")]
@@ -511,7 +515,9 @@ pub struct Threshold {
     pub latch: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TierParam {
     Ideal,
@@ -520,7 +526,7 @@ pub enum TierParam {
     Detailed,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FidelityParams {
     #[serde(default)]

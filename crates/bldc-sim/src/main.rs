@@ -42,6 +42,12 @@ enum Cmd {
         #[arg(required = true)]
         files: Vec<PathBuf>,
     },
+    /// Write one JSON Schema per parameter file type.
+    DumpSchemas {
+        /// Output directory.
+        #[arg(long, default_value = "schemas")]
+        out: PathBuf,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -57,6 +63,7 @@ fn main() -> anyhow::Result<()> {
             Ok(sim_api::run_blocking((host, port).into(), open)?)
         }
         Some(Cmd::RunScenario { file, out }) => cli::run_scenario::run(&file, &out),
+        Some(Cmd::DumpSchemas { out }) => cli::dump_schemas::run(&out),
         Some(Cmd::ValidateFile { files }) => {
             if !cli::validate_file::run(&files) {
                 std::process::exit(1);

@@ -23,6 +23,7 @@ jobs:
       - run: scripts/ci-run.sh "cargo fmt" cargo fmt --all --check
       - run: scripts/ci-run.sh "cargo clippy" cargo clippy --workspace --all-targets -- -D warnings
       - run: scripts/ci-run.sh "cargo nextest" cargo nextest run --workspace --no-tests=pass
+      - run: scripts/ci-run.sh "schemas up to date" bash -c "cargo run -q -p bldc-sim -- dump-schemas --out schemas && git diff --exit-code schemas/"
 
   web:
     runs-on: ubuntu-latest

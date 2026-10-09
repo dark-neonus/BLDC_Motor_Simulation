@@ -1,0 +1,689 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MotorParams",
+  "type": "object",
+  "properties": {
+    "electrical": {
+      "$ref": "#/$defs/MotorElectrical"
+    },
+    "geometry": {
+      "$ref": "#/$defs/MotorGeometry",
+      "default": {
+        "air_gap": null,
+        "magnet_arc": null,
+        "magnet_thickness": null,
+        "rotor_od": null,
+        "stack_length": null,
+        "stator_id": null,
+        "stator_od": null
+      }
+    },
+    "identity": {
+      "$ref": "#/$defs/MotorIdentity"
+    },
+    "magnetic": {
+      "$ref": "#/$defs/MotorMagnetic"
+    },
+    "mechanical": {
+      "$ref": "#/$defs/MotorMechanical"
+    },
+    "ratings": {
+      "$ref": "#/$defs/MotorRatings",
+      "default": {
+        "current_continuous": null,
+        "current_peak": null,
+        "speed": null,
+        "torque_peak": null,
+        "voltage": null
+      }
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "thermal": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MotorThermal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "winding": {
+      "$ref": "#/$defs/MotorWinding"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "identity",
+    "electrical",
+    "magnetic",
+    "winding",
+    "mechanical"
+  ],
+  "$defs": {
+    "CoggingTerm": {
+      "type": "object",
+      "properties": {
+        "amplitude": {
+          "$ref": "#/$defs/Param"
+        },
+        "phase": {
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "amplitude"
+      ]
+    },
+    "Connection": {
+      "type": "string",
+      "enum": [
+        "star",
+        "delta"
+      ]
+    },
+    "ConstantForm": {
+      "description": "Which motor constant the user entered (the others are derived, EQ-CONV-13).",
+      "type": "string",
+      "enum": [
+        "kv",
+        "kt",
+        "ke",
+        "lambda_m"
+      ]
+    },
+    "EmfShape": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "sinusoidal"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Flat-top width per half period [rad or \"120 deg\"] (EQ-MOT-03).",
+          "type": "object",
+          "properties": {
+            "flat_top": {
+              "$ref": "#/$defs/Param"
+            },
+            "kind": {
+              "type": "string",
+              "const": "trapezoidal"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "flat_top"
+          ]
+        },
+        {
+          "description": "Harmonics n (odd) with amplitude b_n relative to the fundamental and phase φ_n.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "harmonics"
+            },
+            "terms": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Harmonic"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "terms"
+          ]
+        }
+      ]
+    },
+    "Friction": {
+      "type": "object",
+      "properties": {
+        "coulomb": {
+          "$ref": "#/$defs/Param"
+        },
+        "static_torque": {
+          "$ref": "#/$defs/Param"
+        },
+        "viscous": {
+          "$ref": "#/$defs/Param"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "static_torque",
+        "coulomb",
+        "viscous"
+      ]
+    },
+    "Harmonic": {
+      "type": "object",
+      "properties": {
+        "b": {
+          "type": "number",
+          "format": "double"
+        },
+        "n": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "phase": {
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "n",
+        "b"
+      ]
+    },
+    "MotorElectrical": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/Connection"
+        },
+        "entered_as": {
+          "description": "Which constant was entered; the others are derived and locked.",
+          "$ref": "#/$defs/ConstantForm"
+        },
+        "ke": {
+          "description": "Back-EMF constant (LL peak) [V·s/rad] — derived unless entered.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kt": {
+          "description": "Torque constant (per peak phase A) [N·m/A] — derived unless entered.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kv": {
+          "description": "Velocity constant (LL peak) [rpm/V] — derived unless entered.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "l_d": {
+          "description": "d-axis inductance [H] (= l_q for non-salient motors).",
+          "$ref": "#/$defs/Param"
+        },
+        "l_q": {
+          "description": "q-axis inductance [H].",
+          "$ref": "#/$defs/Param"
+        },
+        "lambda_m": {
+          "description": "Magnet flux linkage, peak per phase [Wb] — canonical constant (EQ-CONV-09…11).",
+          "$ref": "#/$defs/Param"
+        },
+        "r_phase": {
+          "description": "Phase resistance, star-equivalent [Ω] at `thermal.t_ref`.",
+          "$ref": "#/$defs/Param"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "r_phase",
+        "l_d",
+        "l_q",
+        "lambda_m",
+        "entered_as",
+        "connection"
+      ]
+    },
+    "MotorGeometry": {
+      "type": "object",
+      "properties": {
+        "air_gap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "magnet_arc": {
+          "description": "Magnet arc as a fraction of the pole pitch (0…1).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "magnet_thickness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rotor_od": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stack_length": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stator_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stator_od": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "MotorIdentity": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "size_class": {
+          "description": "Size class `DDHH` (stator diameter × stack height, mm), e.g. \"8010\".",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "topology": {
+          "$ref": "#/$defs/Topology"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "topology"
+      ]
+    },
+    "MotorMagnetic": {
+      "type": "object",
+      "properties": {
+        "alpha_br": {
+          "description": "Magnet remanence temperature coefficient [1/K] (default −0.0012).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cogging": {
+          "description": "Cogging harmonics: amplitude [N·m] and phase per harmonic of N_c (EQ-MOT-08).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CoggingTerm"
+          }
+        },
+        "emf_shape": {
+          "$ref": "#/$defs/EmfShape"
+        },
+        "k_ed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "k_hy": {
+          "description": "Iron loss coefficients k_hy [W·s/rad], k_ed [W·s²/rad²] (EQ-MOT-09).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "saturation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Saturation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "emf_shape"
+      ]
+    },
+    "MotorMechanical": {
+      "type": "object",
+      "properties": {
+        "friction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Friction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "j_rotor": {
+          "$ref": "#/$defs/Param"
+        },
+        "mass": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "j_rotor"
+      ]
+    },
+    "MotorRatings": {
+      "type": "object",
+      "properties": {
+        "current_continuous": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "current_peak": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "speed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "torque_peak": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "voltage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "MotorThermal": {
+      "type": "object",
+      "properties": {
+        "c_h": {
+          "$ref": "#/$defs/Param"
+        },
+        "c_s": {
+          "$ref": "#/$defs/Param"
+        },
+        "c_w": {
+          "$ref": "#/$defs/Param"
+        },
+        "kappa": {
+          "description": "Optional fan-cooling factor κ [s/rad] (EQ-THERM-04).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "r_ha": {
+          "$ref": "#/$defs/Param"
+        },
+        "r_sh": {
+          "$ref": "#/$defs/Param"
+        },
+        "r_ws": {
+          "$ref": "#/$defs/Param"
+        },
+        "t_max": {
+          "$ref": "#/$defs/Param"
+        },
+        "t_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "r_ws",
+        "r_sh",
+        "r_ha",
+        "c_w",
+        "c_s",
+        "c_h",
+        "t_max"
+      ]
+    },
+    "MotorWinding": {
+      "type": "object",
+      "properties": {
+        "pole_pairs": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "slots": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "slots",
+        "pole_pairs"
+      ]
+    },
+    "Param": {
+      "description": "A parameter value with provenance.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/Source",
+              "default": "default"
+            },
+            "value": {
+              "$ref": "#/$defs/Raw"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Raw"
+        }
+      ]
+    },
+    "Raw": {
+      "description": "A raw value as written: a number (SI) or a quantity string.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Saturation": {
+      "type": "object",
+      "properties": {
+        "cross": {
+          "description": "Cross-saturation fraction c (0 ≤ c < 1).",
+          "type": "number",
+          "format": "double"
+        },
+        "i_knee": {
+          "description": "Knee current [A] (EQ-MOT-10).",
+          "$ref": "#/$defs/Param"
+        },
+        "l_inf": {
+          "description": "Incremental q inductance deep in saturation [H].",
+          "$ref": "#/$defs/Param"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "i_knee",
+        "l_inf",
+        "cross"
+      ]
+    },
+    "Source": {
+      "description": "Where a value came from.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "measured",
+            "datasheet",
+            "estimated",
+            "default"
+          ]
+        },
+        {
+          "description": "Computed from other parameters by a constraint rule (locked in the UI).",
+          "type": "string",
+          "const": "derived"
+        }
+      ]
+    },
+    "Topology": {
+      "type": "string",
+      "enum": [
+        "inrunner",
+        "outrunner"
+      ]
+    }
+  }
+}

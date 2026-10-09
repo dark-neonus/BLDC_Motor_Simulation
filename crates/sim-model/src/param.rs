@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use crate::units::{Kind, UnitError, parse_quantity};
 
 /// Where a value came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Source {
     Measured,
@@ -21,7 +23,7 @@ pub enum Source {
 }
 
 /// A raw value as written: a number (SI) or a quantity string.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
 pub enum Raw {
     Number(f64),
@@ -38,7 +40,7 @@ impl Raw {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
 enum ParamRepr {
     Long {
@@ -52,8 +54,9 @@ enum ParamRepr {
 }
 
 /// A parameter value with provenance.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(from = "ParamRepr", into = "ParamRepr")]
+#[schemars(with = "ParamRepr")]
 pub struct Param {
     pub value: Raw,
     pub source: Source,
@@ -114,7 +117,7 @@ impl Param {
 mod tests {
     use super::*;
 
-    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
     struct M {
         kv: Param,
         r: Param,

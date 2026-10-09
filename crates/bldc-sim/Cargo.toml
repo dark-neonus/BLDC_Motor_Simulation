@@ -19,6 +19,7 @@ sim-model.workspace = true
 serde = { workspace = true, features = ["derive"] }
 anyhow.workspace = true
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+schemars = "1.2.2"
 
 [features]
 embed = ["sim-api/embed-ui", "sim-api/embed-docs"]
