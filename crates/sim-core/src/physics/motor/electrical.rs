@@ -207,6 +207,9 @@ pub struct MotorElectrical {
     /// the sign of that current at the request (so g starts positive: no false crossing).
     pending: Option<usize>,
     pending_sign: f64,
+    /// Last solve from the outputs pass: (ψ0, ψ1, θe, λ) → result. The derivatives and
+    /// powers of the same RK stage reuse it when the inputs match exactly.
+    cache: Option<([f64; 4], Solved)>,
 }
 
 /// Amplitude-invariant Clarke of three phase values (EQ-CONV-01).
@@ -281,6 +284,7 @@ impl MotorElectrical {
             open: None,
             pending: None,
             pending_sign: 1.0,
+            cache: None,
         })
     }
 
@@ -358,6 +362,12 @@ impl MotorElectrical {
     fn state(&self, x: &[f64], off: usize, bus: &SignalBus) -> (Solved, f64, f64) {
         let th = bus.get(self.inp.theta_e);
         let lambda = self.lambda(bus);
+        let key = [x[off], x[off + 1], th, lambda];
+        if let Some((k, s)) = &self.cache
+            && *k == key
+        {
+            return (*s, th, lambda);
+        }
         let s = match self.open {
             None => self.solve(x[off], x[off + 1], th, lambda),
             Some(k) => self.solve_open(x[off], th, lambda, k),
@@ -499,7 +509,9 @@ impl PlantModule for MotorElectrical {
         x[1] = s * pd + c * pq + hb;
     }
     fn outputs(&mut self, _t: f64, x: &[f64], off: usize, bus: &mut SignalBus) {
+        self.cache = None;
         let (s, th, lambda) = self.state(x, off, bus);
+        self.cache = Some(([x[off], x[off + 1], th, lambda], s));
         self.last_theta_e = th;
         self.last_lambda = lambda;
         let we = bus.get(self.inp.omega_e);
@@ -509,11 +521,24 @@ impl PlantModule for MotorElectrical {
             let (y, z) = ((k + 1) % 3, (k + 2) % 3);
             (i[k], i[z]) = (0.0, -i[y]);
         }
-        let e: [f64; 3] =
-            std::array::from_fn(|k| we * lambda * self.p.shape.k(th - k as f64 * TWO_PI_3));
+        let e: [f64; 3] = if self.p.shape.is_sinusoidal() {
+            // k = −sin(θ − x·2π/3) from one sin_cos.
+            let (sn, cs) = th.sin_cos();
+            let h = 0.5 * SQRT3 * cs;
+            let a = -we * lambda;
+            [a * sn, a * (-0.5 * sn - h), a * (-0.5 * sn + h)]
+        } else {
+            std::array::from_fn(|k| we * lambda * self.p.shape.k(th - k as f64 * TWO_PI_3))
+        };
         let vt = self.inp.v.map(|id| bus.get(id));
         let o = self.out;
-        let (pa, pb, _, _) = self.flux_ab(s.i_d, s.i_q, th, lambda);
+        let (pa, pb) = match self.open {
+            None => (x[off], x[off + 1]),
+            Some(_) => {
+                let (pa, pb, _, _) = self.flux_ab(s.i_d, s.i_q, th, lambda);
+                (pa, pb)
+            }
+        };
         bus.set(o.psi_alpha, pa);
         bus.set(o.psi_beta, pb);
         for k in 0..3 {

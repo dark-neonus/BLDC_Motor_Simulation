@@ -277,3 +277,6 @@
 ## 2026-10-09 — P05.T12 (part 2/2): field docs, rule ids
 - Doc comments on all 168 `sim-model::params` fields (units, EQ refs; `gearbox.ratio` = motor turns per output turn) → schema descriptions.
 - `Issue.rule`: stable rule id (default = the path when it is the only rule there; named ids `value.unit/finite/positive/range`, `motor.kv_range`, `motor.saliency_ratio`, `motor.time_constant`, `motor.winding_valid`, `motor.saturation_*`, `motor.peak_above_continuous`, `motor.t_max_above_ref`, `mech.coulomb_le_static`, `motor.entered_constant_present`, `wizard.kt_matches_kv`). Test: two rules on one path keep distinct ids.
+
+## 2026-10-09 — P05 gate prep: performance
+- Bench `skeleton_foc_10ms_sim_dt5us`: abc model made it 2.44 ms (4.1× real time, was 19.4× on the dq plant). Exact-match solve cache (outputs → derivatives/powers of the same RK stage), ψ output from the state in normal mode, sinusoidal EMFs from one sin_cos: **1.62 ms (6.2× real time)**. No hard target in the spec; revisit in the perf phase.
