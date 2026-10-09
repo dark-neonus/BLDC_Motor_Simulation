@@ -10,7 +10,7 @@
 > - `apply_edit` propagates Kv→λ→Kt correctly.
 > - The units fixture passes in Rust.
 
-- [ ] **P04.T01** — Units module and shared fixture
+- [x] **P04.T01** — Units module and shared fixture
   - **Depends:** P03
   - **Do:**
     - `sim-model::units`: re-export the `uom` SI types used.

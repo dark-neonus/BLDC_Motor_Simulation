@@ -1,0 +1,60 @@
+# Shared unit-parsing fixture (CONVENTIONS §4): Rust (sim-model::units) and the web UI
+# (math.js layer, P13.T06) must both parse every `input` to `si` (SI value) of `kind`.
+# Tolerance: |a − si| ≤ 1e-12·|si| + 1e-15.
+cases:
+  - { input: "100 rpm", kind: angular_velocity, si: 10.471975511965976 }
+  - { input: "300rpm", kind: angular_velocity, si: 31.41592653589793 }
+  - { input: "2.5 rad/s", kind: angular_velocity, si: 2.5 }
+  - { input: "90 deg", kind: angle, si: 1.5707963267948966 }
+  - { input: "90°", kind: angle, si: 1.5707963267948966 }
+  - { input: "0.5 rad", kind: angle, si: 0.5 }
+  - { input: "2.5 mH", kind: inductance, si: 0.0025 }
+  - { input: "470 uH", kind: inductance, si: 0.00047 }
+  - { input: "470 µH", kind: inductance, si: 0.00047 }
+  - { input: "1 H", kind: inductance, si: 1.0 }
+  - { input: "120 mOhm", kind: resistance, si: 0.12 }
+  - { input: "120 mΩ", kind: resistance, si: 0.12 }
+  - { input: "1.5 Ohm", kind: resistance, si: 1.5 }
+  - { input: "1.5 Ω", kind: resistance, si: 1.5 }
+  - { input: "30 mWb", kind: flux_linkage, si: 0.03 }
+  - { input: "0.03 Wb", kind: flux_linkage, si: 0.03 }
+  - { input: "24 V", kind: voltage, si: 24.0 }
+  - { input: "5 A", kind: current, si: 5.0 }
+  - { input: "250 mA", kind: current, si: 0.25 }
+  - { input: "1.2 N*m", kind: torque, si: 1.2 }
+  - { input: "1.2 N·m", kind: torque, si: 1.2 }
+  - { input: "1.2 Nm", kind: torque, si: 1.2 }
+  - { input: "2 kgf*cm", kind: torque, si: 0.196133 }
+  - { input: "2 kgf·cm", kind: torque, si: 0.196133 }
+  - { input: "100 rpm/V", kind: velocity_constant, si: 10.471975511965976 }
+  - { input: "10 V/krpm", kind: back_emf_constant, si: 0.09549296585513720 }
+  - { input: "0.08 N*m/A", kind: torque_constant, si: 0.08 }
+  - { input: "2.5e-4 kg*m^2", kind: inertia, si: 0.00025 }
+  - { input: "2.5 kg*cm^2", kind: inertia, si: 0.00025 }
+  - { input: "250 g*cm^2", kind: inertia, si: 0.000025 }
+  - { input: "45 °C", kind: temperature, si: 318.15 }
+  - { input: "45 degC", kind: temperature, si: 318.15 }
+  - { input: "300 K", kind: temperature, si: 300.0 }
+  - { input: "80 mm", kind: length, si: 0.08 }
+  - { input: "1.5 cm", kind: length, si: 0.015 }
+  - { input: "0.2 m", kind: length, si: 0.2 }
+  - { input: "350 g", kind: mass, si: 0.35 }
+  - { input: "1.2 kg", kind: mass, si: 1.2 }
+  - { input: "20 kHz", kind: frequency, si: 20000.0 }
+  - { input: "50 Hz", kind: frequency, si: 50.0 }
+  - { input: "500 ns", kind: time, si: 5.0e-7 }
+  - { input: "50 us", kind: time, si: 5.0e-5 }
+  - { input: "50 µs", kind: time, si: 5.0e-5 }
+  - { input: "2 ms", kind: time, si: 0.002 }
+  - { input: "1.5 s", kind: time, si: 1.5 }
+  - { input: "60 W", kind: power, si: 60.0 }
+  - { input: "3 J", kind: energy, si: 3.0 }
+  - { input: "470 uF", kind: capacitance, si: 0.00047 }
+  - { input: "5000 mAh", kind: charge, si: 18000.0 }
+  - { input: "2.2 Ah", kind: charge, si: 7920.0 }
+  - { input: "4.2 K/W", kind: thermal_resistance, si: 4.2 }
+  - { input: "40 J/K", kind: heat_capacity, si: 40.0 }
+  - { input: "-0.12 %/K", kind: temperature_coefficient, si: -0.0012 }
+  - { input: "0.00393 1/K", kind: temperature_coefficient, si: 0.00393 }
+  - { input: "1e-4 N*m*s/rad", kind: rotational_damping, si: 0.0001 }
+  - { input: "12", kind: dimensionless, si: 12.0 }
