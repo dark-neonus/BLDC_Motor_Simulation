@@ -103,7 +103,7 @@
   - **Verify:** `cargo nextest run -p sim-core` green, with the new tests listed.
   - **Done when:** Green.
 
-- [ ] **P06.T09** — Phase gate
+- [x] **P06.T09** — Phase gate
   - **Depends:** P06.T01, P06.T02, P06.T03, P06.T04, P06.T05, P06.T06, P06.T07, P06.T08, P06.T10
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-06-done`.
