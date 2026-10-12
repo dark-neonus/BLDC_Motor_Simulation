@@ -241,6 +241,10 @@ impl SwitchingInverter {
     }
 }
 
+/// Below this phase current [A] an Off leg's diode is chosen from the terminal voltage,
+/// not from the sign of i (round-off at a diode reconnect).
+const LATCH_I_MIN: f64 = 1e-9;
+
 impl PlantModule for SwitchingInverter {
     fn name(&self) -> &str {
         "inverter"
@@ -271,9 +275,11 @@ impl PlantModule for SwitchingInverter {
             } else {
                 if self.latch[k] == 0.0 {
                     // Not floating and no diode yet: the terminal reached a bound (diode
-                    // reconnect) or the current is already flowing; pick the diode.
+                    // reconnect) or the current is already flowing; pick the diode. Right
+                    // after a reconnect i is round-off around 0, so its sign means nothing:
+                    // the bound the floating terminal reached decides (high → −1).
                     let v_float = bus.get(self.v_n) + bus.get(self.e[k]);
-                    self.latch[k] = if i != 0.0 {
+                    self.latch[k] = if i.abs() > LATCH_I_MIN {
                         i.signum()
                     } else if v_float >= 0.5 * v_bus {
                         -1.0
@@ -412,5 +418,32 @@ mod tests {
         for s in [LegState::High, LegState::Low, LegState::Off] {
             assert_eq!(LegState::from_signal(s.to_signal()), s);
         }
+    }
+
+    /// Review P07 #4: a terminal reconnected at the high bound latches the high diode
+    /// even when the round-off current is a hair positive.
+    #[test]
+    fn reconnect_latch_follows_the_bound_not_round_off() {
+        let mut bus = SignalBus::new();
+        let v_bus = bus.register("bus.v", "V", "", SignalKind::Output).unwrap();
+        let mut reg = |n: &str| bus.register(n, "-", "", SignalKind::Output).unwrap();
+        let (ia, ib, ic) = (reg("motor.i_a"), reg("motor.i_b"), reg("motor.i_c"));
+        let (ea, _, _) = (reg("motor.e_a"), reg("motor.e_b"), reg("motor.e_c"));
+        let (vn, open) = (reg("motor.v_n"), reg("motor.open_phase"));
+        let mut inv = SwitchingInverter::new(D, v_bus, &mut bus)
+            .unwrap()
+            .with_motor(&bus)
+            .unwrap();
+        bus.set(v_bus, 24.0);
+        bus.set(open, -1.0);
+        bus.set(inv.legs[0], LegState::Off.to_signal());
+        // Phase a just reached V_bus + V_f (v_n + e_a = 24.8), i_a = +1e-15 from round-off.
+        bus.set(vn, 12.0);
+        bus.set(ea, 12.8);
+        bus.set(ia, 1e-15);
+        bus.set(ib, -1.0);
+        bus.set(ic, 1.0);
+        inv.outputs(0.0, &[], 0, &mut bus);
+        assert_eq!(bus.get(inv.v[0]), 24.8, "high diode");
     }
 }

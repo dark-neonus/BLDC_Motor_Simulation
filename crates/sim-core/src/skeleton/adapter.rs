@@ -136,7 +136,9 @@ impl DiscreteBlock for FocBlock {
         ctx.bus.set(self.s.v_alpha, va);
         ctx.bus.set(self.s.v_beta, vb);
         if let Some((ids, v_bus)) = self.duties {
-            // SVPWM with the overmodulation clamp (EQ-INV-05/06) on the measured bus.
+            // SVPWM with the overmodulation clamp (EQ-INV-05/06) on the measured bus. The
+            // saturation flag is unused: the interim PIs do not stop integrating on it
+            // (anti-windup on the modulator limit is P09's controller).
             let (d, _) = svpwm_ab(va, vb, ctx.bus.get(v_bus).max(1e-9));
             for (id, d) in ids.iter().zip(d) {
                 ctx.bus.set(*id, d);
@@ -309,6 +311,8 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         Ideal(IdealVoltageSource),
         Inv(DcBus, SwitchingInverter, InverterOptions),
     }
+    // INVARIANT: as above, the front-end modules register fixed, unique paths into this
+    // fresh bus, so their constructors cannot fail.
     let front = match &opts.drive {
         Drive::Ideal => Front::Ideal(
             IdealVoltageSource::new(&mut bus, v_alpha, v_beta, cfg.v_bus)

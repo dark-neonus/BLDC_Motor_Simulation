@@ -107,39 +107,67 @@ fn v_sup_001_psu_current_limit_and_blocking() {
     );
 }
 
+fn b_ocv(e: &Engine) -> f64 {
+    pack().ocv(sig(e, "supply.soc"))
+}
+
 fn pack() -> Battery {
     let cell = [(0.0, 3.0), (0.5, 3.7), (1.0, 4.2)];
     Battery::from_cells(&cell, 6, 1, 4e-3, 2e-3, 4000.0, 5.0)
 }
 
-/// T08: a 10 A step sags by I·R0 at once (after the fast bus RC), the RC branch relaxes
-/// with R1·C1, and SoC falls by ∫I dt / (3600·Q).
+/// T08 / V-SUP-004: a 10 A step sags by I·R0 at once (after the fast bus RC), the RC
+/// branch charges and then relaxes with τ = R1·C1, and SoC falls by ∫I dt / (3600·Q).
+/// Exact references (rtol 1e-6) include the bus: its capacitor carries C·dV/dt, and the
+/// source current follows a load step R0·C later.
 #[test]
 fn v_sup_004_battery_sag_relaxation_and_soc() {
     let b = pack();
-    let (r0, r1, c1) = (b.r0, b.r1, b.c1);
-    let ocv0 = b.ocv(0.8);
+    let (r0, r1, c1, q) = (b.r0, b.r1, b.c1, b.q_ah);
+    let tau = r1 * c1;
+    // The load steps back to 0 at τ/10 (the closure cannot capture τ).
+    assert!((tau - 8.0).abs() < 1e-12);
     let src = Source::Battery { pack: b, soc0: 0.8 };
     // dt = 5 µs ≈ τ_bus/2 (D-018: RK4 is stable to ~2.8 τ; accuracy checked here).
-    let mut e = rig(src, None, |_| 10.0, 5e-6);
-    // Bus RC = R0·C ≈ 11 µs: after 0.2 ms the bus sits on OCV − I·R0 − v1 (v1 still tiny).
+    let mut e = rig(src, None, |t| if t < 0.8 { 10.0 } else { 0.0 }, 5e-6);
+    // Bus RC = R0·C ≈ 11 µs: after 0.2 ms the bus sits on OCV − i·R0 − v1. With the
+    // fast bus mode eliminated (error O(τ_bus/τ) on a 1e-6 correction), the source
+    // current is i = (I + C·v1/τ)/(1 + κ), κ = C·(1/C1 + OCV'/(3600·Q)) (its capacitor
+    // carries C·dV/dt), and v1 obeys dv1/dt = a·I − b·v1, a = 1/(C1(1+κ)),
+    // b = (1 − C/(C1(1+κ)))/τ, with I applied δ = R0·C late (the bus RC's lag).
+    let slope = 6.0 * (4.2 - 3.7) / 0.5; // OCV' above SoC 0.5
+    let kappa = C * (1.0 / c1 + slope / (3600.0 * q));
+    let (a, bb) = (
+        1.0 / (c1 * (1.0 + kappa)),
+        (1.0 - C / (c1 * (1.0 + kappa))) / tau,
+    );
     run(&mut e, 2e-4);
-    let sag = ocv0 - sig(&e, "bus.v");
     let v1 = sig(&e, "supply.battery.v_rc");
-    assert!((sag - (10.0 * r0 + v1)).abs() < 1e-6 * ocv0, "{sag}");
-    assert!(v1 < 0.01 * 10.0 * r1);
-    // RC branch: v1(t) → I·R1·(1 − e^{−t/R1C1}); τ = 48 s · … check at t = τ/10.
-    let tau = r1 * c1;
-    run(&mut e, tau / 10.0);
-    let want = 10.0 * r1 * (1.0 - (-0.1f64).exp());
+    let sag = b_ocv(&e) - v1 - sig(&e, "bus.v");
+    let i = (10.0 + C * v1 / tau) / (1.0 + kappa);
+    assert!((sag / (i * r0) - 1.0).abs() < 1e-6, "{sag} vs {}", i * r0);
+    let d = r0 * C;
+    let t1 = tau / 10.0;
+    run(&mut e, t1);
+    let charged = |t: f64| 10.0 * a / bb * (1.0 - (-bb * (t - d)).exp());
+    let v = sig(&e, "supply.battery.v_rc");
     assert!(
-        (sig(&e, "supply.battery.v_rc") / want - 1.0).abs() < 1e-3,
-        "{}",
-        sig(&e, "supply.battery.v_rc")
+        (v / charged(t1) - 1.0).abs() < 1e-6,
+        "charging: {v} vs {}",
+        charged(t1)
     );
     let soc = sig(&e, "supply.soc");
-    let want_soc = 0.8 - 10.0 * (tau / 10.0) / (3600.0 * 5.0);
+    let want_soc = 0.8 - 10.0 * t1 / (3600.0 * q);
     assert!((soc - want_soc).abs() < 1e-6, "{soc} vs {want_soc}");
+    // Relaxation (I = 0 from t_off + δ): v1 = v1(t_off + δ)·e^{−b(t − t_off − δ)}. The
+    // scripted load is 0 at t1, which RK4's last stage of the step ending there samples
+    // with weight 1/6: the load effectively stops at t_off = t1 − h/6 (h = 5 µs).
+    let t_off = t1 - 5e-6 / 6.0;
+    let t2 = t1 + tau / 10.0;
+    run(&mut e, t2);
+    let want = charged(t_off + d) * (-bb * (t2 - t_off - d)).exp();
+    let v = sig(&e, "supply.battery.v_rc");
+    assert!((v / want - 1.0).abs() < 1e-6, "relaxation: {v} vs {want}");
     assert!(
         sig(&e, "energy.residual").abs() < 1e-6,
         "{}",
@@ -199,4 +227,22 @@ fn v_sup_005_battery_soc_integration() {
     let charge = 3600.0 * q * (0.8 - sig(&e, "supply.soc"));
     let want = 10.0 * 0.5 + C * (sig(&e, "bus.v") - v0);
     assert!((charge / want - 1.0).abs() < 1e-9, "{charge} vs {want}");
+}
+
+/// Review P07 #13: a bus that starts above V_on starts with the chopper on.
+#[test]
+fn chopper_starts_on_above_v_on() {
+    let ch = Chopper {
+        r_brake: 5.0,
+        v_on: 25.0,
+        v_off: 24.5,
+    };
+    let src = Source::Psu {
+        v_set: 30.0,
+        i_lim: 1.0,
+        r_out: 0.02,
+    };
+    let mut e = rig(src, Some(ch), |_| 0.0, 5e-6);
+    run(&mut e, 1e-5);
+    assert_eq!(sig(&e, "bus.chopper_on"), 1.0);
 }

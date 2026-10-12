@@ -166,6 +166,26 @@ fn v_inv_007_008_losses_close_the_balance_and_scale_with_f_pwm() {
         assert!(sig(&e, "energy.loss.inverter") > 0.0);
         assert!(sig(&e, "inverter.p_loss") > 0.0);
     }
+    // Averaged mode, from the EQ-INV-09 terms per leg (not from P_dc − Σ v·i): MOSFET
+    // conduction R_on·i², corrected for the dead-time share 2·(t_d/T)·σ·R_on·|i|·i the
+    // diodes carry instead, diode conduction 2·V_f·(t_d/T)·σ·i, and switching V·i_sw with
+    // i_sw = f_pwm·Σ ½|i|(t_r + t_f).
+    let mut e = rig(true);
+    e.step_until(SimTime::from_secs_f64(0.02)).unwrap();
+    let f = PWM.dead_ns as f64 / PWM.period_ns as f64;
+    let (mut cond, mut i_sw) = (0.0, 0.0);
+    for name in ["motor.i_a", "motor.i_b", "motor.i_c"] {
+        let i = sig(&e, name);
+        let s = (i / 0.01).tanh();
+        cond += D.r_on * i * i - 2.0 * f * s * D.r_on * i.abs() * i + 2.0 * f * s * D.v_f * i;
+        i_sw += 20e3 * 0.5 * i.abs() * 60e-9;
+    }
+    let want = cond + V_BUS * i_sw;
+    let p = sig(&e, "inverter.p_loss");
+    assert!(
+        (p / want - 1.0).abs() < 1e-9,
+        "p_loss {p} vs EQ-INV-09 {want}"
+    );
     let i_sw = |f: f64| {
         let mut e = rig_f(true, f);
         e.step_until(SimTime::from_secs_f64(0.02)).unwrap();

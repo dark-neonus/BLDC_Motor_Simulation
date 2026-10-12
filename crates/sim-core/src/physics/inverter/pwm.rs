@@ -61,10 +61,12 @@ impl Pwm {
         })
     }
 
-    /// Latch the duties and lay out this period's edges (EQ-INV-02).
+    /// Latch the duties and lay out this period's edges (EQ-INV-02). Edges of the last
+    /// period at or after t0 (the turn-on into Low at d near 1 ends after the period:
+    /// t_on + high + t_d ≥ t0 + T when T − high < 2·t_d) carry over.
     fn schedule(&mut self, t0: i64, bus: &SignalBus) {
         let (tp, td) = (self.cfg.period_ns, self.cfg.dead_ns);
-        self.edges.clear();
+        let carried: Vec<_> = self.edges.drain(..).filter(|e| e.0 >= t0).collect();
         for x in 0..3 {
             let d = bus.get(self.duty[x]);
             let d = if d.is_finite() {
@@ -88,8 +90,17 @@ impl Pwm {
                 edges.push((t, x, LegState::Off));
                 edges.push((t + td, x, to));
             };
-            if start != self.state[x] {
-                turn(t0, start, &mut self.edges);
+            // The leg's state once its carried edges are done, and when that is.
+            let pending: Vec<_> = carried.iter().filter(|e| e.1 == x).copied().collect();
+            let (cur, t_free) = match pending.last() {
+                Some(&(t, _, s)) => (s, t),
+                None => (self.state[x], t0),
+            };
+            if start != cur {
+                // A carried turn-on is replaced: the leg stays Off until t_d after it.
+                turn(t_free, start, &mut self.edges);
+            } else {
+                self.edges.extend(pending);
             }
             if full.is_none() {
                 let t_on = t0 + (tp - high_ns) / 2;
@@ -254,6 +265,37 @@ mod tests {
         assert_eq!(at(&mut e, 70_500)[0], 1.0);
         assert_eq!(at(&mut e, 80_500)[0], -1.0);
         assert_eq!(e.bus.get(e.bus.id("inverter.pwm_count").unwrap()), 2.0);
+    }
+
+    /// Review P07 #1: at d just below 1 − 2·t_d/T the Low turn-on ends after the period;
+    /// it must carry over (no lost edge, no direct Low ↔ High switch).
+    #[test]
+    fn near_full_duty_edges_carry_into_the_next_period() {
+        for k in 0..=30 {
+            let d = 0.97 + 0.001 * f64::from(k);
+            let mut e = engine([d, 0.5, 0.5]);
+            let mut prev = -1.0;
+            let mut low_in_period = [false; 3];
+            // Sampled every 25 ns: the shortest Low interval kept is T − high − t_d = 50 ns.
+            for t in (0..150_000).step_by(25) {
+                let s = at(&mut e, t)[0];
+                if s != prev {
+                    assert!(s == 0.0 || prev == 0.0, "d {d}: direct switch at {t}");
+                }
+                if s == -1.0 {
+                    low_in_period[(t / 50_000) as usize] = true;
+                }
+                prev = s;
+            }
+            // Pulses are kept while T − high > t_d (d < 0.99); each period then has Low.
+            let high_ns = (d * 50_000.0).round() as i64;
+            if 50_000 - high_ns > 500 {
+                assert!(
+                    low_in_period[1] && low_in_period[2],
+                    "d {d}: {low_in_period:?}"
+                );
+            }
+        }
     }
 
     #[test]

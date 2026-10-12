@@ -609,8 +609,8 @@ mod tests {
 
     /// P07.T12: scenes drive the motor through SVPWM → inverter → DC bus with the scene's
     /// PSU, averaged by default and switching on request; energy closes through the chain.
-    /// V-INV-001: in FOC steady state the two modes agree on the (PWM-center-sampled,
-    /// i.e. ripple-averaged) currents within 1 % of rated (the 5 A limit).
+    /// V-INV-001: in loaded FOC steady state (0.45 N·m brake) the two modes agree on the
+    /// (PWM-center-sampled, i.e. ripple-averaged) currents within 1 % of rated (5 A).
     #[test]
     fn v_inv_001_scenes_drive_through_inverter_and_bus() {
         let mut iq = vec![];
@@ -619,7 +619,7 @@ mod tests {
             "  fidelity: { inverter_mode: switching, dt_max: 0.5 us }\n",
         ] {
             let o = go(&format!(
-                "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: {{ preset: \"builtin:motors/4108-outrunner\" }}\n  inverter: {{ preset: \"builtin:inverters/small-24v-10a\" }}\n  supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n  controller: {{ preset: \"builtin:controllers/foc-default\" }}\n{mode}sample: 1 ms\nrecord: [motor.omega, bus.v, inverter.p_loss, energy.residual, motor.i_d, motor.i_q]\ntimeline:\n  - target: {{ kind: velocity, value: 20 rad/s, ramp: 0.05 s }}\n  - wait: 0.1 s\n"
+                "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: {{ preset: \"builtin:motors/4108-outrunner\" }}\n  load: {{ kind: brake, torque: 0.45 N*m }}\n  inverter: {{ preset: \"builtin:inverters/small-24v-10a\" }}\n  supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n  controller: {{ preset: \"builtin:controllers/foc-default\" }}\n{mode}sample: 1 ms\nrecord: [motor.omega, bus.v, inverter.p_loss, energy.residual, motor.i_d, motor.i_q]\ntimeline:\n  - target: {{ kind: velocity, value: 20 rad/s, ramp: 0.05 s }}\n  - wait: 0.1 s\n"
             ));
             let last = o.rows.last().unwrap();
             assert!((last[1] - 20.0).abs() < 1.0, "{mode}: ω {}", last[1]);
@@ -632,6 +632,9 @@ mod tests {
             iq.push((mean(5), mean(6)));
         }
         let ((d0, q0), (d1, q1)) = (iq[0], iq[1]);
+        // A loaded operating point: the 0.45 N·m brake needs i_q ≈ T/K_t ≈ 1.5 A (K_t =
+        // 1.5·p·λ ≈ 0.31 N·m/A; 2.5 A would exceed the V_bus/√3 limit with R = 5.6 Ω).
+        assert!(q0 > 1.3 && q1 > 1.3, "i_q {q0} / {q1}");
         assert!(
             (d0 - d1).abs() < 0.05 && (q0 - q1).abs() < 0.05,
             "avg ({d0}, {q0}) vs sw ({d1}, {q1})"
@@ -660,7 +663,7 @@ mod tests {
 
     fn brake_scene(chopper: &str) -> String {
         format!(
-            "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: {{ preset: \"builtin:motors/8010-outrunner\" }}\n  load: {{ kind: flywheel, inertia: 2.5e-4 kg*m^2 }}\n  inverter: {{ preset: \"builtin:inverters/small-24v-10a\" }}\n  supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n  bus: {{ capacitance: 470 uF{chopper} }}\n  controller: {{ preset: \"builtin:controllers/foc-default\" }}\n  initial: {{ omega: 60 rad/s }}\nsample: 0.5 ms\nrecord: [bus.v, motor.omega, energy.residual, energy.loss.brake]\ntimeline:\n  - target: {{ kind: velocity, value: 0 rad/s }}\n  - wait: 0.3 s\n"
+            "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: {{ preset: \"builtin:motors/8010-outrunner\" }}\n  load: {{ kind: flywheel, inertia: 2.5e-4 kg*m^2 }}\n  inverter: {{ preset: \"builtin:inverters/small-24v-10a\" }}\n  supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n  bus: {{ capacitance: 470 uF{chopper} }}\n  controller: {{ preset: \"builtin:controllers/foc-default\" }}\n  initial: {{ omega: 60 rad/s }}\nsample: 0.01 ms\nrecord: [bus.v, motor.omega, energy.residual, energy.loss.brake, bus.p_brake, bus.chopper_on]\ntimeline:\n  - target: {{ kind: velocity, value: 0 rad/s }}\n  - wait: 0.3 s\n"
         )
     }
 
@@ -680,7 +683,8 @@ mod tests {
     }
 
     /// V-SUP-003: the same with a chopper: the bus stays at V_on (events located: within
-    /// 0.01 V), the resistor takes part of the kinetic energy, energy closes.
+    /// 0.01 V, sampled every 10 µs), the resistor takes most of the kinetic energy, its
+    /// booked energy matches ∫ p_brake dt, and energy closes.
     #[test]
     fn v_sup_003_regen_with_chopper() {
         let (o, j) = go_with_j(&brake_scene(
@@ -690,7 +694,27 @@ mod tests {
         assert!(v_max <= 25.0 + 0.01, "{v_max}");
         let last = o.rows.last().unwrap();
         let ke = 0.5 * j * 60.0 * 60.0;
-        assert!(last[4] > 0.0 && last[4] < ke, "brake {} of {ke} J", last[4]);
+        // The resistor takes most of the kinetic energy (the rest: copper, inverter).
+        assert!(
+            last[4] > 0.5 * ke && last[4] < ke,
+            "brake {} of {ke} J",
+            last[4]
+        );
+        // Independent of the energy book: ∫ p_brake dt (trapezoid over the 10 µs samples)
+        // agrees within the sampling bound, half a sample at V_on²/R_b per chopper toggle.
+        let trap: f64 = o
+            .rows
+            .windows(2)
+            .map(|w| 0.5 * (w[0][5] + w[1][5]) * (w[1][0] - w[0][0]))
+            .sum();
+        let toggles = o.rows.windows(2).filter(|w| w[0][6] != w[1][6]).count();
+        assert!(toggles > 2, "the chopper cycles: {toggles}");
+        let bound = toggles as f64 * (25.0 * 25.0 / 10.0) * 0.5e-5;
+        assert!(
+            (trap - last[4]).abs() <= bound,
+            "{trap} vs {} (±{bound})",
+            last[4]
+        );
         assert!(o.rows.iter().all(|r| r[3].abs() < 1e-3), "residual");
     }
 

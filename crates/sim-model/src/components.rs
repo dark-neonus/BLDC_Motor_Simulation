@@ -194,7 +194,7 @@ pub fn validate_supply(s: &SupplyParams) -> Vec<Issue> {
         } => {
             v.p(voltage, Kind::Voltage, "supply.voltage", Pos);
             v.p(current_limit, Kind::Current, "supply.current_limit", Pos);
-            v.p(r_out, Kind::Resistance, "supply.r_out", NonNeg);
+            v.p(r_out, Kind::Resistance, "supply.r_out", Pos);
         }
         SupplyParams::Battery {
             series,
@@ -214,8 +214,8 @@ pub fn validate_supply(s: &SupplyParams) -> Vec<Issue> {
                 );
             }
             v.p(capacity_cell, Kind::Charge, "supply.capacity_cell", Pos);
-            v.p(r0_cell, Kind::Resistance, "supply.r0_cell", NonNeg);
-            v.p(r1_cell, Kind::Resistance, "supply.r1_cell", NonNeg);
+            v.p(r0_cell, Kind::Resistance, "supply.r0_cell", Pos);
+            v.p(r1_cell, Kind::Resistance, "supply.r1_cell", Pos);
             v.p(c1_cell, Kind::Capacitance, "supply.c1_cell", Pos);
             if !(0.0..=1.0).contains(soc_init) {
                 v.reject("supply.soc_init", "state of charge must be in [0, 1]");
@@ -231,6 +231,32 @@ pub fn validate_supply(s: &SupplyParams) -> Vec<Issue> {
                 );
             }
         }
+    }
+    v.out
+}
+
+/// DC bus (EQ-SUP-01, EQ-SUP-05): C_bus > 0; chopper R_b > 0 and 0 < V_off < V_on.
+pub fn validate_bus(b: &BusParams) -> Vec<Issue> {
+    let mut v = V { out: vec![] };
+    v.p(&b.capacitance, Kind::Capacitance, "bus.capacitance", Pos);
+    if let Some(c) = &b.chopper {
+        v.p(&c.r_brake, Kind::Resistance, "bus.chopper.r_brake", Pos);
+        let on = v.p(&c.v_on, Kind::Voltage, "bus.chopper.v_on", Pos);
+        let off = v.p(&c.v_off, Kind::Voltage, "bus.chopper.v_off", Pos);
+        if let (Some(on), Some(off)) = (on, off)
+            && off >= on
+        {
+            v.reject(
+                "bus.chopper.v_off",
+                "the chopper's off voltage must be below its on voltage (hysteresis)",
+            );
+        }
+        v.o(
+            &c.power_rating,
+            Kind::Power,
+            "bus.chopper.power_rating",
+            Pos,
+        );
     }
     v.out
 }
@@ -468,6 +494,25 @@ mod tests {
         assert_eq!(
             rejects(&validate_supply(&b)),
             ["supply.series", "supply.soc_init", "supply.ocv_cell"]
+        );
+        let p: SupplyParams = parse_yaml(
+            "kind: psu\nvoltage: 24 V\ncurrent_limit: 5 A\nr_out: 0 ohm\n",
+            "p",
+        )
+        .unwrap();
+        assert_eq!(rejects(&validate_supply(&p)), ["supply.r_out"]);
+        let bus: BusParams = parse_yaml(
+            "capacitance: 0 F\nchopper: { r_brake: 0 ohm, v_on: 30 V, v_off: 31 V }\n",
+            "bus",
+        )
+        .unwrap();
+        assert_eq!(
+            rejects(&validate_bus(&bus)),
+            [
+                "bus.capacitance",
+                "bus.chopper.r_brake",
+                "bus.chopper.v_off"
+            ]
         );
         let l: LoadParams = parse_yaml("kind: flywheel\ninertia: 0 kg*m^2\n", "l").unwrap();
         assert_eq!(rejects(&validate_load(&l)), ["load.inertia"]);

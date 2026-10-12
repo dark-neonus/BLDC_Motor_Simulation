@@ -30,6 +30,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `inverter.duty_a`, `inverter.duty_b`, `inverter.duty_c` | – | duties | modulator | EQ-INV-02 |
 | `inverter.v_a`, `inverter.v_b`, `inverter.v_c` | V | terminal voltages | inverter | EQ-INV-01/03 |
 | `inverter.i_dc`, `inverter.i_sw`, `inverter.p_loss` | A, A, W | DC link, switching current, loss | inverter | EQ-INV-08/09 |
+| `inverter.pwm_count` | – | PWM periods so far (+1 at each period start, the ADC trigger) | PWM | EQ-INV-02 |
 | `bus.v`, `bus.i_chopper`, `bus.chopper_on`, `bus.p_brake` | V, A, –, W | DC bus and chopper | bus | EQ-SUP-01/05 |
 | `supply.i`, `supply.mode`, `supply.soc`, `supply.v_terminal`, `supply.battery.v_rc` | A, –, –, V, V | source state | supply | EQ-SUP-02…04 |
 | `sensors.hall.a`, `.b`, `.c`, `sensors.hall.code` | – | Hall outputs and code | halls | EQ-SENS-02 |
@@ -48,7 +49,7 @@ Two engine-only live parameters are not scene fields: `motor.open_phase` (−1 r
 - Parquet/CSV outputs use the column `t` [s] for time (the bus signal `sim.t` is the same value).
 - **All setpoints are load-side** (`ctrl.theta_ref`, `ctrl.omega_ref`, `ctrl.torque_ref`); controllers convert with the gear ratio $N$. Without a gearbox they equal motor-side values.
 - `energy.loss.<term>` uses these term names: `copper`, `iron`, `friction`, `gearbox`, `load`, `inverter`, `chopper`, `battery`. There is no `energy.out` signal.
-- `inverter.leg_x` reports H/L/O for switched legs and six-step; it is undefined (null) for averaged PWM legs.
+- `inverter.leg_x` reports H/L/O for switched legs and six-step; averaged PWM legs are held at +1 (driven, not Off), and their duty is in `inverter.duty_x`.
 - `ctrl.six_step.sector` is 0…5 in the order of the EQ-INV-07 table (0 = 330°…30°), and −1 for an invalid Hall code.
 
 ## Parameter roots

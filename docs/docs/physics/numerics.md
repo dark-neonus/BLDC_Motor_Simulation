@@ -47,7 +47,7 @@ $$
 
 | Tier / mode | $dt_{max}$ |
 |---|---|
-| Ideal / Standard, averaged | $\min(\tau_e/20,\ T_{ctrl}/2,\ 1/(20\,\omega_{max}),\ R_{src}C_{bus}/20)$, where $R_{src} = R_o$ (PSU) or $R_0$ (battery) |
+| Ideal / Standard, averaged | $\min(\tau_e/20,\ T_{ctrl}/2,\ 1/(20\,\omega_{max}),\ R_{src}C_{bus}/2)$, where $R_{src} = R_o$ (PSU) or $R_0$ (battery); the bus term is $/2$, not $/20$: the bus voltage is an RK4 state integrated with the energy terms, stable to $|h\lambda| \approx 2.8$ (decision D-018) |
 | switching inverter | additionally $\le T_{pwm}/200$; edges are events |
 | backlash contact | additionally $\le 1/(20\sqrt{k_c/J_{red}})$ |
 

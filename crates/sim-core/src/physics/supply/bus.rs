@@ -86,11 +86,13 @@ impl DcBus {
             Source::Psu { v_set, .. } => *v_set,
             Source::Battery { pack, soc0 } => pack.ocv(*soc0),
         };
+        // A bus that starts above V_on starts with the chopper conducting (EQ-SUP-05).
+        let ch_on = chopper.is_some_and(|ch| v0 > ch.v_on);
         Ok(Self {
             src,
             c,
             chopper,
-            ch_on: false,
+            ch_on,
             v0,
             load: vec![],
             ids,

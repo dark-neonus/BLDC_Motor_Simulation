@@ -179,6 +179,9 @@ impl ResolvedScene {
         }
         out.extend(validate_inverter(&self.inverter));
         out.extend(validate_supply(&self.supply));
+        if let Some(b) = &self.bus {
+            out.extend(validate_bus(b));
+        }
         if let Some(s) = &self.sensors {
             out.extend(validate_sensors(s));
         }

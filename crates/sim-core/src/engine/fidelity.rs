@@ -80,8 +80,9 @@ pub fn dt_max(cfg: &FidelityConfig, lim: &StepLimits) -> f64 {
     if lim.omega_max > 0.0 {
         dt = dt.min(1.0 / (20.0 * lim.omega_max));
     }
+    // The bus is an RK4 state limited to τ_bus/2, not τ/20 (D-018).
     if lim.tau_bus > 0.0 {
-        dt = dt.min(lim.tau_bus / 20.0);
+        dt = dt.min(lim.tau_bus / 2.0);
     }
     if cfg.inverter_mode == InverterMode::Switching {
         dt = dt.min(lim.t_pwm / 200.0);
@@ -109,8 +110,8 @@ mod tests {
     #[test]
     fn averaged_rule_uses_smallest_constraint() {
         let cfg = FidelityConfig::preset(Tier::Standard);
-        // tau_e/20 = 125 µs, t_ctrl/2 = 25 µs, tau_bus/20 = 0.47 µs → bus RC dominates.
-        assert!((dt_max(&cfg, &lim()) - 9.4e-6 / 20.0).abs() < 1e-15);
+        // tau_e/20 = 125 µs, t_ctrl/2 = 25 µs, tau_bus/2 = 4.7 µs (D-018) → bus RC dominates.
+        assert!((dt_max(&cfg, &lim()) - 9.4e-6 / 2.0).abs() < 1e-15);
         let ideal_src = StepLimits {
             tau_bus: 0.0,
             ..lim()

@@ -411,6 +411,13 @@ fn drive(scene: &ResolvedScene) -> Result<(Drive, f64), BuildError> {
     if switching {
         cap = cap.min(1.0 / f_pwm / 200.0);
     }
+    // Validation rejects R = 0 and C = 0; a zero cap would stall the engine.
+    if cap.is_nan() || cap <= 0.0 {
+        return Err(BuildError::Param(
+            "bus.capacitance".into(),
+            format!("the bus step limit is {cap} s: source resistance and C_bus must be > 0"),
+        ));
+    }
     let o = InverterOptions {
         switching,
         devices: Devices {
