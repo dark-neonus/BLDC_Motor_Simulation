@@ -272,13 +272,23 @@ fn v_mot_004_stall_torque() {
 
 #[test]
 fn v_mot_006_kv_conversion() {
-    let kv =
-        sim_model::units::parse_quantity("100 rpm/V", sim_model::units::Kind::VelocityConstant)
+    // Through the production derivation (`apply_edit` → EQ-CONV-13), not a restated formula.
+    let m: sim_model::params::MotorParams = sim_model::io::parse_yaml(
+        "schema_version: 1\nidentity: { name: t, topology: outrunner }\nelectrical:\n  r_phase: 1 ohm\n  l_d: 2.5 mH\n  l_q: 2.5 mH\n  lambda_m: 0.03 Wb\n  entered_as: lambda_m\n  connection: star\nmagnetic: { emf_shape: { kind: sinusoidal } }\nwinding: { slots: 24, pole_pairs: 14 }\nmechanical: { j_rotor: 2.5e-4 }\n",
+        "v_mot_006",
+    )
+    .unwrap();
+    let r = sim_model::constraints::apply_edit(&m, "motor.electrical.kv", "100 rpm/V".into());
+    assert!(!r.rejected, "{:?}", r.issues);
+    let e = &r.model.electrical;
+    let lambda = e.lambda_m.si(sim_model::units::Kind::FluxLinkage).unwrap();
+    let kt =
+        e.kt.as_ref()
+            .unwrap()
+            .si(sim_model::units::Kind::TorqueConstant)
             .unwrap();
-    let p = 14.0;
-    let lambda = 1.0 / (kv * 3f64.sqrt() * p); // EQ-CONV-13
     assert!(close(lambda, 3.9381e-3, 0.0, 1e-5), "{lambda}");
-    assert!(close(1.5 * p * lambda, 82.699e-3, 0.0, 1e-5));
+    assert!(close(kt, 82.699e-3, 0.0, 1e-5), "{kt}");
 }
 
 #[test]
@@ -306,6 +316,29 @@ fn v_mot_007_cogging_unpowered() {
         sig(&e, "energy.residual")
     );
     assert!((sig(&e, "motor.omega") - 3.0).abs() > 1e-4, "cogging acted");
+    // Period 2π/N_c and zero mean over a period (atol 1e-9).
+    let mut bus = SignalBus::new();
+    let th = bus
+        .register("motor.theta", "rad", "", SignalKind::State)
+        .unwrap();
+    let c = Cogging::new(
+        CoggingParams {
+            n_c: 84.0,
+            terms: vec![(0.02, 0.3)],
+        },
+        th,
+        &mut bus,
+    )
+    .unwrap();
+    let per = 2.0 * PI / 84.0;
+    let n = 1000;
+    let mut mean = 0.0;
+    for k in 0..n {
+        let x = 0.37 + per * k as f64 / n as f64;
+        assert!((c.torque_at(x) - c.torque_at(x + per)).abs() < 1e-9);
+        mean += c.torque_at(x) / n as f64;
+    }
+    assert!(mean.abs() < 1e-9, "{mean}");
 }
 
 #[test]
@@ -345,6 +378,42 @@ fn v_mot_008_iron_loss_spin_down() {
     );
 }
 
+/// V-MOT-008 near standstill: the hysteresis drag's tanh(ω/ω_ε) region (ω_ε = 0.01) as ω
+/// decays toward 0, against the same RK4 reference.
+#[test]
+fn v_mot_008_iron_loss_near_standstill() {
+    let (j, k_hy, k_ed, w0) = (2e-4, 2e-4, 1e-6, 0.03);
+    let emf: VFn = Box::new(|_, th, we| {
+        std::array::from_fn(|k| -we * LAMBDA * (th - k as f64 * 2.0 * PI / 3.0).sin())
+    });
+    let mut e = build(Case {
+        j,
+        omega0: w0,
+        iron: Some(IronLossParams {
+            k_hy,
+            k_ed,
+            pole_pairs: P,
+        }),
+        v: emf,
+        dt: 1e-5,
+        ..Default::default()
+    });
+    run(&mut e, 0.2);
+    let tfe = |w: f64| -(k_hy * P * (w / 0.01).tanh() + k_ed * P * P * w);
+    let (mut w, h) = (w0, 1e-6);
+    for _ in 0..200_000 {
+        let k1 = tfe(w) / j;
+        let k2 = tfe(w + 0.5 * h * k1) / j;
+        let k3 = tfe(w + 0.5 * h * k2) / j;
+        let k4 = tfe(w + h * k3) / j;
+        w += h / 6.0 * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
+    }
+    assert!(w.abs() < 0.01, "reference reached the tanh region: {w}");
+    let got = sig(&e, "motor.omega");
+    assert!(close(got, w, 1e-9, 1e-4), "{got} vs {w}");
+    assert!(sig(&e, "energy.residual").abs() < 1e-6);
+}
+
 #[test]
 fn v_mot_009_saturation_linear_limit() {
     let lin = SatParams {
@@ -352,14 +421,17 @@ fn v_mot_009_saturation_linear_limit() {
         l_inf: L,
         c: 0.0,
     };
-    let drive = || dq(1.0, 8.0);
+    // Locked, i_q → 25 A > 2·i_k: the saturated-asymptote start of the Newton solve runs.
+    let drive = || dq(1.0, 25.0);
     let (mut a, mut b) = (
         build(Case {
             sat: Some(lin),
+            locked: true,
             v: drive(),
             ..Default::default()
         }),
         build(Case {
+            locked: true,
             v: drive(),
             ..Default::default()
         }),
@@ -368,7 +440,8 @@ fn v_mot_009_saturation_linear_limit() {
         let t = k as f64 * 2e-3;
         run(&mut a, t);
         run(&mut b, t);
-        for n in ["motor.i_d", "motor.i_q", "motor.omega"] {
+        assert!(t < 0.03 || sig(&a, "motor.i_q") > 2.0 * lin.i_k);
+        for n in ["motor.i_d", "motor.i_q", "motor.torque_em"] {
             assert!(close(sig(&a, n), sig(&b, n), 1e-12, 0.0), "{n} at {t}");
         }
     }
@@ -500,4 +573,34 @@ fn v_mot_012_six_step_on_sinusoidal_machine() {
 fn v_mot_013_six_step_on_trapezoidal_machine() {
     let r = six_step_ripple(Shape::Trapezoidal { w: 2.0 * PI / 3.0 }, 1e-3);
     assert!(r.abs() < 0.005, "{r}");
+}
+
+/// V-MOT-011, a–b path: phase c opened at rest (zero current: at once), then v_ab = 2 V
+/// on a locked rotor. ψ_ab = 2L·i, so i(t) = (2/2R)(1 − e^{−t·2R/2L}): τ = L/R (rtol
+/// 1e-6). The Clarke-derived currents keep i_c = 0 (from i_α, i_β, not only motor.i_c).
+#[test]
+fn v_mot_011_open_phase_path_time_constant() {
+    let mut e = build(Case {
+        locked: true,
+        v: Box::new(|_, _, _| [1.0, -1.0, 0.0]),
+        dt: 1e-6,
+        ..Default::default()
+    });
+    e.queue(EngineCommand::SetParam {
+        path: "motor.open_phase".into(),
+        value: 2.0,
+        source: ChangeSource::Internal,
+    });
+    e.apply_pending();
+    assert_eq!(sig(&e, "motor.open_phase"), 2.0);
+    for k in 1..=20 {
+        let t = k as f64 * 0.5e-3;
+        run(&mut e, t);
+        let want = 1.0 / R * (1.0 - (-t * R / L).exp());
+        let ia = sig(&e, "motor.i_a");
+        assert!(close(ia, want, 1e-12, 1e-6), "t = {t}: {ia} vs {want}");
+        let ic = inv_clarke(sig(&e, "motor.i_alpha"), sig(&e, "motor.i_beta"))[2];
+        assert!(ic.abs() < 1e-12, "{ic}");
+    }
+    assert!(sig(&e, "energy.residual").abs() < 1e-6);
 }

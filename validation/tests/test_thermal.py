@@ -37,6 +37,10 @@ def test_v_therm_004_hold_heats_motor(bldc_sim: Path, tmp_path: Path) -> None:
     assert np.all(df["load.omega"].to_numpy()[held] == 0.0), "the arm is held still"
     assert np.all(np.diff(tw[t > 0.5]) >= -1e-9), "the winding only warms while holding"
 
+    # λ(T) changes the magnet flux at fixed ψ; energy.md neglects that work. Check it is
+    # far below the balance tolerance over the heating run (P06.T10).
+    assert np.max(np.abs(df["energy.residual"].to_numpy())) < 1e-6
+
     # Copper loss rises a few % with R(T); drive the linear network with its mean.
     p = float(np.mean(p_cu[t > 0.5]))
     a = np.array(

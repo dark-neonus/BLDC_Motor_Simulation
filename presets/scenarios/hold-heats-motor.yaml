@@ -29,7 +29,7 @@ scene:
   # load.theta: 0 = hanging down, 90 deg = horizontal (EQ-CONV-05).
   initial: { theta: 90 deg, ambient: 25 degC }
 sample: 10 ms
-record: [load.theta, load.omega, motor.i_q, motor.p_cu, thermal.t_winding, thermal.t_stator, thermal.t_housing]
+record: [energy.residual, load.theta, load.omega, motor.i_q, motor.p_cu, thermal.t_winding, thermal.t_stator, thermal.t_housing]
 timeline:
   # g·M_eff = 9.80665·(0.05·0.2/2 + 0.75·0.2) = 1.52 N·m.
   - target: { kind: torque, value: 1.52 N*m }
