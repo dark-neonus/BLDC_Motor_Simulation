@@ -4,5 +4,6 @@
 pub mod inverter;
 pub mod mech;
 pub mod motor;
+pub mod sensors;
 pub mod supply;
 pub mod thermal;

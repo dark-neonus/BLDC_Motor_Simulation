@@ -458,3 +458,8 @@
   - Minors fixed: chopper starts on above V_on; signals.md (`inverter.pwm_count`, averaged legs held +1); INVARIANT comment on the front-end constructors; the SVPWM saturation flag is noted as P09's anti-windup.
   - Carried to **P08.T10**: averaged pulse dropping (spec first), two-legs-Off warning/tracking, open-phase fault vs leg float, supply parameter paths + DcBus params, latch out of `outputs()`.
 - `just check` green.
+
+## 2026-10-12 — P08.T01 Sensor pipeline framework
+- `physics::sensors::pipeline::SensorPipeline` (EQ-SENS-01): y_k = sat(Q(x(t_k − τ) + e(x(t_k − τ)) + n_k)), held between samples. History with integer-ns timestamps and linear interpolation (latency N periods → exactly the sample N back); optional error fn, seeded Gaussian noise (block RNG stream), quantisation step, wrap (angles), range clamp. `bypass` returns x and draws no noise. Save/restore includes the history and the RNG state.
+- `SensorBlock`: fixed-rate discrete block (priority SENSOR) around a pipeline; PWM-centre triggering = period T_pwm, phase 0. Bypass is exact at each firing; continuous bypass (consumers read x(t)) is for the sensor builders.
+- Tests: quantisation/wrap/range, delay of exactly 3 samples and the half-period midpoint, noise σ within 5 % over 1e4 seeded samples (mean within 4σ/√n), bypass exact, error at the delayed value, block snapshot/restore reproduces the noisy sequence.

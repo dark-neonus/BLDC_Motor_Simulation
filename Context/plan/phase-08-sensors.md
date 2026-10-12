@@ -5,7 +5,7 @@
 > **Read first:** `docs/docs/physics/sensors.md` (EQ-SENS-*), `control.md` (estimators), [CONVENTIONS §6 (RNG)](CONVENTIONS.md).
 > **Exit criteria:** All V-SENS cases pass. Every sensor can be bypassed (ideal) and has update rate, latency, noise and resolution parameters. The observer converges above its minimum speed and fails below it, as documented.
 
-- [ ] **P08.T01** — Sensor pipeline framework
+- [x] **P08.T01** — Sensor pipeline framework
   - **Depends:** P07
   - **Do:**
     - A generic `SensorPipeline` (composable stages: deterministic error fn, quantizer, seeded Gaussian noise, delay line in update periods or ns, sample-and-hold).
