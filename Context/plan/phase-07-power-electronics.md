@@ -91,14 +91,14 @@
     - SoC integration = ∫I dt / capacity
   - **Done when:** Passing.
 
-- [ ] **P07.T09** — Brake chopper & over-voltage behavior
+- [x] **P07.T09** — Brake chopper & over-voltage behavior
   - **Depends:** P07.T07
   - **Do:** Chopper with hysteresis (on above V_on, off below V_off), resistor R_brake, power to energy terms. Signals `bus.chopper_on`, `bus.p_brake`.
   - **Files:** `crates/sim-core/src/physics/supply/chopper.rs`
   - **Verify:** Test: a regen spin-down with the chopper keeps V_bus ≤ V_on + margin, and the energy dumped matches the kinetic energy minus losses.
   - **Done when:** Passing.
 
-- [ ] **P07.T10** — V-INV/V-SUP sweep, performance check
+- [x] **P07.T10** — V-INV/V-SUP sweep, performance check
   - **Depends:** P07.T03, P07.T04, P07.T05, P07.T08, P07.T09
   - **Do:** Implement all V-INV and V-SUP catalog cases as tests. Add a criterion benchmark for switching mode (20 kHz PWM, dt per tier rule) and log the sim/real ratio (release).
   - **Verify:** `cargo nextest run -p sim-core v_inv v_sup`; `just bench`.

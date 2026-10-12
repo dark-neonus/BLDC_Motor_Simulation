@@ -417,3 +417,19 @@
 - Build: `fidelity.inverter_mode` (ideal / averaged / switching, else the tier's: Ideal and Standard averaged, Detailed switching) → `Drive`; device values from the inverter preset; source from `scene.supply` (ideal / PSU / battery from cells); `bus.capacitance` default 470 µF (supply.md's example; no scene sets it yet); chopper from `scene.bus.chopper`. dt cap: τ_bus/2 (D-018) and T_pwm/200 in switching mode (EQ-NUM step table).
 - All scenes (server default, scenario tests, hold-heats) now run through averaged inverter + PSU. No expected values changed: V-SKEL keeps the ideal source; hold-heats, scenario and e2e tests pass unchanged.
 - Test: the 4108 scene in averaged and switching mode tracks 20 rad/s, the PSU bus stays 22–25 V (a brief regen after the ramp lifts a blocking PSU slightly above 24 V), the inverter loss is booked, residual < 1e-3. `just check` green (184 Rust tests).
+
+## 2026-10-12 — P07.T09/T10 Regen + V-INV/V-SUP sweep, performance
+- Every V-INV and V-SUP case has a test (`cargo nextest run -p sim-core v_inv v_sup` → 13):
+  - V-INV-001: FOC steady state, averaged vs switching scene, mean i_d/i_q at the PWM-center control ticks agree within 0.05 A = 1 % of the 5 A rating.
+  - V-INV-002/003/005/007/008: existing tests renamed to their ids.
+  - V-INV-004: switching dead-time error of the period-average terminal voltage = ∓(t_d/T)(V_bus + 2V_f − 2R_on|i|) for both signs, rtol 2 %.
+  - V-INV-006: a–b ripple with phase c disconnected, t_d = 0, = V·D(1−D)T/(2L), rtol 5 %.
+  - V-SUP-001/004: renamed.
+  - V-SUP-002: flywheel braked by the FOC into a blocking PSU (low-R 8010 at 60 rad/s, since the 4108 burns everything in its 5.6 Ω copper and the bus never rises) rises above 24.5 V but stays under √(V₁² + Jω₀²/C); residual < 1e-3.
+  - V-SUP-003 (= P07.T09 verify): the same with a chopper keeps the bus ≤ V_on + 0.01 V, the brake takes part of the kinetic energy, residual < 1e-3.
+  - V-SUP-005: 3600·Q·ΔSoC = I·t + C·ΔV to rtol 1e-9.
+- Found and fixed: inverter legs registered as 0.0 (= Off) floated phase a at engine start; legs now start Low.
+- Bench (release, 10 ms sim, 20 kHz FOC):
+  - skeleton/ideal 2.00 ms (5.0× real time);
+  - averaged inverter + PSU at dt 4.7 µs 3.34 ms (3.0×);
+  - switching at the T_pwm/200 rule (0.25 µs) 52.1 ms (0.19×), above the 0.05× threshold, so no P19 task.

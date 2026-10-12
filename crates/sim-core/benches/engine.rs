@@ -4,7 +4,9 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use sim_core::engine::commands::{ChangeSource, EngineCommand};
 use sim_core::engine::time::SimTime;
-use sim_core::skeleton::adapter::{SkeletonOptions, build_engine};
+use sim_core::physics::inverter::leg::Devices;
+use sim_core::physics::supply::bus::Source;
+use sim_core::skeleton::adapter::{Drive, InverterOptions, SkeletonOptions, build_engine};
 
 fn skeleton_10ms(c: &mut Criterion) {
     c.bench_function("skeleton_foc_10ms_sim_dt5us", |b| {
@@ -22,6 +24,53 @@ fn skeleton_10ms(c: &mut Criterion) {
             criterion::BatchSize::SmallInput,
         )
     });
+}
+
+/// P07.T10: the same 10 ms through SVPWM → inverter → DC bus (20 kHz, PSU 20 mΩ, 470 µF):
+/// averaged at dt = min(5 µs, τ_bus/2), switching at the T_pwm/200 step rule.
+fn inverter_10ms(c: &mut Criterion) {
+    for (name, switching, dt) in [
+        ("averaged_inverter_10ms_sim", false, 4.7e-6),
+        ("switching_inverter_10ms_sim", true, 0.25e-6),
+    ] {
+        c.bench_function(name, |b| {
+            b.iter_batched(
+                || {
+                    let drive = Drive::Inverter(InverterOptions {
+                        switching,
+                        devices: Devices {
+                            r_on: 0.02,
+                            v_f: 0.8,
+                        },
+                        f_pwm: 20e3,
+                        dead_time: 0.5e-6,
+                        t_rise_fall: 60e-9,
+                        i_eps: 0.01,
+                        source: Source::Psu {
+                            v_set: 24.0,
+                            i_lim: 10.0,
+                            r_out: 0.02,
+                        },
+                        c_bus: 470e-6,
+                        chopper: None,
+                    });
+                    let mut e = build_engine(SkeletonOptions {
+                        dt_max: dt,
+                        drive,
+                        ..Default::default()
+                    });
+                    e.queue(EngineCommand::SetSignal {
+                        path: "ctrl.omega_ref".into(),
+                        value: 20.0,
+                        source: ChangeSource::Internal,
+                    });
+                    e
+                },
+                |mut e| e.step_until(SimTime::from_secs_f64(0.01)).unwrap(),
+                criterion::BatchSize::SmallInput,
+            )
+        });
+    }
 }
 
 /// Raw plant cost: 10k RK4 steps of the skeleton motor (no events: open loop, 1 ms span).
@@ -82,6 +131,6 @@ fn event_rates(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = Criterion::default().sample_size(20);
-    targets = skeleton_10ms, plant_steps, event_rates
+    targets = skeleton_10ms, inverter_10ms, plant_steps, event_rates
 }
 criterion_main!(benches);
