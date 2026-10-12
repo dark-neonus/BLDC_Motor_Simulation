@@ -9,7 +9,7 @@
 > - A regen scenario shows the bus voltage rising with a PSU, and being clamped with the chopper.
 > - Sim/real ratio in switching mode is measured and logged.
 
-- [ ] **P07.T01** — Inverter leg model (switching)
+- [x] **P07.T01** — Inverter leg model (switching)
   - **Depends:** P06
   - **Do:**
     - Per-leg state High/Low/Off.
@@ -117,8 +117,8 @@
     2. Snapshot format: add a version bump/migration note (the P06 rotor and FOC block need new fields, so older snapshots fail with "missing …").
     3. `get_param("load.disturbance.duration")` and `gearbox.stiffness`/`damping` return `None`; expose them (duration is a state: read through the engine).
     4. Interim torque mode (until P09): reset the speed integrator on a mode switch (bumpless), state in a comment that the command ignores η and uses K_t(λ_ref).
-    6. `presets/supplies/liion-12s.yaml` reuses the LiPo OCV table (flagged during the P06 graph extraction): give Li-ion its own curve with a source.
     5. Tests: V-THERM-002 through the motor's own R(T) path (locked motor at Î_cont) instead of a restated copper formula; a λ(T) torque-drop check (K_t at 80 °C ≈ 7 % lower, EQ-THERM-03).
+    6. `presets/supplies/liion-12s.yaml` reuses the LiPo OCV table (flagged during the P06 graph extraction): give Li-ion its own curve with a source.
   - **Files:** `crates/sim-core/src/physics/mech/rotor.rs`, `crates/sim-core/src/skeleton/{adapter,foc}.rs`, `crates/sim-core/src/engine/snapshot.rs`, tests
   - **Verify:** `cargo nextest run -p sim-core` green with the new tests.
   - **Done when:** Green.

@@ -1,0 +1,280 @@
+//! Switching inverter legs (EQ-INV-01): each leg is High, Low or Off; the terminal
+//! voltage w.r.t. DC− follows from the state, the phase current and the device drops.
+//! Leg states arrive on the bus as `inverter.leg_x` (+1 High, −1 Low, 0 Off), written
+//! by the PWM/commutation logic.
+
+use crate::engine::plant::PlantModule;
+use crate::engine::signals::{SignalBus, SignalError, SignalId, SignalKind};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LegState {
+    High,
+    Low,
+    Off,
+}
+
+impl LegState {
+    /// Bus encoding: +1 High, −1 Low, 0 Off.
+    pub fn from_signal(v: f64) -> Self {
+        if v > 0.5 {
+            LegState::High
+        } else if v < -0.5 {
+            LegState::Low
+        } else {
+            LegState::Off
+        }
+    }
+
+    pub fn to_signal(self) -> f64 {
+        match self {
+            LegState::High => 1.0,
+            LegState::Low => -1.0,
+            LegState::Off => 0.0,
+        }
+    }
+}
+
+/// Device parameters of the bridge.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Devices {
+    /// MOSFET on-resistance R_on [Ω] (both directions, synchronous rectification).
+    pub r_on: f64,
+    /// Diode forward drop V_f [V].
+    pub v_f: f64,
+}
+
+/// Terminal voltage of one leg (EQ-INV-01), or `None` when the terminal floats (Off with
+/// zero current: the motor sets it, EQ-MOT-12).
+pub fn terminal_voltage(s: LegState, i: f64, v_bus: f64, d: &Devices) -> Option<f64> {
+    match s {
+        LegState::High => Some(v_bus - d.r_on * i),
+        LegState::Low => Some(-d.r_on * i),
+        LegState::Off if i > 0.0 => Some(-d.v_f),
+        LegState::Off if i < 0.0 => Some(v_bus + d.v_f),
+        LegState::Off => None,
+    }
+}
+
+/// Whether a leg's current flows through the high side (EQ-INV-08): the High switch, or
+/// the high-side diode when Off with i < 0.
+pub fn high_side_conducts(s: LegState, i: f64) -> bool {
+    s == LegState::High || (s == LegState::Off && i < 0.0)
+}
+
+/// Switching-mode inverter (module `inverter`, no states): writes `inverter.v_a..c` from
+/// the leg states and the motor currents, and `inverter.i_dc` (EQ-INV-08).
+pub struct SwitchingInverter {
+    d: Devices,
+    legs: [SignalId; 3],
+    i: [SignalId; 3],
+    v_bus: SignalId,
+    /// Floating terminal: v_n + e_x (EQ-MOT-12), from the motor's signals.
+    v_n: SignalId,
+    e: [SignalId; 3],
+    v: [SignalId; 3],
+    i_dc: SignalId,
+    /// `motor.open_phase` (−1 none, k: phase k floats).
+    open_phase: Option<SignalId>,
+    /// Conducting diode of an Off leg: +1 low diode (i > 0), −1 high diode (i < 0), 0 none.
+    /// Latched when the leg turns Off (or a floating terminal reaches a bound) and held
+    /// until the motor reports the phase floating: the clamp must not flip with the sign
+    /// of i inside a step, or the current chatters at zero instead of crossing it.
+    latch: [f64; 3],
+    prev: [LegState; 3],
+}
+
+impl SwitchingInverter {
+    /// Registers `inverter.leg_a..c` (inputs), `inverter.v_a..c` and `inverter.i_dc`. The
+    /// motor's current/EMF/neutral signals are attached with `with_motor` (the motor needs
+    /// the terminal voltages first).
+    pub fn new(d: Devices, v_bus: SignalId, bus: &mut SignalBus) -> Result<Self, SignalError> {
+        let mut leg = |x: &str| {
+            bus.register(
+                &format!("inverter.leg_{x}"),
+                "-",
+                "leg state: +1 High, −1 Low, 0 Off",
+                SignalKind::Input,
+            )
+        };
+        let legs = [leg("a")?, leg("b")?, leg("c")?];
+        let mut volt = |x: &str| {
+            bus.register(
+                &format!("inverter.v_{x}"),
+                "V",
+                "terminal voltage w.r.t. DC−",
+                SignalKind::Output,
+            )
+        };
+        let v = [volt("a")?, volt("b")?, volt("c")?];
+        let i_dc = bus.register("inverter.i_dc", "A", "DC-link current", SignalKind::Output)?;
+        Ok(Self {
+            d,
+            legs,
+            i: [v_bus; 3],
+            v_bus,
+            v_n: v_bus,
+            e: [v_bus; 3],
+            v,
+            i_dc,
+            open_phase: None,
+            latch: [0.0; 3],
+            prev: [LegState::Low; 3],
+        })
+    }
+
+    pub fn outputs_ids(&self) -> [SignalId; 3] {
+        self.v
+    }
+
+    /// Attach the motor's `motor.i_x`, `motor.e_x` and `motor.v_n` signals.
+    pub fn with_motor(mut self, bus: &SignalBus) -> Result<Self, SignalError> {
+        let id = |n: &str| bus.id(n);
+        self.i = [id("motor.i_a")?, id("motor.i_b")?, id("motor.i_c")?];
+        self.e = [id("motor.e_a")?, id("motor.e_b")?, id("motor.e_c")?];
+        self.v_n = id("motor.v_n")?;
+        self.open_phase = Some(id("motor.open_phase")?);
+        Ok(self)
+    }
+
+    /// Initial leg states (written once; later the PWM/commutation block owns them).
+    pub fn set_legs(&self, bus: &mut SignalBus, s: [LegState; 3]) {
+        for (id, s) in self.legs.iter().zip(s) {
+            bus.set(*id, s.to_signal());
+        }
+    }
+}
+
+impl PlantModule for SwitchingInverter {
+    fn name(&self) -> &str {
+        "inverter"
+    }
+    fn n_states(&self) -> usize {
+        0
+    }
+    fn state_names(&self) -> Vec<(String, String)> {
+        vec![]
+    }
+    fn init(&self, _x: &mut [f64]) {}
+    fn outputs(&mut self, _t: f64, _x: &[f64], _off: usize, bus: &mut SignalBus) {
+        let v_bus = bus.get(self.v_bus);
+        let open = self.open_phase.map_or(-1.0, |id| bus.get(id));
+        let mut i_dc = 0.0;
+        for k in 0..3 {
+            let s = LegState::from_signal(bus.get(self.legs[k]));
+            let i = bus.get(self.i[k]);
+            let v = if s != LegState::Off {
+                terminal_voltage(s, i, v_bus, &self.d).unwrap_or(0.0)
+            } else if open == k as f64 {
+                // Floating: v_n + e_x (EQ-MOT-12); i = 0, no diode conducts.
+                self.latch[k] = 0.0;
+                (bus.get(self.v_n) + bus.get(self.e[k])).clamp(-self.d.v_f, v_bus + self.d.v_f)
+            } else {
+                if self.latch[k] == 0.0 {
+                    // Not floating and no diode yet: the terminal reached a bound (diode
+                    // reconnect) or the current is already flowing; pick the diode.
+                    let v_float = bus.get(self.v_n) + bus.get(self.e[k]);
+                    self.latch[k] = if i != 0.0 {
+                        i.signum()
+                    } else if v_float >= 0.5 * v_bus {
+                        -1.0
+                    } else {
+                        1.0
+                    };
+                }
+                terminal_voltage(s, self.latch[k], v_bus, &self.d).unwrap_or(0.0)
+            };
+            bus.set(self.v[k], v);
+            let high = s == LegState::High
+                || (s == LegState::Off && open != k as f64 && self.latch[k] < 0.0);
+            if high {
+                i_dc += i;
+            }
+        }
+        bus.set(self.i_dc, i_dc);
+    }
+    fn derivatives(&self, _t: f64, _x: &[f64], _off: usize, _bus: &SignalBus, _dx: &mut [f64]) {}
+    fn after_discrete(&mut self, _t: f64, _x: &mut [f64], bus: &SignalBus) {
+        for k in 0..3 {
+            let s = LegState::from_signal(bus.get(self.legs[k]));
+            if s != LegState::Off {
+                self.latch[k] = 0.0;
+            } else if self.prev[k] != LegState::Off {
+                // Turned Off: the current keeps its direction through the matching diode.
+                let i = bus.get(self.i[k]);
+                self.latch[k] = if i == 0.0 { 0.0 } else { i.signum() };
+            }
+            self.prev[k] = s;
+        }
+    }
+    fn save(&self) -> serde_json::Value {
+        serde_json::json!({
+            "latch": self.latch,
+            "prev": self.prev.map(LegState::to_signal),
+            "r_on": self.d.r_on, "v_f": self.d.v_f,
+        })
+    }
+    fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
+        let arr = |k: &str| -> Result<[f64; 3], String> {
+            serde_json::from_value(v.get(k).cloned().unwrap_or_default())
+                .map_err(|e| format!("`{k}`: {e}"))
+        };
+        self.latch = arr("latch")?;
+        self.prev = arr("prev")?.map(LegState::from_signal);
+        let f = |k: &str| {
+            v.get(k)
+                .and_then(serde_json::Value::as_f64)
+                .ok_or(format!("missing `{k}`"))
+        };
+        (self.d.r_on, self.d.v_f) = (f("r_on")?, f("v_f")?);
+        Ok(())
+    }
+    fn params(&self) -> Vec<(String, String)> {
+        vec![("r_on".into(), "ohm".into()), ("v_f".into(), "V".into())]
+    }
+    fn get_param(&self, name: &str) -> Option<f64> {
+        match name {
+            "r_on" => Some(self.d.r_on),
+            "v_f" => Some(self.d.v_f),
+            _ => None,
+        }
+    }
+    fn set_param(&mut self, name: &str, v: f64, _x: &mut [f64]) -> Result<f64, String> {
+        let slot = match name {
+            "r_on" => &mut self.d.r_on,
+            "v_f" => &mut self.d.v_f,
+            _ => return Err(format!("unknown parameter `{name}`")),
+        };
+        if !(v.is_finite() && v >= 0.0) {
+            return Err(format!("`{name}` must be ≥ 0, got {v}"));
+        }
+        Ok(std::mem::replace(slot, v))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const D: Devices = Devices {
+        r_on: 0.01,
+        v_f: 0.8,
+    };
+
+    #[test]
+    fn terminal_voltage_per_state() {
+        // On-resistance drop in both directions.
+        assert_eq!(
+            terminal_voltage(LegState::High, 5.0, 24.0, &D),
+            Some(24.0 - 0.05)
+        );
+        assert_eq!(terminal_voltage(LegState::Low, -5.0, 24.0, &D), Some(0.05));
+        // Off: the diode set by the current direction conducts.
+        assert_eq!(terminal_voltage(LegState::Off, 2.0, 24.0, &D), Some(-0.8));
+        assert_eq!(terminal_voltage(LegState::Off, -2.0, 24.0, &D), Some(24.8));
+        assert_eq!(terminal_voltage(LegState::Off, 0.0, 24.0, &D), None);
+        assert!(high_side_conducts(LegState::Off, -1.0) && !high_side_conducts(LegState::Off, 1.0));
+        for s in [LegState::High, LegState::Low, LegState::Off] {
+            assert_eq!(LegState::from_signal(s.to_signal()), s);
+        }
+    }
+}

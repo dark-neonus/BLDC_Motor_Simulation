@@ -125,7 +125,10 @@ impl Engine {
             g_prev: Vec::new(),
             g_new: Vec::new(),
         };
-        // Make the bus consistent with the initial state.
+        // Make the bus consistent with the initial state, and let modules adopt the initial
+        // discrete inputs (e.g. a leg that starts Off).
+        e.plant.outputs(0.0, &e.x, &mut e.bus);
+        e.plant.after_discrete(0.0, &mut e.x, &e.bus);
         e.plant.outputs(0.0, &e.x, &mut e.bus);
         if let Some((_, book)) = &mut e.energy {
             book.e_st0 = e.plant.stored_energy(&e.x, &e.bus);
@@ -155,7 +158,8 @@ impl Engine {
     }
 
     /// Fire all blocks due at the current time, in priority order.
-    fn fire_due(&mut self) -> Result<(), SimError> {
+    /// Fire the blocks due now; true if any fired.
+    fn fire_due(&mut self) -> Result<bool, SimError> {
         self.due.clear();
         for (i, &t) in self.next_fire.iter().enumerate() {
             if t == self.time {
@@ -163,7 +167,7 @@ impl Engine {
             }
         }
         if self.due.is_empty() {
-            return Ok(());
+            return Ok(false);
         }
         let blocks = &self.blocks;
         self.due.sort_by_key(|&i| (blocks[i].priority(), i));
@@ -195,7 +199,7 @@ impl Engine {
         }
         // Other blocks' outputs may have changed variable-event schedules: re-poll them.
         self.repoll_variable(self.time);
-        Ok(())
+        Ok(true)
     }
 
     /// Advance to `target`, firing events on the way. Events due exactly at
@@ -203,7 +207,13 @@ impl Engine {
     pub fn step_until(&mut self, target: SimTime) -> Result<(), SimError> {
         while self.time < target {
             self.apply_pending();
-            self.fire_due()?;
+            if self.fire_due()? {
+                // Blocks may have changed plant inputs (leg states …): let modules react,
+                // then refresh the bus from the possibly changed states.
+                let t = self.time.as_secs_f64();
+                self.plant.after_discrete(t, &mut self.x, &self.bus);
+                self.plant.outputs(t, &self.x, &mut self.bus);
+            }
             let t_next = self.next_event_time().map_or(target, |t| t.min(target));
             let (t0, t1) = (self.time.as_secs_f64(), t_next.as_secs_f64());
             self.advance(t0, t1)?;
@@ -346,7 +356,11 @@ impl Engine {
                 Some(_) => {
                     // An event is due now: apply commands, fire it, move to the following one.
                     self.apply_pending();
-                    self.fire_due()?;
+                    if self.fire_due()? {
+                        let t = self.time.as_secs_f64();
+                        self.plant.after_discrete(t, &mut self.x, &self.bus);
+                        self.plant.outputs(t, &self.x, &mut self.bus);
+                    }
                     if let Some(t) = self.next_event_time() {
                         self.step_until(t)?;
                     }
@@ -388,9 +402,12 @@ impl Engine {
             let ev = self.apply(cmd);
             self.events.push(ev);
         }
-        // Keep the bus consistent with possibly changed plant parameters/states.
-        self.plant
-            .outputs(self.time.as_secs_f64(), &self.x, &mut self.bus);
+        // Keep the bus consistent with possibly changed plant parameters/states, and let
+        // modules react to changed inputs (e.g. leg states set by a command).
+        let t = self.time.as_secs_f64();
+        self.plant.outputs(t, &self.x, &mut self.bus);
+        self.plant.after_discrete(t, &mut self.x, &self.bus);
+        self.plant.outputs(t, &self.x, &mut self.bus);
         self.update_energy();
         self.repoll_variable(SimTime(self.time.nanos() - 1));
     }

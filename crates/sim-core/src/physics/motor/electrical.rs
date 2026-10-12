@@ -180,6 +180,16 @@ pub struct RTemperature {
     pub t_ref: f64,
 }
 
+/// Inverter leg states and diode bounds for automatic floating (EQ-INV-01, EQ-MOT-12).
+#[derive(Debug, Clone, Copy)]
+pub struct LegInputs {
+    /// `inverter.leg_a..c` (+1 High, −1 Low, 0 Off).
+    pub legs: [SignalId; 3],
+    pub v_bus: SignalId,
+    /// Diode forward drop V_f [V].
+    pub v_f: f64,
+}
+
 /// Bus signals the module reads.
 #[derive(Debug, Clone, Copy)]
 pub struct ElectricalInputs {
@@ -222,6 +232,11 @@ pub struct MotorElectrical {
     out: Out,
     temp: Option<LambdaTemperature>,
     r_temp: Option<RTemperature>,
+    legs: Option<LegInputs>,
+    /// The open phase is a physical disconnect (`motor.open_phase`): it never reconnects
+    /// by itself. Otherwise it follows its inverter leg and the diode bounds.
+    fault_open: bool,
+    warned_two_off: bool,
     jump: f64,
     last_theta_e: f64,
     last_lambda: f64,
@@ -311,6 +326,9 @@ impl MotorElectrical {
             out,
             temp: None,
             r_temp: None,
+            legs: None,
+            fault_open: false,
+            warned_two_off: false,
             jump: 0.0,
             last_lambda: lambda,
             open: None,
@@ -336,6 +354,14 @@ impl MotorElectrical {
             Some(t) => self.p.lambda * (1.0 + t.alpha_br * (t.t_start - t.t_ref)),
             None => self.p.lambda,
         }
+    }
+
+    /// Follow inverter leg states: a leg that is Off opens its phase at the next current
+    /// zero, a floating terminal that reaches a diode bound reconnects (EQ-INV-01,
+    /// EQ-MOT-12).
+    pub fn with_legs(mut self, l: LegInputs) -> Self {
+        self.legs = Some(l);
+        self
     }
 
     /// Enable R(T) from the winding-temperature signal (EQ-THERM-02).
@@ -524,13 +550,8 @@ impl MotorElectrical {
         let old = self.open.or(self.pending).map_or(-1.0, |k| k as f64);
         if v == -1.0 {
             self.pending = None;
-            if let Some(k) = self.open.take() {
-                // Rebuild ψαβ from the current state (continuous, EQ-MOT-12).
-                let (th, lam) = (self.last_theta_e, self.last_lambda);
-                let s = self.solve_open(x_own[0], th, lam, k);
-                let (pa, pb, _, _) = self.flux_ab(s.i_d, s.i_q, th, lam);
-                (x_own[0], x_own[1]) = (pa, pb);
-            }
+            self.fault_open = false;
+            self.reconnect(x_own);
             return Ok(old);
         }
         if !matches!(v, 0.0 | 1.0 | 2.0) {
@@ -539,17 +560,32 @@ impl MotorElectrical {
         if self.open.is_some() {
             return Err("a phase is already open; reconnect it first".into());
         }
-        let k = v as usize;
+        self.fault_open = true;
+        self.request_open(v as usize, x_own);
+        Ok(old)
+    }
+
+    /// Leave open-phase mode: rebuild ψαβ from the current state (continuous, EQ-MOT-12).
+    fn reconnect(&mut self, x_own: &mut [f64]) {
+        if let Some(k) = self.open.take() {
+            let (th, lam) = (self.last_theta_e, self.last_lambda);
+            let s = self.solve_open(x_own[0], th, lam, k);
+            let (pa, pb, _, _) = self.flux_ab(s.i_d, s.i_q, th, lam);
+            (x_own[0], x_own[1]) = (pa, pb);
+        }
+    }
+
+    /// Open phase k at its next current zero (at once if it is already zero).
+    fn request_open(&mut self, k: usize, x_own: &mut [f64]) {
         let s = self.solve(x_own[0], x_own[1], self.last_theta_e, self.last_lambda);
         let i_k = Self::phase_current(&s, k);
         if i_k.abs() <= 1e-12 * (1.0 + s.i_alpha.hypot(s.i_beta)) {
             // Already at a current zero (e.g. at rest): no crossing will come, open now.
             self.enter_open(k, x_own);
-            return Ok(old);
+            return;
         }
         self.pending_sign = if i_k < 0.0 { -1.0 } else { 1.0 };
         self.pending = Some(k);
-        Ok(old)
     }
 
     /// Switch to the open-phase state (EQ-MOT-11) with phase k's current at zero.
@@ -741,25 +777,83 @@ impl PlantModule for MotorElectrical {
         std::mem::take(&mut self.jump)
     }
     fn n_events(&self) -> usize {
-        1
+        3
     }
     fn event_functions(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, g: &mut [f64]) {
-        // The pending phase's current; constant (no crossing) otherwise.
+        // 0: the pending phase's current; constant (no crossing) otherwise.
         g[0] = match self.pending {
             Some(k) => self.pending_sign * Self::phase_current(&self.state(x, off, bus).0, k),
             None => 1.0,
         };
+        // 1, 2: a leg-driven floating terminal v_kT = v_n + e_k reaching V_bus + V_f (high
+        // diode) or −V_f (low diode) (EQ-MOT-12). v_n from the connected pair's terminal
+        // voltages and EMFs on the bus (this outputs pass).
+        (g[1], g[2]) = (1.0, 1.0);
+        if let (Some(k), Some(l), false) = (self.open, self.legs, self.fault_open) {
+            let (y, z) = ((k + 1) % 3, (k + 2) % 3);
+            let (v, e) = (
+                self.inp.v.map(|id| bus.get(id)),
+                self.out.e.map(|id| bus.get(id)),
+            );
+            let v_n = 0.5 * (v[y] + v[z] - e[y] - e[z]);
+            let v_k = v_n + e[k];
+            g[1] = bus.get(l.v_bus) + l.v_f - v_k;
+            g[2] = v_k + l.v_f;
+        }
     }
     fn on_event(
         &mut self,
-        _idx: usize,
+        idx: usize,
         _rising: bool,
         _t: f64,
         x_own: &mut [f64],
         _bus: &mut SignalBus,
     ) {
-        if let Some(k) = self.pending.take() {
-            self.enter_open(k, x_own);
+        match idx {
+            0 => {
+                if let Some(k) = self.pending.take() {
+                    self.enter_open(k, x_own);
+                }
+            }
+            _ => {
+                let Some(k) = self.open else { return };
+                // A diode starts conducting: back to two states; the current grows out of
+                // the high diode (i < 0) or into the low one (i > 0) and the phase opens
+                // again at its next zero while the leg stays Off.
+                self.reconnect(x_own);
+                self.pending = Some(k);
+                self.pending_sign = if idx == 1 { -1.0 } else { 1.0 };
+            }
+        }
+    }
+    fn after_discrete(&mut self, _t: f64, x_own: &mut [f64], bus: &SignalBus) {
+        let Some(l) = self.legs else { return };
+        if self.fault_open {
+            return;
+        }
+        let off: [bool; 3] = std::array::from_fn(|k| bus.get(l.legs[k]).abs() < 0.5);
+        if let Some(k) = self.open
+            && !off[k]
+        {
+            self.reconnect(x_own);
+        }
+        if let Some(k) = self.pending
+            && !off[k]
+        {
+            self.pending = None;
+        }
+        if self.open.is_none() && self.pending.is_none() {
+            let offs: Vec<usize> = (0..3).filter(|&k| off[k]).collect();
+            if offs.len() > 1 && !self.warned_two_off {
+                // Zero-current mode (all/two legs Off) is not modelled yet (P10).
+                self.warned_two_off = true;
+                self.warnings.push(
+                    "two or more inverter legs are Off: only the first is modelled as floating (zero-current mode arrives with faults, P10)".into(),
+                );
+            }
+            if let Some(&k) = offs.first() {
+                self.request_open(k, x_own);
+            }
         }
     }
     fn take_warnings(&mut self) -> Vec<String> {
@@ -777,6 +871,7 @@ impl PlantModule for MotorElectrical {
             "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda,
             "open": self.open, "pending": self.pending, "pending_sign": self.pending_sign,
             "last_theta_e": self.last_theta_e, "last_lambda": self.last_lambda, "jump": self.jump, "warned": self.warned,
+            "fault_open": self.fault_open,
         })
     }
     fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
@@ -805,6 +900,10 @@ impl PlantModule for MotorElectrical {
             .get("warned")
             .and_then(serde_json::Value::as_bool)
             .ok_or("missing `warned`")?;
+        self.fault_open = v
+            .get("fault_open")
+            .and_then(serde_json::Value::as_bool)
+            .ok_or("missing `fault_open`")?;
         Ok(())
     }
 }

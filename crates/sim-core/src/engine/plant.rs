@@ -75,6 +75,11 @@ pub trait PlantModule: Send {
     ) {
     }
 
+    /// Called after discrete blocks fired (their outputs, e.g. inverter leg states, may
+    /// have changed). A module may switch modes or rebuild its own states here; a state
+    /// event could not see such a change, since g is re-evaluated after it.
+    fn after_discrete(&mut self, _t: f64, _x_own: &mut [f64], _bus: &SignalBus) {}
+
     /// Diagnostics raised since the last call (e.g. from `on_event`); the engine turns
     /// them into `EngineEvent::Warning`s.
     fn take_warnings(&mut self) -> Vec<String> {
@@ -168,6 +173,14 @@ impl Plant {
             .iter_mut()
             .map(|m| m.take_external_energy())
             .sum()
+    }
+
+    /// Let every module react to changed discrete inputs (see `PlantModule::after_discrete`).
+    pub fn after_discrete(&mut self, t: f64, x: &mut [f64], bus: &SignalBus) {
+        for i in 0..self.modules.len() {
+            let (m, xs) = self.module_mut(i, x);
+            m.after_discrete(t, xs, bus);
+        }
     }
 
     /// Warnings raised by modules since the last call: (module name, message).

@@ -26,7 +26,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `load.theta`, `load.omega` | rad, rad/s | load-side angle, speed | mech | EQ-MECH-02/04 |
 | `load.torque_gravity`, `load.torque_ext`, `load.disturbance` | N·m | load torques | load | EQ-MECH-06…08 |
 | `thermal.t_winding`, `thermal.t_stator`, `thermal.t_housing`, `thermal.t_magnet` | K | temperatures | thermal | EQ-THERM-01 |
-| `inverter.leg_a`, `inverter.leg_b`, `inverter.leg_c` | – | leg state H/L/O | inverter | EQ-INV-01 |
+| `inverter.leg_a`, `inverter.leg_b`, `inverter.leg_c` | – | leg state: +1 High, −1 Low, 0 Off | inverter | EQ-INV-01 |
 | `inverter.duty_a`, `inverter.duty_b`, `inverter.duty_c` | – | duties | modulator | EQ-INV-02 |
 | `inverter.v_a`, `inverter.v_b`, `inverter.v_c` | V | terminal voltages | inverter | EQ-INV-01/03 |
 | `inverter.i_dc`, `inverter.i_sw`, `inverter.p_loss` | A, A, W | DC link, switching current, loss | inverter | EQ-INV-08/09 |

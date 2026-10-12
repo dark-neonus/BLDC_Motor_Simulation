@@ -212,7 +212,7 @@ $i$ follows from $\psi_{ab}(i,\theta_e)$, built with EQ-MOT-02 along that curren
 
 **All-off / two-off (zero-current mode).** With two or three legs Off and no current, the motor still generates. The model monitors the line-to-line EMFs: when $|e_x - e_y|$ exceeds $V_{bus} + 2V_f$ for some pair, that pair enters single-path mode with both terminals diode-clamped (high side of the more positive terminal, low side of the other). This is how a spinning motor charges the bus after an over-voltage trip disables PWM (state event).
 
-**Implementation status (P05):** zero-current mode and the diode-clamp reconnection below need the switched inverter and arrive with it (P07). Until then a phase is opened through `motor.open_phase` (at its next current zero, or at once if the current is already zero) and reconnected only explicitly (`motor.open_phase = -1`).
+**Implementation status (P07.T01):** with a switching inverter the phase floats when its leg is Off and its current reaches zero, and reconnects when the leg is driven again or the floating terminal reaches a diode bound (state event); the conducting diode is latched from the current direction when the leg turns Off. A `motor.open_phase` fault is a physical disconnect and never reconnects by itself. Zero-current mode with two or more legs Off arrives with faults (P10); until then only the first Off leg floats (with a warning).
 
 ### EQ-MOT-12 — Floating-terminal voltage and reconnection {/* #eq-mot-12 */}
 
