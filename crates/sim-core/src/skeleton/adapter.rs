@@ -105,6 +105,8 @@ pub struct SkeletonOptions {
     pub load: Load,
     /// EQ-MECH-09: live load changes keep momentum instead of speed.
     pub conserve_momentum: bool,
+    /// Initial load angle θ_L [rad] (arm mounting offset).
+    pub theta_l0: f64,
     /// Gear ratio N (load-side setpoints × N = motor side).
     pub ratio: f64,
     /// Cogging (EQ-MOT-08), when the fidelity tier enables it.
@@ -126,6 +128,7 @@ impl Default for SkeletonOptions {
             gearbox: Gearbox::BYPASS,
             load: Load::None,
             conserve_momentum: false,
+            theta_l0: 0.0,
             ratio: 1.0,
             cogging: None,
             iron: None,
@@ -191,7 +194,7 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         j_load: 0.0,
         b: mp.b,
         pole_pairs: mp.p,
-        theta0: 0.0,
+        theta0: opts.theta_l0 * opts.gearbox.n,
         omega0: 0.0,
     };
     let rotor = RotorRigid::new(rp, &mut bus, vec![], vec![])

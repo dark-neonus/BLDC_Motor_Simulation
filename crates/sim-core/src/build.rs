@@ -18,6 +18,7 @@ use crate::engine::engine::Engine;
 use crate::engine::fidelity::{FidelityConfig, Tier};
 use crate::physics::mech::gearbox::Gearbox;
 use crate::physics::mech::load::Load;
+use crate::physics::mech::load_arm::Arm;
 use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::CoggingParams;
 use crate::physics::motor::electrical::SatParams;
@@ -313,6 +314,16 @@ fn gearbox(scene: &ResolvedScene) -> Result<Gearbox, BuildError> {
     })
 }
 
+/// Initial arm angle (mounting offset, EQ-MECH-06) [rad].
+fn mount_angle(scene: &ResolvedScene) -> Result<f64, BuildError> {
+    match &scene.load {
+        Some(LoadParams::Arm { mount_angle, .. }) => {
+            opt(mount_angle, Kind::Angle, "load.mount_angle")
+        }
+        _ => Ok(0.0),
+    }
+}
+
 /// The scene's load and its EQ-MECH-09 rule (true: conserve momentum).
 fn load(scene: &ResolvedScene) -> Result<(Load, bool), BuildError> {
     Ok(match &scene.load {
@@ -323,13 +334,23 @@ fn load(scene: &ResolvedScene) -> Result<(Load, bool), BuildError> {
             },
             false,
         ),
-        // INTERIM until P06.T04/T05: the arm's inertia only; other loads add none.
-        Some(l @ LoadParams::Arm { on_change, .. }) => (
-            Load::Flywheel {
-                j: reflected_inertia(None, Some(l))?,
-            },
+        Some(LoadParams::Arm {
+            arm_length,
+            arm_mass,
+            mass,
+            distance,
+            on_change,
+            ..
+        }) => (
+            Load::Arm(Arm {
+                arm_length: si(arm_length, Kind::Length, "load.arm_length")?,
+                arm_mass: si(arm_mass, Kind::Mass, "load.arm_mass")?,
+                mass: si(mass, Kind::Mass, "load.mass")?,
+                distance: si(distance, Kind::Length, "load.distance")?,
+            }),
             *on_change == OnChange::ConserveMomentum,
         ),
+        // INTERIM until P06.T05: constant/brake/viscous loads.
         Some(_) => (Load::None, false),
     })
 }
@@ -415,6 +436,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             gearbox: gearbox(scene)?,
             load,
             conserve_momentum,
+            theta_l0: mount_angle(scene)?,
             ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
             cogging: cogging(scene)?,
             iron: iron(scene)?,

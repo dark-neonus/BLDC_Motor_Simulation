@@ -38,7 +38,7 @@
     - friction dissipation is accounted in energy
   - **Done when:** Passing.
 
-- [ ] **P06.T04** — Arm + mass gravity load
+- [x] **P06.T04** — Arm + mass gravity load
   - **Depends:** P06.T01
   - **Do:**
     - Load params: arm length, arm mass, point mass and distance d, mounting offset angle.

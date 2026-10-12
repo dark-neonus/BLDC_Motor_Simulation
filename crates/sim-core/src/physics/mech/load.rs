@@ -4,6 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::load_arm::Arm;
+
 /// Load-side torques [N·m], split by where their energy goes.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct LoadTorques {
@@ -27,6 +29,8 @@ pub enum Load {
     None,
     /// A pure inertia [kg·m²].
     Flywheel { j: f64 },
+    /// Arm + point mass under gravity (EQ-MECH-06).
+    Arm(Arm),
 }
 
 impl Load {
@@ -35,16 +39,26 @@ impl Load {
         match self {
             Load::None => 0.0,
             Load::Flywheel { j } => *j,
+            Load::Arm(a) => a.inertia(),
         }
     }
 
-    pub fn torques(&self, _theta_l: f64, _omega_l: f64) -> LoadTorques {
-        LoadTorques::default()
+    pub fn torques(&self, theta_l: f64, _omega_l: f64) -> LoadTorques {
+        match self {
+            Load::Arm(a) => LoadTorques {
+                gravity: a.torque(theta_l),
+                ..Default::default()
+            },
+            _ => LoadTorques::default(),
+        }
     }
 
     /// Potential energy U(θ_L) [J].
-    pub fn potential(&self, _theta_l: f64) -> f64 {
-        0.0
+    pub fn potential(&self, theta_l: f64) -> f64 {
+        match self {
+            Load::Arm(a) => a.potential(theta_l),
+            _ => 0.0,
+        }
     }
 
     /// Live parameters under `load.` with their units.
@@ -52,12 +66,17 @@ impl Load {
         match self {
             Load::None => vec![],
             Load::Flywheel { .. } => vec![("load.inertia".into(), "kg*m^2".into())],
+            Load::Arm(_) => Arm::PARAMS
+                .iter()
+                .map(|(p, u)| ((*p).into(), (*u).into()))
+                .collect(),
         }
     }
 
     pub fn get(&self, path: &str) -> Option<f64> {
         match (self, path) {
             (Load::Flywheel { j }, "load.inertia") => Some(*j),
+            (Load::Arm(a), p) => a.get(p),
             _ => None,
         }
     }
@@ -72,6 +91,7 @@ impl Load {
                 }
                 Ok(std::mem::replace(j, v))
             }
+            (Load::Arm(a), p) => a.set(p, v),
             _ => Err(format!("unknown parameter `{path}`")),
         }
     }

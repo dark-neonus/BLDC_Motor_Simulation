@@ -315,3 +315,8 @@
 - Live: gearbox.efficiency, gearbox.j_in/j_out (keep ω), load.* via the EQ-MECH-09 rule (keep ω, or J·ω with `on_change: conserve_momentum`), ΔE booked external; gearbox.ratio is build-only.
 - Build: `SkeletonOptions{gearbox, load, conserve_momentum}` replace `extra_j`; FOC gains use `gearbox.j_eq`. arm-servo now sees its gearbox η.
 - Tests: V-MECH-003 torque step through N = 9 (rtol 1e-9), gear loss = (1−η)|τ_in ω| driving and braking (rtol 1e-6), live load-inertia rules both ways (rtol 1e-9, residual < 1e-9), ratio edit rejected.
+
+## 2026-10-12 — P06.T04 Arm + mass gravity load
+- `mech::load_arm::Arm` (EQ-MECH-06): M_eff, J_load, T_g = −g·M_eff·sin θ_L, U_g reported as stored energy (gravity has no power term; its work is −dU/dt). `Load::Arm`; live `load.arm_length/arm_mass/mass/distance` through the EQ-MECH-09 rule (ΔU included in the booked jump).
+- Scene: optional `load.mount_angle` (initial θ_L; the spec's mounting offset) → rotor θ0 = N·angle. Schemas regenerated. Build maps the arm fully (replaces the T01 interim inertia-only mapping).
+- `tests/v_mech.rs`: V-MECH-001 period 0.77961 s (spec value reproduced to 1e-5, simulated rtol 5e-4), V-MECH-002 150° swing for 15 s: residual < 1e-6 and stored energy constant, V-MECH-009 keep_speed / conserve_momentum through N = 9 (rtol 1e-9) with ΔE booked.

@@ -2,4 +2,5 @@
 
 pub mod gearbox;
 pub mod load;
+pub mod load_arm;
 pub mod rotor;

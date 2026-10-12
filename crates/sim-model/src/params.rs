@@ -318,6 +318,8 @@ pub enum LoadParams {
         mass: Param,
         /// Distance of the point mass from the axis.
         distance: Param,
+        /// Arm angle from straight down at the start (mounting offset, EQ-MECH-06); default 0.
+        mount_angle: Option<Param>,
         /// What a live mass change keeps: speed (default) or momentum (D-007).
         #[serde(default)]
         on_change: OnChange,
