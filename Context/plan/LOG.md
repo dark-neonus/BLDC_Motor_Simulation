@@ -307,3 +307,11 @@
   - iron-loss drag.
   
   It runs with a rigid rotor and an ideal voltage source under the interim skeleton FOC. Energy closes for every term, and the server holds a live scene whose edits pass the constraint rules and the engine.
+
+## 2026-10-12 — P06.T01 Rigid drivetrain: gearbox + load slot (D-015)
+- D-015: the rotor module (`motor.mechanical`) is the drivetrain and owns `gearbox.*` / `load.*` through the new `PlantModule::param_roots` (engine routing: longest root; extra roots get the full path). `Engine::get_param` uses the same routing.
+- `mech::gearbox::Gearbox` (N, η, J_gi, J_go; `j_eq`, EQ-MECH-03 `loss_torque` from the lossless acceleration, ω_ε = 1e-3). `mech::load::{Load, LoadTorques}`: torques split into gravity (stored U), loss and external; T01 has `Flywheel` (arm → its inertia only, INTERIM until T04).
+- Rotor signals now include load.theta/omega, load.torque_gravity/torque_ext, gearbox.p_loss (display; the motor torque on the bus lags one stage in outputs, the energy book uses `powers`). Power terms: friction, gearbox, load (losses), external (renamed from "load").
+- Live: gearbox.efficiency, gearbox.j_in/j_out (keep ω), load.* via the EQ-MECH-09 rule (keep ω, or J·ω with `on_change: conserve_momentum`), ΔE booked external; gearbox.ratio is build-only.
+- Build: `SkeletonOptions{gearbox, load, conserve_momentum}` replace `extra_j`; FOC gains use `gearbox.j_eq`. arm-servo now sees its gearbox η.
+- Tests: V-MECH-003 torque step through N = 9 (rtol 1e-9), gear loss = (1−η)|τ_in ω| driving and braking (rtol 1e-6), live load-inertia rules both ways (rtol 1e-9, residual < 1e-9), ratio edit rejected.

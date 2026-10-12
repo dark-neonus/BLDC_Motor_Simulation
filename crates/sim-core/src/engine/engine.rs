@@ -422,13 +422,7 @@ impl Engine {
                         .and_then(|r| r.strip_prefix('.'))
                         .map(|r| (owner.len(), r.to_owned()))
                 };
-                let module = self
-                    .plant
-                    .modules()
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, m)| under(m.name()).map(|(l, r)| (l, i, r)))
-                    .max_by_key(|(l, _, _)| *l);
+                let module = self.route_module(&path);
                 let block = self
                     .blocks
                     .iter()
@@ -557,16 +551,50 @@ impl Engine {
         self.blocks[i].as_mut()
     }
 
+    /// The module owning a parameter path: the longest matching root (its name, or an
+    /// extra root from `param_roots`, D-015) → (root length, module index, local name).
+    fn route_module(&self, path: &str) -> Option<(usize, usize, String)> {
+        let mut best: Option<(usize, usize, String)> = None;
+        for (i, m) in self.plant.modules().iter().enumerate() {
+            let own = std::iter::once((m.name().to_string(), true))
+                .chain(m.param_roots().into_iter().map(|r| (r, false)));
+            for (root, is_name) in own {
+                let Some(rest) = path
+                    .strip_prefix(root.as_str())
+                    .and_then(|r| r.strip_prefix('.'))
+                else {
+                    continue;
+                };
+                if best.as_ref().is_none_or(|b| root.len() > b.0) {
+                    let local = if is_name {
+                        rest.to_string()
+                    } else {
+                        path.to_string()
+                    };
+                    best = Some((root.len(), i, local));
+                }
+            }
+        }
+        best
+    }
+
     /// Read a live parameter by path.
     pub fn get_param(&self, path: &str) -> Option<f64> {
-        let (owner, name) = path.rsplit_once('.')?;
-        if let Some(m) = self.plant.modules().iter().find(|m| m.name() == owner) {
-            return m.get_param(name);
-        }
-        self.blocks
+        let module = self.route_module(path);
+        let block = self
+            .blocks
             .iter()
-            .find(|b| b.id() == owner)?
-            .get_param(name)
+            .filter_map(|b| {
+                let rest = path.strip_prefix(b.id())?.strip_prefix('.')?;
+                Some((b.id().len(), b, rest))
+            })
+            .max_by_key(|(l, _, _)| *l);
+        match (module, block) {
+            (Some(m), Some(b)) if b.0 > m.0 => b.1.get_param(b.2),
+            (Some((_, i, name)), _) => self.plant.modules()[i].get_param(&name),
+            (None, Some(b)) => b.1.get_param(b.2),
+            (None, None) => None,
+        }
     }
 }
 

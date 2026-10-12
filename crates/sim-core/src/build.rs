@@ -7,7 +7,8 @@
 use sim_model::constraints::{self, Severity};
 use sim_model::param::Param;
 use sim_model::params::{
-    ControllerParams, EmfShape, GearboxParams, LoadParams, MotorParams, SupplyParams, TierParam,
+    ControllerParams, EmfShape, GearboxParams, LoadParams, MotorParams, OnChange, SupplyParams,
+    TierParam,
 };
 use sim_model::scene::ResolvedScene;
 use sim_model::units::Kind;
@@ -15,6 +16,8 @@ use sim_model::units::Kind;
 use crate::engine::commands::{ChangeSource, EngineCommand};
 use crate::engine::engine::Engine;
 use crate::engine::fidelity::{FidelityConfig, Tier};
+use crate::physics::mech::gearbox::Gearbox;
+use crate::physics::mech::load::Load;
 use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::CoggingParams;
 use crate::physics::motor::electrical::SatParams;
@@ -297,6 +300,40 @@ fn iron(scene: &ResolvedScene) -> Result<Option<IronLossParams>, BuildError> {
     }))
 }
 
+/// The scene's gearbox (EQ-MECH-02/03); bypass without one.
+fn gearbox(scene: &ResolvedScene) -> Result<Gearbox, BuildError> {
+    let Some(g) = &scene.gearbox else {
+        return Ok(Gearbox::BYPASS);
+    };
+    Ok(Gearbox {
+        n: g.ratio,
+        eta: g.efficiency,
+        j_in: opt(&g.j_in, Kind::Inertia, "gearbox.j_in")?,
+        j_out: opt(&g.j_out, Kind::Inertia, "gearbox.j_out")?,
+    })
+}
+
+/// The scene's load and its EQ-MECH-09 rule (true: conserve momentum).
+fn load(scene: &ResolvedScene) -> Result<(Load, bool), BuildError> {
+    Ok(match &scene.load {
+        None => (Load::None, false),
+        Some(LoadParams::Flywheel { inertia }) => (
+            Load::Flywheel {
+                j: si(inertia, Kind::Inertia, "load.inertia")?,
+            },
+            false,
+        ),
+        // INTERIM until P06.T04/T05: the arm's inertia only; other loads add none.
+        Some(l @ LoadParams::Arm { on_change, .. }) => (
+            Load::Flywheel {
+                j: reflected_inertia(None, Some(l))?,
+            },
+            *on_change == OnChange::ConserveMomentum,
+        ),
+        Some(_) => (Load::None, false),
+    })
+}
+
 /// Back-EMF shape (EQ-MOT-03). Not tier-gated: the shape is part of the motor.
 fn shape(scene: &ResolvedScene) -> Result<Shape, BuildError> {
     Ok(match &scene.motor.magnetic.emf_shape {
@@ -363,6 +400,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
     };
     let extra_j = reflected_inertia(scene.gearbox.as_ref(), scene.load.as_ref())?;
     let mp = pmsm_from(&scene.motor, 0.0)?;
+    let (load, conserve_momentum) = load(scene)?;
     let dt_max = match scene.fidelity.as_ref().and_then(|f| f.dt_max.as_ref()) {
         Some(p) => si(p, Kind::Time, "fidelity.dt_max")?,
         None => cfg.dt / 10.0,
@@ -374,7 +412,9 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             locked: false,
             open_loop_vq: None,
             dt_max,
-            extra_j,
+            gearbox: gearbox(scene)?,
+            load,
+            conserve_momentum,
             ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
             cogging: cogging(scene)?,
             iron: iron(scene)?,

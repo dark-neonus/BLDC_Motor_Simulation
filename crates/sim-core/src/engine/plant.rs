@@ -24,6 +24,12 @@ pub trait PlantModule: Send {
     fn outputs(&mut self, t: f64, x: &[f64], off: usize, bus: &mut SignalBus);
     /// Pass 2: write d(own states)/dt into `dx` (this module's slice only).
     fn derivatives(&self, t: f64, x: &[f64], off: usize, bus: &SignalBus, dx: &mut [f64]);
+    /// Extra parameter roots this module owns besides its name (D-015): a path
+    /// `<root>.<rest>` reaches `set_param`/`get_param` as `<root>.<rest>` unchanged, while
+    /// paths under the module name arrive relative to it.
+    fn param_roots(&self) -> Vec<String> {
+        Vec::new()
+    }
     /// Live-settable parameters: `(name, unit)`; full path is `<module name>.<name>`.
     fn params(&self) -> Vec<(String, String)> {
         Vec::new()

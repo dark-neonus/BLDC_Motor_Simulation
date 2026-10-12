@@ -5,7 +5,7 @@
 > **Read first:** `docs/docs/physics/mechanical.md` (EQ-MECH-*), `thermal.md` (EQ-THERM-*), [DECISIONS D-007](DECISIONS.md).
 > **Exit criteria:** All V-MECH and V-THERM cases pass. Holding torque at standstill visibly heats the winding in a scenario (`presets/scenarios/hold-heats-motor.yaml`), and the temperature trajectory matches the analytic first-order approximation within the stated tolerance.
 
-- [ ] **P06.T01** — Rotor + rigid gearbox + reflected inertia
+- [x] **P06.T01** — Rotor + rigid gearbox + reflected inertia
   - **Depends:** P05
   - **Do:**
     - Extend/replace the minimal rotor from P05.T10: mechanical plant states θm, ωm (motor side).

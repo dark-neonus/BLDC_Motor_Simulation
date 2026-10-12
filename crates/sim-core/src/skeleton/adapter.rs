@@ -11,6 +11,8 @@ use crate::engine::plant::Plant;
 use crate::engine::signals::{SignalBus, SignalId, SignalKind};
 use crate::engine::time::{SimTime, period_from_hz};
 use crate::physics::inverter::ideal::IdealVoltageSource;
+use crate::physics::mech::gearbox::Gearbox;
+use crate::physics::mech::load::Load;
 use crate::physics::mech::rotor::{RotorParams, RotorRigid};
 use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::{Cogging, CoggingParams};
@@ -97,8 +99,12 @@ pub struct SkeletonOptions {
     pub open_loop_vq: Option<f64>,
     /// Integration step limit [s].
     pub dt_max: f64,
-    /// Reflected gearbox/load inertia added to `PmsmParams::j` by the caller [kg·m²].
-    pub extra_j: f64,
+    /// Gearbox on the output shaft (EQ-MECH-02/03); bypass by default.
+    pub gearbox: Gearbox,
+    /// Load on the output shaft (EQ-MECH-06/07).
+    pub load: Load,
+    /// EQ-MECH-09: live load changes keep momentum instead of speed.
+    pub conserve_momentum: bool,
     /// Gear ratio N (load-side setpoints × N = motor side).
     pub ratio: f64,
     /// Cogging (EQ-MOT-08), when the fidelity tier enables it.
@@ -117,7 +123,9 @@ impl Default for SkeletonOptions {
             locked: false,
             open_loop_vq: None,
             dt_max: 5e-6,
-            extra_j: 0.0,
+            gearbox: Gearbox::BYPASS,
+            load: Load::None,
+            conserve_momentum: false,
             ratio: 1.0,
             cogging: None,
             iron: None,
@@ -180,7 +188,7 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         .expect("unique skeleton signal");
     let rp = RotorParams {
         j: mp.j,
-        j_load: opts.extra_j,
+        j_load: 0.0,
         b: mp.b,
         pole_pairs: mp.p,
         theta0: 0.0,
@@ -188,7 +196,9 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
     };
     let rotor = RotorRigid::new(rp, &mut bus, vec![], vec![])
         .expect("unique skeleton signal")
-        .with_locked(opts.locked);
+        .with_locked(opts.locked)
+        .with_gearbox(opts.gearbox)
+        .with_load(opts.load.clone(), opts.conserve_momentum);
     let id = |bus: &SignalBus, p: &str| bus.id(p).expect("registered above");
     let inp = ElectricalInputs {
         v: source.outputs_ids(),
@@ -252,7 +262,7 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         .unwrap_or(SimTime(50_000));
     // Gains are designed for the whole shaft inertia.
     let design = PmsmParams {
-        j: mp.j + opts.extra_j,
+        j: opts.gearbox.j_eq(mp.j, opts.load.inertia()),
         ..mp
     };
     let blocks: Vec<Box<dyn DiscreteBlock>> = vec![Box::new(FocBlock {
