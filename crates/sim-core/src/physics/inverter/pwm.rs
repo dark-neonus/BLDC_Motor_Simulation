@@ -36,15 +36,7 @@ impl Pwm {
     /// Registers `inverter.duty_a..c` (inputs) and `inverter.pwm_count`; drives the legs
     /// `inverter.leg_a..c` (registered by the inverter).
     pub fn new(cfg: PwmConfig, bus: &mut SignalBus) -> Result<Self, SignalError> {
-        let mut duty = |x: &str| {
-            bus.register(
-                &format!("inverter.duty_{x}"),
-                "-",
-                "duty (fraction of the period High)",
-                SignalKind::Input,
-            )
-        };
-        let duty = [duty("a")?, duty("b")?, duty("c")?];
+        let duty = super::leg::duty_ids(bus)?;
         let count = bus.register(
             "inverter.pwm_count",
             "-",

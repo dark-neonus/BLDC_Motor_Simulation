@@ -38,7 +38,7 @@
     - duty changes mid-period apply next period
   - **Done when:** Passing.
 
-- [ ] **P07.T03** — Averaged inverter
+- [x] **P07.T03** — Averaged inverter
   - **Depends:** P07.T01
   - **Do:** Duty → average terminal voltages, including conduction drop and optional dead-time average error (sign of current) per EQ-INV. Leg Off in averaged mode → diode rule as in switching mode (so six-step floating phases behave correctly). Mode selected by `fidelity.inverter_mode`.
   - **Files:** `crates/sim-core/src/physics/inverter/averaged.rs`

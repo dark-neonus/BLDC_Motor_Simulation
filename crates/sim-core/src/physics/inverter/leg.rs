@@ -81,9 +81,71 @@ pub struct SwitchingInverter {
     /// of i inside a step, or the current chatters at zero instead of crossing it.
     latch: [f64; 3],
     prev: [LegState; 3],
+    /// Averaged mode (EQ-INV-03): driven legs give their period-average voltage.
+    averaged: Option<Averaged>,
+}
+
+/// Averaged-mode data (EQ-INV-03, `fidelity.inverter_mode = averaged`).
+#[derive(Debug, Clone, Copy)]
+struct Averaged {
+    duty: [SignalId; 3],
+    /// t_d / T_pwm.
+    dead_frac: f64,
+    /// Current scale of the dead-time sign smoothing σ(i) = tanh(i/i_ε) [A].
+    i_eps: f64,
+}
+
+/// `inverter.duty_a..c`: the existing inputs, or registered here (PWM block or averaged
+/// inverter, whichever comes first).
+pub fn duty_ids(bus: &mut SignalBus) -> Result<[SignalId; 3], SignalError> {
+    let mut get = |x: &str| {
+        let n = format!("inverter.duty_{x}");
+        match bus.id(&n) {
+            Ok(id) => Ok(id),
+            Err(_) => bus.register(
+                &n,
+                "-",
+                "duty (fraction of the period High)",
+                SignalKind::Input,
+            ),
+        }
+    };
+    Ok([get("a")?, get("b")?, get("c")?])
+}
+
+/// Period-average terminal voltage of a complementary PWM leg (EQ-INV-03), including the
+/// dead-time error with σ(i) = tanh(i/i_ε).
+pub fn averaged_voltage(
+    d: f64,
+    i: f64,
+    v_bus: f64,
+    dev: &Devices,
+    dead_frac: f64,
+    i_eps: f64,
+) -> f64 {
+    let sigma = (i / i_eps).tanh();
+    d * v_bus
+        - dev.r_on * i
+        - sigma * dead_frac * (v_bus + 2.0 * dev.v_f - 2.0 * dev.r_on * i.abs())
 }
 
 impl SwitchingInverter {
+    /// Switch to the averaged model (EQ-INV-03): legs that are not Off follow their duty
+    /// `inverter.duty_x` (complementary PWM); Off legs keep the diode/floating rule.
+    pub fn averaged(
+        mut self,
+        bus: &mut SignalBus,
+        dead_frac: f64,
+        i_eps: f64,
+    ) -> Result<Self, SignalError> {
+        self.averaged = Some(Averaged {
+            duty: duty_ids(bus)?,
+            dead_frac,
+            i_eps,
+        });
+        Ok(self)
+    }
+
     /// Registers `inverter.leg_a..c` (inputs), `inverter.v_a..c` and `inverter.i_dc`. The
     /// motor's current/EMF/neutral signals are attached with `with_motor` (the motor needs
     /// the terminal voltages first).
@@ -119,6 +181,7 @@ impl SwitchingInverter {
             open_phase: None,
             latch: [0.0; 3],
             prev: [LegState::Low; 3],
+            averaged: None,
         })
     }
 
@@ -162,7 +225,10 @@ impl PlantModule for SwitchingInverter {
         for k in 0..3 {
             let s = LegState::from_signal(bus.get(self.legs[k]));
             let i = bus.get(self.i[k]);
-            let v = if s != LegState::Off {
+            let v = if let (Some(a), true) = (self.averaged, s != LegState::Off) {
+                let d = bus.get(a.duty[k]).clamp(0.0, 1.0);
+                averaged_voltage(d, i, v_bus, &self.d, a.dead_frac, a.i_eps)
+            } else if s != LegState::Off {
                 terminal_voltage(s, i, v_bus, &self.d).unwrap_or(0.0)
             } else if open == k as f64 {
                 // Floating: v_n + e_x (EQ-MOT-12); i = 0, no diode conducts.
@@ -184,9 +250,13 @@ impl PlantModule for SwitchingInverter {
                 terminal_voltage(s, self.latch[k], v_bus, &self.d).unwrap_or(0.0)
             };
             bus.set(self.v[k], v);
-            let high = s == LegState::High
-                || (s == LegState::Off && open != k as f64 && self.latch[k] < 0.0);
-            if high {
+            if let (Some(a), true) = (self.averaged, s != LegState::Off) {
+                // EQ-INV-08 averaged: the dead time changes the effective high-side duty.
+                let d = bus.get(a.duty[k]).clamp(0.0, 1.0);
+                i_dc += (d - (i / a.i_eps).tanh() * a.dead_frac) * i;
+            } else if s == LegState::High
+                || (s == LegState::Off && open != k as f64 && self.latch[k] < 0.0)
+            {
                 i_dc += i;
             }
         }
