@@ -100,9 +100,13 @@ impl Magnetics {
     }
 
     /// Solve ψ_dq(i) = (pd, pq) for i (closed form when linear, Newton otherwise).
-    fn currents(&self, pd: f64, pq: f64) -> (f64, f64) {
+    /// (i_d, i_q, converged) for the fluxes (ψ_d, ψ_q). Not converging means the state is
+    /// outside the validated (positive-definite) range; the caller reports it.
+    fn currents(&self, pd: f64, pq: f64) -> (f64, f64, bool) {
         let lin = ((pd - self.lambda) / self.ld, pq / self.lq);
-        let Some(s) = self.sat else { return lin };
+        let Some(s) = self.sat else {
+            return (lin.0, lin.1, true);
+        };
         // Start from the linear solution every time: stateless, so snapshots restore
         // bit-identically. The Jacobian is the (symmetric) Hessian of W'.
         let (mut id, mut iq) = lin;
@@ -116,12 +120,8 @@ impl Magnetics {
             let (fd, fq) = self.psi(id, iq);
             ((fd - pd).hypot(fq - pq), fd - pd, fq - pq)
         };
-        let (mut norm, mut rd, mut rq) = res(id, iq);
-        let scale = 1e-15 * (1.0 + pd.abs() + pq.abs());
-        for _ in 0..100 {
-            if norm <= scale {
-                break;
-            }
+        // Jacobian = Hessian of W' at (i_d, i_q): (a, b; b, d), and its determinant.
+        let jac = |id: f64, iq: f64| {
             let (_, hp, hpp) = self.h(iq);
             let sech2 = 1.0 / (iq / s.i_k).cosh().powi(2);
             let (a, b, d) = (
@@ -129,9 +129,17 @@ impl Magnetics {
                 -self.lambda * hp,
                 s.l_inf + (self.lq - s.l_inf) * sech2 - self.lambda * id * hpp,
             );
-            let det = a * d - b * b;
+            (a, b, d, a * d - b * b)
+        };
+        let (mut norm, mut rd, mut rq) = res(id, iq);
+        let flux = 1.0 + pd.abs() + pq.abs();
+        for _ in 0..100 {
+            if norm <= 1e-15 * flux {
+                break;
+            }
+            let (a, b, d, det) = jac(id, iq);
             if !(det.is_finite() && det > 0.0) {
-                break; // outside the validated (positive-definite) range
+                return (id, iq, false); // outside the validated (positive-definite) range
             }
             let (did, diq) = ((d * rd - b * rq) / det, (a * rq - b * rd) / det);
             let mut t = 1.0;
@@ -143,8 +151,14 @@ impl Magnetics {
                 }
                 t *= 0.5;
             }
+            // Step-size stop: at the round-off floor the residual no longer falls.
+            if t * (did.abs() + diq.abs()) <= 1e-14 * (1.0 + id.abs() + iq.abs()) {
+                break;
+            }
         }
-        (id, iq)
+        // Converged and inside the validated (positive-definite) range: there the
+        // flux–current map is invertible and the solution unique.
+        (id, iq, norm <= 1e-9 * flux && jac(id, iq).3 > 0.0)
     }
 }
 
@@ -221,6 +235,12 @@ pub struct MotorElectrical {
     /// Last solve from the outputs pass: (ψ0, ψ1, θe, λ) → result. The derivatives and
     /// powers of the same RK stage reuse it when the inputs match exactly.
     cache: Option<([f64; 4], Solved)>,
+    /// Set by a flux→current solve that did not converge (the solves run in `&self`
+    /// passes); reported once as a warning (PLAN §4 rule 5: diagnose, don't continue
+    /// silently).
+    unconverged: std::cell::Cell<bool>,
+    warned: bool,
+    warnings: Vec<String>,
 }
 
 /// Amplitude-invariant Clarke of three phase values (EQ-CONV-01).
@@ -297,6 +317,9 @@ impl MotorElectrical {
             pending: None,
             pending_sign: 1.0,
             cache: None,
+            unconverged: std::cell::Cell::new(false),
+            warned: false,
+            warnings: vec![],
         })
     }
 
@@ -364,7 +387,10 @@ impl MotorElectrical {
         let (s, c) = th.sin_cos();
         let psi_d = c * a + s * b;
         let psi_q = -s * a + c * b;
-        let (i_d, i_q) = self.magnetics(lambda).currents(psi_d, psi_q);
+        let (i_d, i_q, ok) = self.magnetics(lambda).currents(psi_d, psi_q);
+        if !ok {
+            self.unconverged.set(true);
+        }
         Solved {
             i_alpha: c * i_d - s * i_q,
             i_beta: s * i_d + c * i_q,
@@ -455,6 +481,7 @@ impl MotorElectrical {
             let h = 1e-6 * (1.0 + i.abs());
             let slope = (at(i + h).0 - at(i - h).0) / (2.0 * h);
             if !(slope.is_finite() && slope > 0.0) {
+                self.unconverged.set(true);
                 break;
             }
             let di = (f - psi_yz) / slope;
@@ -462,6 +489,10 @@ impl MotorElectrical {
             if di.abs() <= 1e-13 * (1.0 + i.abs()) {
                 break;
             }
+        }
+        let (f, _) = at(i);
+        if !((f - psi_yz).abs() <= 1e-9 * (1.0 + psi_yz.abs())) {
+            self.unconverged.set(true);
         }
         at(i).1
     }
@@ -730,6 +761,15 @@ impl PlantModule for MotorElectrical {
             self.enter_open(k, x_own);
         }
     }
+    fn take_warnings(&mut self) -> Vec<String> {
+        if self.unconverged.take() && !self.warned {
+            self.warned = true;
+            self.warnings.push(
+                "the flux→current solve did not converge: the state is outside the validated range of the saturation curve or the open-phase law (EQ-MOT-10/11); results are unreliable".into(),
+            );
+        }
+        std::mem::take(&mut self.warnings)
+    }
     fn save(&self) -> serde_json::Value {
         let p = &self.p;
         serde_json::json!({
@@ -792,7 +832,8 @@ mod tests {
             (-10.0, 60.0),
         ] {
             let (pd, pq) = m.psi(id, iq);
-            let (a, b) = m.currents(pd, pq);
+            let (a, b, ok) = m.currents(pd, pq);
+            assert!(ok);
             // Newton to 1e-13 relative step: recovered currents within 1e-9 A.
             assert!(
                 (a - id).abs() < 1e-9 && (b - iq).abs() < 1e-9,

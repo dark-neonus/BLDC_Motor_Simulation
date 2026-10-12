@@ -161,3 +161,37 @@ fn energy_closes_for_a_pulse_into_saturation() {
         sig(&e, "energy.residual")
     );
 }
+
+/// P06.T10: driving the motor outside the curve's validated range (motor.md: i_k 10 A,
+/// c 0.15 is not positive definite near i_d ≈ +30 A) raises one warning instead of
+/// continuing silently; a valid curve over the same drive raises none.
+#[test]
+fn a_solve_outside_the_validated_range_is_reported_once() {
+    use sim_core::engine::commands::EngineEvent;
+    let bad = SatParams {
+        i_k: 10.0,
+        l_inf: 0.75e-3,
+        c: 0.15,
+    };
+    let warnings = |sat| {
+        // θe = 0, d axis = α: +45 V drives i_d → +45 A at i_q ≈ 0, where h″ peaks and
+        // the term −λ·i_d·h″ makes the Jacobian indefinite (EQ-MOT-10 validity).
+        let mut e = build(
+            Some(sat),
+            true,
+            0.0,
+            Box::new(|_| inv_clarke(45.0, 0.0)),
+            1e-5,
+        );
+        e.step_until(SimTime::from_secs_f64(0.03)).unwrap();
+        e.drain_events()
+            .into_iter()
+            .filter(|ev| {
+                matches!(ev, EngineEvent::Warning { source, msg, .. }
+                if source == "motor" && msg.contains("did not converge"))
+            })
+            .count()
+    };
+    assert_eq!(warnings(bad), 1);
+    assert_eq!(warnings(SAT), 0);
+}

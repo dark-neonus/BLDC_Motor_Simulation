@@ -322,6 +322,14 @@ impl Engine {
                 rec.sample(t, &self.bus);
             }
         }
+        // Diagnostics raised during plain steps (e.g. a solve that did not converge).
+        for (source, msg) in self.plant.take_warnings() {
+            self.events.push(EngineEvent::Warning {
+                t: SimTime::from_secs_f64(t),
+                source,
+                msg,
+            });
+        }
         Ok(())
     }
 
