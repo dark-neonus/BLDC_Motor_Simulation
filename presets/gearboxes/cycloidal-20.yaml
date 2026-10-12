@@ -4,3 +4,4 @@ name: Cycloidal 1:20
 ratio: 20
 efficiency: 0.85
 backlash: { value: 0.05 deg, source: estimated }
+stiffness: { value: 10 N*m/arcmin, source: estimated }

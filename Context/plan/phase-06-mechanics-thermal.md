@@ -18,7 +18,7 @@
     - back-driven efficiency asymmetry per EQ
   - **Done when:** Passing.
 
-- [ ] **P06.T02** — Backlash two-inertia model
+- [x] **P06.T02** — Backlash two-inertia model
   - **Depends:** P06.T01
   - **Do:** When backlash > 0, add load-side states θ_L, ω_L with a dead-zone contact spring-damper per EQ-MECH. Switch between the rigid and two-inertia formulations at scene build (not live), and document this in the UI help.
   - **Files:** `crates/sim-core/src/physics/mech/backlash.rs`

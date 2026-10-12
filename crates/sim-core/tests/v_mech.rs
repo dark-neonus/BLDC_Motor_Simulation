@@ -4,9 +4,10 @@ use std::f64::consts::PI;
 
 use sim_core::engine::commands::{ChangeSource, EngineCommand};
 use sim_core::engine::engine::Engine;
-use sim_core::engine::plant::Plant;
-use sim_core::engine::signals::SignalBus;
+use sim_core::engine::plant::{Plant, PlantModule};
+use sim_core::engine::signals::{SignalBus, SignalId, SignalKind};
 use sim_core::engine::time::SimTime;
+use sim_core::physics::mech::backlash::Backlash;
 use sim_core::physics::mech::friction::Friction;
 use sim_core::physics::mech::gearbox::Gearbox;
 use sim_core::physics::mech::load::Load;
@@ -267,6 +268,113 @@ fn v_mech_007_breakaway_coast_and_restick() {
     assert_eq!(sig(&e, "motor.theta"), th, "re-stuck");
     assert!(
         sig(&e, "energy.residual").abs() < 1e-3,
+        "{}",
+        sig(&e, "energy.residual")
+    );
+}
+
+/// Motor-side PD drive tracking θm_ref = N·A·sin(2π·f·t) (writes `test.torque`).
+struct Pd {
+    out: SignalId,
+    th: SignalId,
+    w: SignalId,
+    n: f64,
+}
+
+impl PlantModule for Pd {
+    fn name(&self) -> &str {
+        "test"
+    }
+    fn n_states(&self) -> usize {
+        0
+    }
+    fn state_names(&self) -> Vec<(String, String)> {
+        vec![]
+    }
+    fn init(&self, _: &mut [f64]) {}
+    fn outputs(&mut self, t: f64, _: &[f64], _: usize, bus: &mut SignalBus) {
+        let w = 2.0 * PI * 0.5;
+        let (r, dr) = (
+            self.n * 0.05 * (w * t).sin(),
+            self.n * 0.05 * w * (w * t).cos(),
+        );
+        let u = 50.0 * (r - bus.get(self.th)) + 1.0 * (dr - bus.get(self.w));
+        bus.set(self.out, u);
+    }
+    fn derivatives(&self, _: f64, _: &[f64], _: usize, _: &SignalBus, _: &mut [f64]) {}
+}
+
+/// V-MECH-005: a slowly reversing motor with backlash b: the load lags by b (the
+/// deflection swings between ±b/2 plus the contact penetration T_c/k), atol 1e-4 rad.
+/// Contact loss is never negative and the balance closes; no NaN at dt_max.
+#[test]
+fn v_mech_005_backlash_lost_motion() {
+    let gb = Gearbox {
+        n: 9.0,
+        eta: 1.0,
+        j_in: 0.0,
+        j_out: 0.0,
+    };
+    let bl = Backlash {
+        width: 0.01,
+        k: 3438.0,
+        d: 2.0,
+    };
+    let fr_l = Friction {
+        t_s: 0.02,
+        t_c: 0.01,
+        b: 0.0,
+    };
+    let mut bus = SignalBus::new();
+    let tq = bus
+        .register("test.torque", "N*m", "drive", SignalKind::Output)
+        .unwrap();
+    let p = RotorParams {
+        j: J_M,
+        j_load: 0.0,
+        b: 0.0,
+        pole_pairs: 7.0,
+        theta0: 0.0,
+        omega0: 0.0,
+    };
+    let rotor = RotorRigid::new(p, &mut bus, vec![], vec![tq])
+        .unwrap()
+        .with_gearbox(gb)
+        .with_load(Load::Flywheel { j: 0.01 }, false)
+        .with_friction(Friction::default(), fr_l)
+        .with_backlash(bl);
+    let pd = Pd {
+        out: tq,
+        th: bus.id("motor.theta").unwrap(),
+        w: bus.id("motor.omega").unwrap(),
+        n: 9.0,
+    };
+    let mut plant = Plant::new();
+    plant.add(Box::new(rotor));
+    plant.add(Box::new(pd));
+    let mut e = Engine::new(plant, bus, vec![], 2e-5);
+    // δ at the stroke mid-points (max speed, zero acceleration, contact settled): forward
+    // at t = 2 s, backward at t = 1 s and 3 s. The re-engagement impact makes the peak δ
+    // larger for a few ms, so peaks are not used.
+    let at = |t: f64, e: &mut Engine| {
+        let mut s = e.time.as_secs_f64();
+        while s < t {
+            s = (s + 1e-3).min(t);
+            e.step_until(SimTime::from_secs_f64(s)).unwrap();
+            assert!(sig(e, "gearbox.delta").is_finite() && sig(e, "load.omega").is_finite());
+        }
+        sig(e, "gearbox.delta")
+    };
+    let back1 = at(1.0, &mut e);
+    let fwd = at(2.0, &mut e);
+    let back2 = at(3.0, &mut e);
+    let lost = bl.width + 2.0 * fr_l.t_c / bl.k;
+    for back in [back1, back2] {
+        assert!(((fwd - back) - lost).abs() < 1e-4, "{fwd} {back}");
+    }
+    assert!(sig(&e, "energy.loss.backlash") >= 0.0);
+    assert!(
+        sig(&e, "energy.residual").abs() < 1e-6,
         "{}",
         sig(&e, "energy.residual")
     );

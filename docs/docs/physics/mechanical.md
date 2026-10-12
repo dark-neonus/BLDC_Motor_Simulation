@@ -106,6 +106,7 @@ $$
 - Stored energy while in contact: $\tfrac12 k_c(|\delta| - b_{bl}/2)^2$.
 - Typical values: small planetary gearboxes have backlash of 10–30 arcmin and torsional stiffness of 1–10 N·m/arcmin (≈ 3.4·10³–3.4·10⁴ N·m/rad).
 - Damping: $d_c = 2\zeta\sqrt{k_c J_{red}}$ with $\zeta \approx 0.05\ldots0.2$ and $J_{red}$ the reduced inertia of the two sides.
+- **Defaults (D-016):** without `gearbox.stiffness` the model uses $k_c$ = 1 N·m/arcmin (with a warning); without `gearbox.damping`, $\zeta = 0.1$.
 - Numerics: the contact frequency $\sqrt{k_c/J_{red}}$ limits the time step (EQ-NUM).
 - **Switching:** rigid vs backlash is chosen when the scene is built, not live, because the number of states changes.
 

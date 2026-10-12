@@ -64,6 +64,27 @@ pub fn validate_gearbox(g: &GearboxParams) -> Vec<Issue> {
     }
     v.o(&g.backlash, Kind::Angle, "gearbox.backlash", NonNeg);
     v.o(
+        &g.stiffness,
+        Kind::TorsionalStiffness,
+        "gearbox.stiffness",
+        NonNeg,
+    );
+    let has_backlash = g
+        .backlash
+        .as_ref()
+        .and_then(|b| b.si(Kind::Angle).ok())
+        .is_some_and(|b| b > 0.0);
+    if has_backlash && g.stiffness.is_none() {
+        v.out.push(
+            issue(
+                Severity::Warn,
+                "gearbox.stiffness",
+                "backlash without a contact stiffness: 1 N·m/arcmin is assumed (D-016)",
+            )
+            .with_rule("gearbox.backlash_stiffness"),
+        );
+    }
+    v.o(
         &g.damping,
         Kind::RotationalDamping,
         "gearbox.damping",
@@ -404,6 +425,26 @@ mod tests {
             .filter(|i| i.severity == Severity::Reject)
             .map(|i| i.path.clone())
             .collect()
+    }
+
+    #[test]
+    fn backlash_without_stiffness_warns() {
+        let g: GearboxParams = parse_yaml(
+            "name: g\nratio: 9\nefficiency: 0.9\nbacklash: 0.3 deg\n",
+            "g",
+        )
+        .unwrap();
+        let w = validate_gearbox(&g);
+        assert!(
+            w.iter()
+                .any(|i| i.rule == "gearbox.backlash_stiffness" && i.severity == Severity::Warn)
+        );
+        let g: GearboxParams = parse_yaml(
+            "name: g\nratio: 9\nefficiency: 0.9\nbacklash: 0.3 deg\nstiffness: 2 N*m/arcmin\n",
+            "g",
+        )
+        .unwrap();
+        assert!(validate_gearbox(&g).is_empty());
     }
 
     #[test]

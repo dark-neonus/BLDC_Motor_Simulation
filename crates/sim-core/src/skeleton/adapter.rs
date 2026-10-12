@@ -11,6 +11,7 @@ use crate::engine::plant::Plant;
 use crate::engine::signals::{SignalBus, SignalId, SignalKind};
 use crate::engine::time::{SimTime, period_from_hz};
 use crate::physics::inverter::ideal::IdealVoltageSource;
+use crate::physics::mech::backlash::Backlash;
 use crate::physics::mech::friction::Friction;
 use crate::physics::mech::gearbox::Gearbox;
 use crate::physics::mech::load::Load;
@@ -110,6 +111,8 @@ pub struct SkeletonOptions {
     pub theta_l0: f64,
     /// Stick–slip friction: motor static/Coulomb (viscous is `PmsmParams::b`) and load.
     pub friction: (Friction, Friction),
+    /// Two-inertia backlash (EQ-MECH-04); `None` = rigid.
+    pub backlash: Option<Backlash>,
     /// Gear ratio N (load-side setpoints × N = motor side).
     pub ratio: f64,
     /// Cogging (EQ-MOT-08), when the fidelity tier enables it.
@@ -133,6 +136,7 @@ impl Default for SkeletonOptions {
             conserve_momentum: false,
             theta_l0: 0.0,
             friction: (Friction::default(), Friction::default()),
+            backlash: None,
             ratio: 1.0,
             cogging: None,
             iron: None,
@@ -207,6 +211,10 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         .with_gearbox(opts.gearbox)
         .with_load(opts.load.clone(), opts.conserve_momentum)
         .with_friction(opts.friction.0, opts.friction.1);
+    let rotor = match opts.backlash {
+        Some(b) => rotor.with_backlash(b),
+        None => rotor,
+    };
     let id = |bus: &SignalBus, p: &str| bus.id(p).expect("registered above");
     let inp = ElectricalInputs {
         v: source.outputs_ids(),

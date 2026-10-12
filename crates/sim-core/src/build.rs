@@ -16,6 +16,7 @@ use sim_model::units::Kind;
 use crate::engine::commands::{ChangeSource, EngineCommand};
 use crate::engine::engine::Engine;
 use crate::engine::fidelity::{FidelityConfig, Tier};
+use crate::physics::mech::backlash::{Backlash, DEFAULT_STIFFNESS, DEFAULT_ZETA};
 use crate::physics::mech::friction::Friction;
 use crate::physics::mech::gearbox::Gearbox;
 use crate::physics::mech::load::Load;
@@ -315,6 +316,39 @@ fn gearbox(scene: &ResolvedScene) -> Result<Gearbox, BuildError> {
     })
 }
 
+/// Two-inertia backlash (EQ-MECH-04) when the gearbox has backlash > 0, and the step
+/// limit its contact needs (EQ-NUM: dt ≤ 1/(20·√(k_c/J_red))). Missing stiffness
+/// defaults to 1 N·m/arcmin and missing damping to ζ = 0.1 (D-016).
+fn backlash(scene: &ResolvedScene, j_m: f64) -> Result<(Option<Backlash>, f64), BuildError> {
+    let Some(g) = &scene.gearbox else {
+        return Ok((None, f64::INFINITY));
+    };
+    let width = opt(&g.backlash, Kind::Angle, "gearbox.backlash")?;
+    if width <= 0.0 {
+        return Ok((None, f64::INFINITY));
+    }
+    let gb = gearbox(scene)?;
+    let (load, _) = load(scene)?;
+    // Reduced inertia of the contact, both sides seen from the output.
+    let j_ms = gb.n * gb.n * (j_m + gb.j_in);
+    let j_ls = gb.j_out + load.inertia();
+    let j_red = if j_ls > 0.0 {
+        j_ms * j_ls / (j_ms + j_ls)
+    } else {
+        j_ms
+    };
+    let k = match &g.stiffness {
+        Some(p) => si(p, Kind::TorsionalStiffness, "gearbox.stiffness")?,
+        None => DEFAULT_STIFFNESS,
+    };
+    let d = match &g.damping {
+        Some(p) => si(p, Kind::RotationalDamping, "gearbox.damping")?,
+        None => Backlash::damping_for(k, DEFAULT_ZETA, j_red),
+    };
+    let b = Backlash { width, k, d };
+    Ok((Some(b), b.dt_limit(j_red)))
+}
+
 /// Stick–slip friction (EQ-MECH-05): the motor's static/Coulomb part (its viscous part
 /// is `PmsmParams::b`) and the arm's load-side friction.
 fn friction(scene: &ResolvedScene) -> Result<(Friction, Friction), BuildError> {
@@ -473,10 +507,12 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
     let extra_j = reflected_inertia(scene.gearbox.as_ref(), scene.load.as_ref())?;
     let mp = pmsm_from(&scene.motor, 0.0)?;
     let (load, conserve_momentum) = load(scene)?;
+    let (backlash, dt_contact) = backlash(scene, mp.j)?;
     let dt_max = match scene.fidelity.as_ref().and_then(|f| f.dt_max.as_ref()) {
         Some(p) => si(p, Kind::Time, "fidelity.dt_max")?,
         None => cfg.dt / 10.0,
-    };
+    }
+    .min(dt_contact);
     let engine = build_engine_with(
         mp,
         cfg,
@@ -489,6 +525,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             conserve_momentum,
             theta_l0: mount_angle(scene)?,
             friction: friction(scene)?,
+            backlash,
             ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
             cogging: cogging(scene)?,
             iron: iron(scene)?,

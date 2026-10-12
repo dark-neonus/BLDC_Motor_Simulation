@@ -34,6 +34,8 @@ pub enum Kind {
     HeatCapacity,
     TemperatureCoefficient,
     RotationalDamping,
+    /// Torsional stiffness: N·m per rad (gear contact, EQ-MECH-04).
+    TorsionalStiffness,
     /// Kv: rad/s per volt (SI) — shown as rpm/V.
     VelocityConstant,
     /// Ke: V per rad/s (SI) — shown as V/krpm.
@@ -101,6 +103,13 @@ const TABLE: &[(&str, Kind, f64, f64)] = &[
     ("%/k", Kind::TemperatureCoefficient, 0.01, 0.0),
     ("1/k", Kind::TemperatureCoefficient, 1.0, 0.0),
     ("n*m*s/rad", Kind::RotationalDamping, 1.0, 0.0),
+    ("n*m/rad", Kind::TorsionalStiffness, 1.0, 0.0),
+    (
+        "n*m/arcmin",
+        Kind::TorsionalStiffness,
+        10800.0 / std::f64::consts::PI,
+        0.0,
+    ),
     ("rpm/v", Kind::VelocityConstant, RPM, 0.0),
     ("rad/s/v", Kind::VelocityConstant, 1.0, 0.0),
     ("v/krpm", Kind::BackEmfConstant, 1.0 / (1000.0 * RPM), 0.0),

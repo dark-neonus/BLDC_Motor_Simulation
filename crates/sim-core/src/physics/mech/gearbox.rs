@@ -44,6 +44,15 @@ impl Gearbox {
             return 0.0;
         }
         let tau_in = ((self.j_out + j_load) / self.n * a0 - t_l) / self.n;
+        self.loss_for(tau_in, omega_m)
+    }
+
+    /// Loss torque for a known input-side transmitted torque τ_in (with backlash
+    /// τ_in = τ_c/N).
+    pub fn loss_for(&self, tau_in: f64, omega_m: f64) -> f64 {
+        if self.eta >= 1.0 {
+            return 0.0;
+        }
         -(1.0 - self.eta) * tau_in.abs() * (omega_m / OMEGA_EPS).tanh()
     }
 }

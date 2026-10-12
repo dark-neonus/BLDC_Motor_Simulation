@@ -244,3 +244,6 @@ blob-report/
 .idea/
 web/dist/
 docs/build/
+
+# VS Code Counter extension output (local)
+.VSCodeCounter/

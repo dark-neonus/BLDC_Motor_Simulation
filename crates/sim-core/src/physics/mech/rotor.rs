@@ -1,19 +1,27 @@
-//! Rigid drivetrain (EQ-MECH-02/03, D-015): rotor, gearbox and load share one degree of
-//! freedom, θm/ωm on the motor side:
+//! The drivetrain (D-015): rotor, gearbox, load, friction and the disturbance pulse.
 //!
-//! J_eq·dω/dt = Σ T_internal + Σ T_external − B·ω + T_gl + T_L/N,
-//! J_eq = J_m + J_gi + (J_go + J_load)/N²,  θ_L = θm/N.
+//! **Rigid** (EQ-MECH-02/03): one degree of freedom θm/ωm on the motor side,
+//! J_eq·dω/dt = T_a + T_f + T_gl,  T_a = Σ T_internal + Σ T_external + T_L/N,
+//! J_eq = J_m + J_gi + (J_go + J_load)/N²,  θ_L = θm/N; friction is lumped on ω_m.
+//!
+//! **Backlash** (EQ-MECH-04, chosen at build): the load side gets θ_L/ω_L, coupled by a
+//! push-only dead-zone contact τ_c(δ, δ̇), δ = θm/N − θ_L:
+//! (J_m + J_gi)·dωm/dt = T_motor − τ_c/N + T_f,m + T_gl,  (J_go + J_load)·dω_L/dt = τ_c + T_L + T_f,L,
+//! with T_gl from τ_in = τ_c/N, and each side keeping its own friction element.
 //!
 //! Torques arrive as bus signals. *Internal* torques (electromagnetic, cogging, iron
 //! drag) move energy between modules and need no power term here: the module that
 //! produces them accounts for its side. *External* torques do work on the system and
 //! are reported as `External` power. Load torques are computed here and booked by kind
 //! (`load::LoadTorques`).
+//!
+//! States: θm, ωm, disturbance time left, [θ_L, ω_L with backlash].
 
 use crate::energy::PowerKind;
 use crate::engine::plant::PlantModule;
 use crate::engine::signals::{SignalBus, SignalError, SignalId, SignalKind};
 
+use super::backlash::Backlash;
 use super::friction::{self, Friction, Mode};
 use super::gearbox::Gearbox;
 use super::load::{Load, LoadTorques};
@@ -43,23 +51,38 @@ struct Ids {
     torque_ext: SignalId,
     p_gear: SignalId,
     disturbance: SignalId,
+    delta: SignalId,
+    torque_contact: SignalId,
+}
+
+/// One friction element's evaluation.
+#[derive(Clone, Copy)]
+struct Side {
+    /// Applied torque except this element's friction (and the gear loss).
+    t_a: f64,
+    /// Friction torque.
+    t_f: f64,
+    held: bool,
+    /// Acceleration of this side.
+    a: f64,
 }
 
 /// One evaluation of the drivetrain dynamics.
 struct Dyn {
-    /// dω_m/dt.
-    a: f64,
+    motor: Side,
+    /// Load side (backlash only; rigid: unused).
+    load_side: Side,
     /// Gear loss torque on the motor shaft.
     t_gl: f64,
     load: LoadTorques,
     /// Σ external motor-side torques.
     t_ext_m: f64,
-    /// Applied torque on the motor shaft except friction and gear loss.
-    t_a: f64,
-    /// Lumped friction torque (EQ-MECH-05).
-    t_f: f64,
-    /// Stuck: ω ≡ 0.
-    held: bool,
+    /// Contact deflection, its rate, and torque (backlash; else 0).
+    delta: f64,
+    ddelta: f64,
+    tau_c: f64,
+    /// Load speed.
+    w_l: f64,
 }
 
 pub struct RotorRigid {
@@ -79,16 +102,45 @@ pub struct RotorRigid {
     dist: f64,
     /// Motor-bearing static/Coulomb friction (its viscous part is `p.b`).
     fr_m: Friction,
-    /// Load-side friction, lumped onto the motor shaft (rigid drivetrain).
+    /// Load-side friction (lumped onto the motor shaft when rigid).
     fr_l: Friction,
     mode: Mode,
+    /// Load-side friction mode (backlash only).
+    mode_l: Mode,
+    backlash: Option<Backlash>,
+}
+
+/// Start mode of a friction element from its initial speed.
+fn start_mode(w: f64) -> Mode {
+    if w != 0.0 {
+        Mode::Slip { dir: w.signum() }
+    } else {
+        Mode::Stick
+    }
+}
+
+/// One friction element: held, or accelerating under T_a + T_f over inertia `j`.
+fn side(fr: &Friction, mode: Mode, t_a: f64, w: f64, j: f64) -> Side {
+    let (t_f, held) = if fr.is_hybrid() {
+        let e = friction::eval(fr, mode, t_a, w);
+        (e.torque, e.held)
+    } else {
+        (-fr.b * w, false)
+    };
+    Side {
+        t_a,
+        t_f,
+        held,
+        a: if held { 0.0 } else { (t_a + t_f) / j },
+    }
 }
 
 impl RotorRigid {
     /// Registers `motor.theta`, `motor.omega`, `motor.theta_e`, `motor.omega_e`, the
-    /// load-side `load.theta`, `load.omega`, `load.torque_gravity`, `load.torque_ext` and
-    /// `gearbox.p_loss`. `internal` / `external` are motor-side torque signals [N·m]
-    /// that must already be registered.
+    /// load-side `load.theta`, `load.omega`, `load.torque_gravity`, `load.torque_ext`,
+    /// `load.disturbance` and `gearbox.p_loss`, `gearbox.delta`, `gearbox.torque_contact`.
+    /// `internal` / `external` are motor-side torque signals [N·m] that must already be
+    /// registered.
     pub fn new(
         p: RotorParams,
         bus: &mut SignalBus,
@@ -126,6 +178,8 @@ impl RotorRigid {
             )?,
             p_gear: out("gearbox.p_loss", "W", "gearbox meshing loss")?,
             disturbance: out("load.disturbance", "N*m", "disturbance torque pulse")?,
+            delta: out("gearbox.delta", "rad", "backlash deflection θm/N − θ_L")?,
+            torque_contact: out("gearbox.torque_contact", "N*m", "gear contact torque")?,
         };
         Ok(Self {
             p,
@@ -140,7 +194,9 @@ impl RotorRigid {
             dist: 0.0,
             fr_m: Friction::default(),
             fr_l: Friction::default(),
-            mode: Mode::Stick,
+            mode: start_mode(p.omega0),
+            mode_l: start_mode(p.omega0),
+            backlash: None,
         })
     }
 
@@ -154,6 +210,9 @@ impl RotorRigid {
     /// Start with the shaft held (ω = 0); `motor.mechanical.locked` releases it.
     pub fn with_locked(mut self, locked: bool) -> Self {
         self.locked = locked;
+        if locked {
+            self.mode = Mode::Stick;
+        }
         self
     }
 
@@ -169,95 +228,171 @@ impl RotorRigid {
         self
     }
 
-    /// Stick–slip friction (EQ-MECH-05): motor static/Coulomb (`motor.b` comes from
-    /// `RotorParams::b`) and load-side friction. Starts slipping if ω0 ≠ 0.
+    /// Stick–slip friction (EQ-MECH-05): motor static/Coulomb (the motor's viscous part
+    /// is `RotorParams::b`) and load-side friction.
     pub fn with_friction(mut self, motor: Friction, load: Friction) -> Self {
         self.fr_m = motor;
         self.fr_l = load;
-        let w0 = if self.locked { 0.0 } else { self.p.omega0 };
-        self.mode = if w0 != 0.0 {
-            Mode::Slip { dir: w0.signum() }
-        } else {
-            Mode::Stick
-        };
         self
     }
 
-    /// The friction lumped on ω_m.
-    fn friction(&self) -> Friction {
-        let motor = Friction {
-            b: self.p.b,
-            ..self.fr_m
-        };
-        Friction::lumped(&motor, &self.fr_l, self.gb.n)
+    /// Two-inertia backlash model (EQ-MECH-04): adds θ_L, ω_L. Chosen at build.
+    pub fn with_backlash(mut self, b: Backlash) -> Self {
+        self.backlash = Some(b);
+        self
     }
 
-    fn hybrid(&self) -> bool {
-        !self.locked && self.friction().is_hybrid()
+    /// Motor-side inertia J_m + J_gi (backlash) [kg·m²].
+    fn j_motor_side(&self) -> f64 {
+        self.p.j + self.p.j_load + self.gb.j_in
+    }
+
+    /// Load-body inertia J_go + J_load (backlash) [kg·m²].
+    fn j_load_side(&self) -> f64 {
+        self.gb.j_out + self.load.inertia()
     }
 
     fn j_eq(&self) -> f64 {
         self.gb.j_eq(self.p.j + self.p.j_load, self.load.inertia())
     }
 
-    fn dynamics(&self, th: f64, w: f64, bus: &SignalBus) -> Dyn {
+    /// Friction element on ω_m: lumped when rigid, the motor's own with backlash.
+    fn fr_motor(&self) -> Friction {
+        let motor = Friction {
+            b: self.p.b,
+            ..self.fr_m
+        };
+        if self.backlash.is_some() {
+            motor
+        } else {
+            Friction::lumped(&motor, &self.fr_l, self.gb.n)
+        }
+    }
+
+    /// Load angle and speed from the own states.
+    fn load_state(&self, s: &[f64]) -> (f64, f64) {
+        match self.backlash {
+            Some(_) => (s[3], s[4]),
+            None => (s[0] / self.gb.n, s[1] / self.gb.n),
+        }
+    }
+
+    /// Drivetrain dynamics from the own state slice.
+    fn dynamics(&self, s: &[f64], bus: &SignalBus) -> Dyn {
         let n = self.gb.n;
-        let mut load = self.load.torques(th / n, w / n);
+        let (th, w) = (s[0], s[1]);
+        let (th_l, w_l) = self.load_state(s);
+        let mut load = self.load.torques(th_l, w_l);
         load.ext += self.dist;
         let t_l = load.total();
         let t_ext_m: f64 = self.external.iter().map(|&id| bus.get(id)).sum();
         let t_int: f64 = self.internal.iter().map(|&id| bus.get(id)).sum();
-        let j_eq = self.j_eq();
-        let t_a = t_int + t_ext_m + t_l / n;
-        let fr = self.friction();
-        let (t_f, held) = if fr.is_hybrid() {
-            let e = friction::eval(&fr, self.mode, t_a, w);
-            (e.torque, e.held)
-        } else {
-            (-fr.b * w, false)
+        let idle = Side {
+            t_a: 0.0,
+            t_f: 0.0,
+            held: true,
+            a: 0.0,
         };
-        if held {
-            // While sticking T_gl = 0 (EQ-MECH-05 clarifications).
+        let Some(bl) = self.backlash else {
+            let j_eq = self.j_eq();
+            let mut m = side(
+                &self.fr_motor(),
+                self.mode,
+                t_int + t_ext_m + t_l / n,
+                w,
+                j_eq,
+            );
+            // Gear loss from the lossless solution (EQ-MECH-03, one pass); 0 while stuck.
+            let t_gl = if m.held {
+                0.0
+            } else {
+                self.gb.loss_torque(m.a, t_l, self.load.inertia(), w)
+            };
+            m.a += t_gl / j_eq;
             return Dyn {
-                a: 0.0,
-                t_gl: 0.0,
+                motor: m,
+                load_side: idle,
+                t_gl,
                 load,
                 t_ext_m,
-                t_a,
-                t_f,
-                held,
+                delta: 0.0,
+                ddelta: 0.0,
+                tau_c: 0.0,
+                w_l,
             };
-        }
-        // Lossless acceleration first; the gear loss uses it (EQ-MECH-03, one pass).
-        let a0 = (t_a + t_f) / j_eq;
-        let t_gl = self.gb.loss_torque(a0, t_l, self.load.inertia(), w);
+        };
+        let (delta, ddelta) = (th / n - th_l, w / n - w_l);
+        let tau_c = bl.torque(delta, ddelta);
+        let j_m = self.j_motor_side();
+        let mut m = side(
+            &self.fr_motor(),
+            self.mode,
+            t_int + t_ext_m - tau_c / n,
+            w,
+            j_m,
+        );
+        let t_gl = if m.held {
+            0.0
+        } else {
+            self.gb.loss_for(tau_c / n, w)
+        };
+        m.a += t_gl / j_m;
+        let l = side(
+            &self.fr_l,
+            self.mode_l,
+            tau_c + t_l,
+            w_l,
+            self.j_load_side(),
+        );
         Dyn {
-            a: a0 + t_gl / j_eq,
+            motor: m,
+            load_side: l,
             t_gl,
             load,
             t_ext_m,
-            t_a,
-            t_f,
-            held,
+            delta,
+            ddelta,
+            tau_c,
+            w_l,
+        }
+    }
+
+    /// Stored energy of the own states: kinetic + gravity + contact spring.
+    fn energy(&self, s: &[f64]) -> f64 {
+        let (th_l, w_l) = self.load_state(s);
+        let w = s[1];
+        let u = self.load.potential(th_l);
+        match self.backlash {
+            None => 0.5 * self.j_eq() * w * w + u,
+            Some(bl) => {
+                0.5 * self.j_motor_side() * w * w
+                    + 0.5 * self.j_load_side() * w_l * w_l
+                    + u
+                    + bl.energy(s[0] / self.gb.n - th_l)
+            }
         }
     }
 
     /// Apply a change to inertia-carrying parameters with the EQ-MECH-09 rule: keep ω
-    /// (D-007) or, with `conserve`, keep J_eq·ω. The stored-energy jump (kinetic and
-    /// potential) is booked as external energy.
+    /// (D-007) or, with `conserve`, keep the momentum of the body that changed (J_eq·ω
+    /// rigid, the load body's with backlash). The stored-energy jump (kinetic, potential)
+    /// is booked as external energy.
     fn change_inertia(
         &mut self,
         x_own: &mut [f64],
         conserve: bool,
         f: impl FnOnce(&mut Self) -> Result<f64, String>,
     ) -> Result<f64, String> {
-        let (th, w) = (x_own[0], x_own[1]);
-        let (j0, u0) = (self.j_eq(), self.load.potential(th / self.gb.n));
+        let e0 = self.energy(x_own);
+        let (j0, jl0) = (self.j_eq(), self.j_load_side());
         let old = f(self)?;
-        let (j1, u1) = (self.j_eq(), self.load.potential(th / self.gb.n));
-        let w1 = if conserve { w * j0 / j1 } else { w };
-        x_own[1] = w1;
-        self.jump += 0.5 * j1 * w1 * w1 - 0.5 * j0 * w * w + (u1 - u0);
+        if conserve {
+            match self.backlash {
+                None => x_own[1] *= j0 / self.j_eq(),
+                Some(_) => x_own[4] *= jl0 / self.j_load_side(),
+            }
+        }
+        self.jump += self.energy(x_own) - e0;
         Ok(old)
     }
 
@@ -296,8 +431,72 @@ impl RotorRigid {
                     Ok(std::mem::replace(j, v))
                 })
             }
-            "gearbox.ratio" => Err("the gear ratio changes only on a rebuild (reset)".into()),
+            "gearbox.ratio" | "gearbox.backlash" => {
+                Err(format!("`{name}` changes only on a rebuild (reset)"))
+            }
             _ => Err(format!("unknown parameter `{name}`")),
+        }
+    }
+
+    /// Friction events of one element (`sub` 0: ω crosses zero / breakaway, 1: stuck
+    /// but moving): stick, slip, or reverse (EQ-MECH-05). `wi` is its speed state index.
+    fn friction_event(&mut self, load_side: bool, sub: usize, x_own: &mut [f64], bus: &SignalBus) {
+        let d = self.dynamics(x_own, bus);
+        let (el, wi, j, t_s) = if load_side {
+            (d.load_side, 4, self.j_load_side(), self.fr_l.t_s)
+        } else {
+            let j = if self.backlash.is_some() {
+                self.j_motor_side()
+            } else {
+                self.j_eq()
+            };
+            (d.motor, 1, j, self.fr_motor().t_s)
+        };
+        let mode = if load_side {
+            &mut self.mode_l
+        } else {
+            &mut self.mode
+        };
+        match (sub, *mode) {
+            (0, Mode::Slip { .. }) => {
+                if el.t_a.abs() <= t_s {
+                    // Stick: the leftover ½Jω² (bisection-sized) leaves with the jump.
+                    let w = x_own[wi];
+                    self.jump -= 0.5 * j * w * w;
+                    x_own[wi] = 0.0;
+                    *mode = Mode::Stick;
+                } else {
+                    *mode = Mode::Slip {
+                        dir: el.t_a.signum(),
+                    };
+                }
+            }
+            (0, Mode::Stick) => {
+                *mode = Mode::Slip {
+                    dir: el.t_a.signum(),
+                }
+            }
+            (1, Mode::Stick) => {
+                *mode = Mode::Slip {
+                    dir: x_own[wi].signum(),
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Event functions of one friction element (see `friction_event`).
+    fn friction_g(&self, el: Side, mode: Mode, fr: &Friction, w: f64, g: &mut [f64]) {
+        (g[0], g[1]) = (1.0, 1.0);
+        if !fr.is_hybrid() {
+            return;
+        }
+        match mode {
+            Mode::Slip { dir } => g[0] = dir * w,
+            Mode::Stick => {
+                g[0] = fr.t_s - el.t_a.abs();
+                g[1] = 1e-12 - w.abs();
+            }
         }
     }
 }
@@ -310,60 +509,89 @@ impl PlantModule for RotorRigid {
         vec!["gearbox".into(), "load".into()]
     }
     fn n_states(&self) -> usize {
-        3
+        if self.backlash.is_some() { 5 } else { 3 }
     }
     fn state_names(&self) -> Vec<(String, String)> {
-        vec![
+        let mut v = vec![
             ("theta".into(), "rad".into()),
             ("omega".into(), "rad/s".into()),
             ("disturbance_left".into(), "s".into()),
-        ]
+        ];
+        if self.backlash.is_some() {
+            v.push(("theta_load".into(), "rad".into()));
+            v.push(("omega_load".into(), "rad/s".into()));
+        }
+        v
     }
     fn init(&self, x: &mut [f64]) {
+        let w0 = if self.locked { 0.0 } else { self.p.omega0 };
         x[0] = self.p.theta0;
-        x[1] = if self.locked { 0.0 } else { self.p.omega0 };
+        x[1] = w0;
         x[2] = 0.0;
+        if self.backlash.is_some() {
+            x[3] = self.p.theta0 / self.gb.n;
+            x[4] = self.p.omega0 / self.gb.n;
+        }
     }
     fn outputs(&mut self, _t: f64, x: &[f64], off: usize, bus: &mut SignalBus) {
-        let (th, w) = (x[off], x[off + 1]);
-        let (n, p) = (self.gb.n, self.p.pole_pairs);
+        let s = &x[off..off + self.n_states()];
+        let (th, w) = (s[0], s[1]);
+        let (th_l, w_l) = self.load_state(s);
+        let p = self.p.pole_pairs;
         let ids = &self.ids;
         bus.set(ids.theta, th);
         bus.set(ids.omega, w);
         bus.set(ids.theta_e, p * th);
         bus.set(ids.omega_e, p * w);
-        bus.set(ids.theta_l, th / n);
-        bus.set(ids.omega_l, w / n);
+        bus.set(ids.theta_l, th_l);
+        bus.set(ids.omega_l, w_l);
         // The motor torques on the bus are from the previous stage here (the motor's
         // outputs run after the rotor's): p_loss is for display; the energy book uses
         // `powers`, which runs after all outputs.
-        let d = self.dynamics(th, w, bus);
+        let d = self.dynamics(s, bus);
+        let ids = &self.ids;
         bus.set(ids.torque_gravity, d.load.gravity);
-        bus.set(ids.torque_ext, d.load.loss + d.load.ext);
+        bus.set(ids.torque_ext, d.load.loss + d.load.ext - self.dist);
         bus.set(ids.p_gear, if self.locked { 0.0 } else { -d.t_gl * w });
         bus.set(ids.disturbance, self.dist);
+        bus.set(ids.delta, d.delta);
+        bus.set(ids.torque_contact, d.tau_c);
     }
     fn derivatives(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, dx: &mut [f64]) {
+        let s = &x[off..off + self.n_states()];
+        let d = self.dynamics(s, bus);
         dx[2] = if self.dist != 0.0 { -1.0 } else { 0.0 };
-        if self.locked {
+        if self.locked || d.motor.held {
             dx[0] = 0.0;
             dx[1] = 0.0;
-            return;
+        } else {
+            dx[0] = s[1];
+            dx[1] = d.motor.a;
         }
-        let (th, w) = (x[off], x[off + 1]);
-        let d = self.dynamics(th, w, bus);
-        dx[0] = if d.held { 0.0 } else { w };
-        dx[1] = d.a;
+        if self.backlash.is_some() {
+            dx[3] = if d.load_side.held { 0.0 } else { s[4] };
+            dx[4] = d.load_side.a;
+        }
     }
     fn params(&self) -> Vec<(String, String)> {
-        let mut v = vec![
-            ("j_rotor".into(), "kg*m^2".into()),
-            ("friction.viscous".into(), "N*m*s/rad".into()),
-            ("locked".into(), "-".into()),
-            ("gearbox.efficiency".into(), "-".into()),
-            ("gearbox.j_in".into(), "kg*m^2".into()),
-            ("gearbox.j_out".into(), "kg*m^2".into()),
-        ];
+        let mut v: Vec<(String, String)> = [
+            ("j_rotor", "kg*m^2"),
+            ("friction.viscous", "N*m*s/rad"),
+            ("friction.static_torque", "N*m"),
+            ("friction.coulomb", "N*m"),
+            ("locked", "-"),
+            ("gearbox.efficiency", "-"),
+            ("gearbox.j_in", "kg*m^2"),
+            ("gearbox.j_out", "kg*m^2"),
+            ("load.friction.static_torque", "N*m"),
+            ("load.friction.coulomb", "N*m"),
+            ("load.friction.viscous", "N*m*s/rad"),
+            ("load.disturbance.torque", "N*m"),
+            ("load.disturbance.duration", "s"),
+        ]
+        .iter()
+        .map(|(a, b)| ((*a).into(), (*b).into()))
+        .collect();
         v.extend(self.load.params());
         v
     }
@@ -381,6 +609,8 @@ impl PlantModule for RotorRigid {
             "gearbox.efficiency" => Some(self.gb.eta),
             "gearbox.j_in" => Some(self.gb.j_in),
             "gearbox.j_out" => Some(self.gb.j_out),
+            "gearbox.backlash" => Some(self.backlash.map_or(0.0, |b| b.width)),
+            "load.disturbance.torque" => Some(self.dist),
             _ => self.load.get(name),
         }
     }
@@ -427,14 +657,16 @@ impl PlantModule for RotorRigid {
             }
             "locked" => {
                 let old = f64::from(u8::from(self.locked));
-                self.locked = v != 0.0;
+                let lock = v != 0.0;
+                if lock {
+                    // Stopping the shaft removes its kinetic energy.
+                    let e0 = self.energy(x_own);
+                    x_own[1] = 0.0;
+                    self.jump += self.energy(x_own) - e0;
+                }
+                self.locked = lock;
                 // Locking stops the shaft; releasing starts from rest.
                 self.mode = Mode::Stick;
-                if self.locked {
-                    // Stopping the shaft removes its kinetic energy.
-                    self.jump -= 0.5 * self.j_eq() * x_own[1] * x_own[1];
-                    x_own[1] = 0.0;
-                }
                 Ok(old)
             }
             _ => Err(format!("unknown parameter `{name}`")),
@@ -445,48 +677,54 @@ impl PlantModule for RotorRigid {
             ("friction".into(), PowerKind::Loss),
             ("gearbox".into(), PowerKind::Loss),
             ("load".into(), PowerKind::Loss),
+            ("backlash".into(), PowerKind::Loss),
             ("external".into(), PowerKind::External),
         ]
     }
     fn powers(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, p: &mut [f64]) {
-        if self.locked {
-            p.fill(0.0);
-            return;
-        }
-        let (th, w) = (x[off], x[off + 1]);
-        let d = self.dynamics(th, w, bus);
-        let w_l = w / self.gb.n;
-        p[0] = -d.t_f * w;
+        let s = &x[off..off + self.n_states()];
+        let d = self.dynamics(s, bus);
+        let w = if self.locked { 0.0 } else { s[1] };
+        let w_l = if self.locked && self.backlash.is_none() {
+            0.0
+        } else {
+            d.w_l
+        };
+        p[0] = -d.motor.t_f * w - d.load_side.t_f * w_l;
         p[1] = -d.t_gl * w;
         p[2] = -d.load.loss * w_l;
-        p[3] = d.t_ext_m * w + d.load.ext * w_l;
+        p[3] = match self.backlash {
+            Some(bl) => d.tau_c * d.ddelta - bl.energy_rate(d.delta, d.ddelta),
+            None => 0.0,
+        };
+        p[4] = d.t_ext_m * w + d.load.ext * w_l;
     }
     fn stored_energy(&self, x: &[f64], off: usize, _bus: &SignalBus) -> f64 {
-        let w = x[off + 1];
-        0.5 * self.j_eq() * w * w + self.load.potential(x[off] / self.gb.n)
+        self.energy(&x[off..off + self.n_states()])
     }
     fn take_external_energy(&mut self) -> f64 {
         std::mem::take(&mut self.jump)
     }
     fn n_events(&self) -> usize {
-        3
+        6
     }
     fn event_functions(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, g: &mut [f64]) {
+        let s = &x[off..off + self.n_states()];
         // 0: the pulse ends when its remaining time crosses zero.
-        g[0] = if self.dist != 0.0 { x[off + 2] } else { 1.0 };
-        // 1: slip → ω crosses zero; stick → |T_a| crosses T_s (EQ-MECH-05).
-        // 2: stick but already moving (a step started past breakaway, e.g. after an edit).
-        (g[1], g[2]) = (1.0, 1.0);
-        if self.hybrid() {
-            let (th, w) = (x[off], x[off + 1]);
-            match self.mode {
-                Mode::Slip { dir } => g[1] = dir * w,
-                Mode::Stick => {
-                    let t_a = self.dynamics(th, w, bus).t_a;
-                    g[1] = self.friction().t_s - t_a.abs();
-                    g[2] = 1e-12 - w.abs();
-                }
-            }
+        g[0] = if self.dist != 0.0 { s[2] } else { 1.0 };
+        // 1, 2: the motor-shaft friction element; 3, 4: the load side (backlash).
+        // Per element: slip → ω crosses zero; stick → |T_a| crosses T_s; stick but
+        // already moving (a step started past breakaway: the engine re-evaluates g at
+        // each advance, so an already-negative g would never cross).
+        // 5: contact, |δ| − b/2 (backlash).
+        g[1..6].fill(1.0);
+        let d = self.dynamics(s, bus);
+        if !self.locked {
+            self.friction_g(d.motor, self.mode, &self.fr_motor(), s[1], &mut g[1..3]);
+        }
+        if let Some(bl) = self.backlash {
+            self.friction_g(d.load_side, self.mode_l, &self.fr_l, s[4], &mut g[3..5]);
+            g[5] = d.delta.abs() - 0.5 * bl.width;
         }
     }
     fn on_event(
@@ -497,28 +735,14 @@ impl PlantModule for RotorRigid {
         x_own: &mut [f64],
         bus: &mut SignalBus,
     ) {
-        let (th, w) = (x_own[0], x_own[1]);
-        match (idx, self.mode) {
-            (0, _) => {
+        match idx {
+            0 => {
                 self.dist = 0.0;
                 x_own[2] = 0.0;
             }
-            (1, Mode::Slip { .. }) => {
-                let t_a = self.dynamics(th, w, bus).t_a;
-                if t_a.abs() <= self.friction().t_s {
-                    // Stick: the leftover ½Jω² (bisection-sized) leaves with the jump.
-                    self.jump -= 0.5 * self.j_eq() * w * w;
-                    x_own[1] = 0.0;
-                    self.mode = Mode::Stick;
-                } else {
-                    self.mode = Mode::Slip { dir: t_a.signum() };
-                }
-            }
-            (1, Mode::Stick) => {
-                let t_a = self.dynamics(th, w, bus).t_a;
-                self.mode = Mode::Slip { dir: t_a.signum() };
-            }
-            (2, Mode::Stick) => self.mode = Mode::Slip { dir: w.signum() },
+            1 | 2 => self.friction_event(false, idx - 1, x_own, bus),
+            3 | 4 => self.friction_event(true, idx - 3, x_own, bus),
+            // 5: contact change; located only (the contact law is continuous in δ).
             _ => {}
         }
     }
@@ -527,7 +751,7 @@ impl PlantModule for RotorRigid {
             "j": self.p.j, "b": self.p.b, "locked": self.locked,
             "eta": self.gb.eta, "j_in": self.gb.j_in, "j_out": self.gb.j_out,
             "load": self.load, "jump": self.jump, "dist": self.dist,
-            "fr_m": self.fr_m, "fr_l": self.fr_l, "mode": self.mode,
+            "fr_m": self.fr_m, "fr_l": self.fr_l, "mode": self.mode, "mode_l": self.mode_l,
         })
     }
     fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
@@ -536,22 +760,22 @@ impl PlantModule for RotorRigid {
                 .and_then(serde_json::Value::as_f64)
                 .ok_or(format!("missing `{k}`"))
         };
-        let (j, b) = (f("j")?, f("b")?);
+        let de = |k: &str| v.get(k).cloned().ok_or(format!("missing `{k}`"));
+        let (j, b, dist) = (f("j")?, f("b")?, f("dist")?);
         let (eta, j_in, j_out, jump) = (f("eta")?, f("j_in")?, f("j_out")?, f("jump")?);
-        let dist = f("dist")?;
         let locked = v
             .get("locked")
             .and_then(serde_json::Value::as_bool)
             .ok_or("missing `locked`")?;
-        let load: Load = serde_json::from_value(v.get("load").cloned().unwrap_or_default())
-            .map_err(|e| format!("`load`: {e}"))?;
+        let load: Load = serde_json::from_value(de("load")?).map_err(|e| format!("`load`: {e}"))?;
+        let fr_m: Friction = serde_json::from_value(de("fr_m")?).map_err(|e| e.to_string())?;
+        let fr_l: Friction = serde_json::from_value(de("fr_l")?).map_err(|e| e.to_string())?;
+        let mode: Mode = serde_json::from_value(de("mode")?).map_err(|e| e.to_string())?;
+        let mode_l: Mode = serde_json::from_value(de("mode_l")?).map_err(|e| e.to_string())?;
         (self.p.j, self.p.b, self.locked) = (j, b, locked);
         (self.gb.eta, self.gb.j_in, self.gb.j_out) = (eta, j_in, j_out);
         (self.load, self.jump, self.dist) = (load, jump, dist);
-        let de = |k: &str| v.get(k).cloned().ok_or(format!("missing `{k}`"));
-        self.fr_m = serde_json::from_value(de("fr_m")?).map_err(|e| e.to_string())?;
-        self.fr_l = serde_json::from_value(de("fr_l")?).map_err(|e| e.to_string())?;
-        self.mode = serde_json::from_value(de("mode")?).map_err(|e| e.to_string())?;
+        (self.fr_m, self.fr_l, self.mode, self.mode_l) = (fr_m, fr_l, mode, mode_l);
         Ok(())
     }
 }
