@@ -152,8 +152,10 @@ mod tests {
             .collect()
     }
 
+    /// V-SENS-004: over one electrical turn the code changes at 30° + 60°k and follows
+    /// the EQ-SENS-02 table.
     #[test]
-    fn codes_change_every_60_degrees_at_the_six_step_boundaries() {
+    fn v_sens_004_codes_change_every_60_degrees_at_the_six_step_boundaries() {
         let codes = sweep(&HallConfig::default(), 1.0);
         let changes: Vec<f64> = codes
             .windows(2)

@@ -233,8 +233,10 @@ mod tests {
         }
     }
 
+    /// V-SENS-007: 1000 CPR → 4000 counts per turn, signed by direction; index once per
+    /// turn.
     #[test]
-    fn counts_4000_per_rev_with_direction_sign_and_index_once_per_rev() {
+    fn v_sens_007_counts_4000_per_rev_with_direction_sign_and_index_once_per_rev() {
         let theta0 = 0.3;
         let mut r = Rig::new(theta0, false);
         let n = 7200; // 0.05° per sample (Δ = 0.09°)

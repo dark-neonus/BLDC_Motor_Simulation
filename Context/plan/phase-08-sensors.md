@@ -71,7 +71,7 @@
     - at very low speed, the error grows and `est.valid = false` (documented failure)
   - **Done when:** Passing.
 
-- [ ] **P08.T08** — V-SENS sweep
+- [x] **P08.T08** — V-SENS sweep
   - **Depends:** P08.T02, P08.T03, P08.T04, P08.T05, P08.T07
   - **Do:** Implement all V-SENS catalog cases as tests.
   - **Verify:** `cargo nextest run -p sim-core v_sens`

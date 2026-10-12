@@ -244,8 +244,10 @@ mod tests {
         assert_eq!(p.sample(1, -12.0), -10.0);
     }
 
+    /// V-SENS-002: a latency of N periods reads exactly x(t − τ); between samples, the
+    /// linear interpolation.
     #[test]
-    fn delay_is_exactly_n_samples_and_interpolates_between() {
+    fn v_sens_002_latency_reads_the_past_value() {
         let t_s = 50_000;
         let mut p = pipe(PipelineConfig {
             latency_ns: 3 * t_s,
@@ -270,8 +272,9 @@ mod tests {
         }
     }
 
+    /// V-SENS-003: σ within 5 % over 1e4 seeded samples; same seed, same sequence.
     #[test]
-    fn noise_std_within_bounds_and_seeded() {
+    fn v_sens_003_noise_std_within_bounds_and_seeded() {
         let sigma = 0.3;
         let cfg = PipelineConfig {
             noise_sigma: sigma,
