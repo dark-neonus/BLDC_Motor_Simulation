@@ -92,7 +92,7 @@ impl Pwm {
             };
             // Each period starts in the zero vector: Low, unless the leg stays High.
             let start = full.unwrap_or(LegState::Low);
-            let mut turn = |t: i64, to: LegState, edges: &mut Vec<(i64, usize, LegState)>| {
+            let turn = |t: i64, to: LegState, edges: &mut Vec<(i64, usize, LegState)>| {
                 edges.push((t, x, LegState::Off));
                 edges.push((t + td, x, to));
             };
