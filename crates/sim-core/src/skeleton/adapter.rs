@@ -11,6 +11,9 @@ use crate::engine::plant::Plant;
 use crate::engine::signals::{SignalBus, SignalId, SignalKind};
 use crate::engine::time::{SimTime, period_from_hz};
 use crate::physics::inverter::ideal::IdealVoltageSource;
+use crate::physics::inverter::leg::{Devices, LegState, SwitchingInverter};
+use crate::physics::inverter::modulation::svpwm_ab;
+use crate::physics::inverter::pwm::{Pwm, PwmConfig};
 use crate::physics::mech::backlash::Backlash;
 use crate::physics::mech::friction::Friction;
 use crate::physics::mech::gearbox::Gearbox;
@@ -19,9 +22,11 @@ use crate::physics::mech::rotor::{RotorParams, RotorRigid};
 use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::{Cogging, CoggingParams};
 use crate::physics::motor::electrical::{
-    ElectricalInputs, ElectricalParams, LambdaTemperature, MotorElectrical, RTemperature, SatParams,
+    ElectricalInputs, ElectricalParams, LambdaTemperature, LegInputs, MotorElectrical,
+    RTemperature, SatParams,
 };
 use crate::physics::motor::iron_loss::{IronLoss, IronLossParams};
+use crate::physics::supply::bus::{Chopper, DcBus, Source};
 use crate::physics::thermal::{Thermal, ThermalInputs, ThermalParams};
 
 /// Signals the FOC block reads and writes.
@@ -47,6 +52,8 @@ struct FocBlock {
     iq_ref: SignalId,
     /// Gear ratio N: `ctrl.omega_ref` is load-side, the speed loop runs on the motor side.
     ratio: f64,
+    /// SVPWM duty outputs and the bus voltage they are scaled by (inverter drive).
+    duties: Option<([SignalId; 3], SignalId)>,
     /// `ctrl.torque_ref` (load side) and the design K_t that turns it into i_q.
     torque_ref: SignalId,
     kt: f64,
@@ -114,14 +121,49 @@ impl DiscreteBlock for FocBlock {
         ctx.bus.set(self.s.v_q, vq);
         // Inverse Park at the measured angle; held until the next tick (ZOH).
         let (sn, cs) = ctx.bus.get(self.s.theta_e).sin_cos();
-        ctx.bus.set(self.s.v_alpha, cs * vd - sn * vq);
-        ctx.bus.set(self.s.v_beta, sn * vd + cs * vq);
+        let (va, vb) = (cs * vd - sn * vq, sn * vd + cs * vq);
+        ctx.bus.set(self.s.v_alpha, va);
+        ctx.bus.set(self.s.v_beta, vb);
+        if let Some((ids, v_bus)) = self.duties {
+            // SVPWM with the overmodulation clamp (EQ-INV-05/06) on the measured bus.
+            let (d, _) = svpwm_ab(va, vb, ctx.bus.get(v_bus).max(1e-9));
+            for (id, d) in ids.iter().zip(d) {
+                ctx.bus.set(*id, d);
+            }
+        }
         ctx.bus.set(self.iq_ref, self.foc.iq_ref);
         Ok(())
     }
     fn reset(&mut self) {
         self.foc.reset();
     }
+}
+
+/// What drives the motor terminals.
+#[derive(Debug, Clone, Default)]
+pub enum Drive {
+    /// Phase voltages applied directly (tests, skeleton; `inverter_mode = ideal`).
+    #[default]
+    Ideal,
+    /// SVPWM → inverter (averaged or switching) → DC bus with its source.
+    Inverter(InverterOptions),
+}
+
+#[derive(Debug, Clone)]
+pub struct InverterOptions {
+    /// Switching (PWM edges + dead time) instead of averaged.
+    pub switching: bool,
+    pub devices: Devices,
+    pub f_pwm: f64,
+    pub dead_time: f64,
+    /// t_r + t_f [s] (switching loss).
+    pub t_rise_fall: f64,
+    /// Dead-time sign smoothing scale [A].
+    pub i_eps: f64,
+    pub source: Source,
+    /// Bus capacitance [F].
+    pub c_bus: f64,
+    pub chopper: Option<Chopper>,
 }
 
 /// Options for the skeleton engine.
@@ -146,6 +188,8 @@ pub struct SkeletonOptions {
     pub backlash: Option<Backlash>,
     /// Thermal network with R(T) and λ(T) coupling (EQ-THERM-01…03).
     pub thermal: Option<ThermalOptions>,
+    /// Terminal drive (ideal source, or inverter + bus).
+    pub drive: Drive,
     /// Gear ratio N (load-side setpoints × N = motor side).
     pub ratio: f64,
     /// Cogging (EQ-MOT-08), when the fidelity tier enables it.
@@ -172,6 +216,7 @@ impl Default for SkeletonOptions {
             friction: (Friction::default(), Friction::default()),
             backlash: None,
             thermal: None,
+            drive: Drive::Ideal,
             ratio: 1.0,
             cogging: None,
             iron: None,
@@ -246,8 +291,37 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         "q-axis current reference",
         SignalKind::Output,
     );
-    let source = IdealVoltageSource::new(&mut bus, v_alpha, v_beta, cfg.v_bus)
-        .expect("unique skeleton signal");
+    // Front end: the ideal source, or bus + inverter (+ PWM block).
+    // Built once per engine and consumed below; its size does not matter.
+    #[allow(clippy::large_enum_variant)]
+    enum Front {
+        Ideal(IdealVoltageSource),
+        Inv(DcBus, SwitchingInverter, InverterOptions),
+    }
+    let front = match &opts.drive {
+        Drive::Ideal => Front::Ideal(
+            IdealVoltageSource::new(&mut bus, v_alpha, v_beta, cfg.v_bus)
+                .expect("unique skeleton signal"),
+        ),
+        Drive::Inverter(o) => {
+            let dc = DcBus::new(o.source.clone(), o.c_bus, o.chopper, &mut bus)
+                .expect("unique skeleton signal");
+            let mut inv = SwitchingInverter::new(o.devices, dc.v_id(), &mut bus)
+                .expect("unique skeleton signal")
+                .with_switching_loss(o.t_rise_fall, o.f_pwm)
+                .without_dc_input();
+            if !o.switching {
+                inv = inv
+                    .averaged(&mut bus, o.dead_time * o.f_pwm, o.i_eps)
+                    .expect("unique skeleton signal");
+            }
+            Front::Inv(dc, inv, o.clone())
+        }
+    };
+    let terminals = match &front {
+        Front::Ideal(s) => s.outputs_ids(),
+        Front::Inv(_, inv, _) => inv.outputs_ids(),
+    };
     let rp = RotorParams {
         j: mp.j,
         j_load: 0.0,
@@ -268,7 +342,7 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
     };
     let id = |bus: &SignalBus, p: &str| bus.id(p).expect("registered above");
     let inp = ElectricalInputs {
-        v: source.outputs_ids(),
+        v: terminals,
         theta_e: id(&bus, "motor.theta_e"),
         omega_e: id(&bus, "motor.omega_e"),
     };
@@ -290,6 +364,16 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         (th, o)
     });
     let mut motor = MotorElectrical::new(ep, inp, &mut bus).expect("unique skeleton signal");
+    if let Front::Inv(dc, _, o) = &front {
+        let legs = ["inverter.leg_a", "inverter.leg_b", "inverter.leg_c"].map(|n| id(&bus, n));
+        motor = motor
+            .with_legs(LegInputs {
+                legs,
+                v_bus: dc.v_id(),
+                v_f: o.devices.v_f,
+            })
+            .with_internal_terminals();
+    }
     if let Some((_, o)) = &thermal {
         motor = motor
             .with_r_temperature(RTemperature {
@@ -333,8 +417,37 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         theta_e: id(&bus, "motor.theta_e"),
     };
     let mut plant = Plant::new();
-    plant.add(Box::new(rotor));
-    plant.add(Box::new(source));
+    let mut extra_blocks: Vec<Box<dyn DiscreteBlock>> = vec![];
+    let mut duties = None;
+    let mut inverter = None;
+    match front {
+        Front::Ideal(src) => {
+            plant.add(Box::new(rotor));
+            plant.add(Box::new(src));
+        }
+        Front::Inv(dc, inv, o) => {
+            let inv = inv.with_motor(&bus).expect("motor registered above");
+            let load = vec![id(&bus, "inverter.i_dc"), id(&bus, "inverter.i_sw")];
+            let v_bus = dc.v_id();
+            // The bus first (its voltage depends on its state only), the inverter after
+            // the motor (it needs this stage's currents).
+            plant.add(Box::new(dc.with_load(load)));
+            plant.add(Box::new(rotor));
+            let duty = crate::physics::inverter::leg::duty_ids(&mut bus).expect("duty inputs");
+            if o.switching {
+                let cfg = PwmConfig {
+                    period_ns: (1e9 / o.f_pwm).round() as i64,
+                    dead_ns: (o.dead_time * 1e9).round() as i64,
+                };
+                extra_blocks.push(Box::new(Pwm::new(cfg, &mut bus).expect("pwm signals")));
+            } else {
+                // Averaged: every leg is driven by its duty.
+                inv.set_legs(&mut bus, [LegState::High; 3]);
+            }
+            duties = Some((duty, v_bus));
+            inverter = Some(inv);
+        }
+    }
     if let Some((th, _)) = thermal {
         // Before the motor: its outputs (temperatures) feed R(T) and λ(T).
         let inputs = ThermalInputs {
@@ -352,6 +465,9 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
     if let Some(m) = iron {
         plant.add(Box::new(m));
     }
+    if let Some(inv) = inverter {
+        plant.add(Box::new(inv));
+    }
     let period = period_from_hz(1.0 / cfg.dt)
         .map(|p| p.period)
         .unwrap_or(SimTime(50_000));
@@ -360,7 +476,7 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         j: opts.gearbox.j_eq(mp.j, opts.load.inertia()),
         ..mp
     };
-    let blocks: Vec<Box<dyn DiscreteBlock>> = vec![Box::new(FocBlock {
+    let mut blocks: Vec<Box<dyn DiscreteBlock>> = vec![Box::new(FocBlock {
         foc: Foc::new(cfg, FocGains::design(&design, &cfg)),
         period,
         open_loop_vq: opts.open_loop_vq,
@@ -368,10 +484,12 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         omega_ref,
         iq_ref,
         ratio: opts.ratio,
+        duties,
         torque_ref,
         kt: 1.5 * mp.p * mp.lambda,
         torque_mode: false,
     })];
+    blocks.extend(extra_blocks);
     Engine::new(plant, bus, blocks, opts.dt_max)
 }
 

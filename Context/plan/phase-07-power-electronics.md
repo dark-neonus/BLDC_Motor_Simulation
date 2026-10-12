@@ -104,7 +104,7 @@
   - **Verify:** `cargo nextest run -p sim-core v_inv v_sup`; `just bench`.
   - **Done when:** Green, numbers logged. If switching mode is < 0.05× real time, add a P19 optimization task and note it.
 
-- [ ] **P07.T12** — Rewire the interim drive through the real inverter & supply
+- [x] **P07.T12** — Rewire the interim drive through the real inverter & supply
   - **Depends:** P07.T03, P07.T04, P07.T07
   - **Do:** The skeleton FOC's v_α/v_β now go through SVPWM (P07.T04) → averaged inverter (default) or switching inverter → DC bus → lab PSU. The ideal source remains as `inverter.mode = ideal` for tests. Update the default scene, V-SKEL scenarios (with expected values updated only if the physics legitimately changes — note it in LOG) and the server.
   - **Verify:** `just test && just validate && just e2e` green.

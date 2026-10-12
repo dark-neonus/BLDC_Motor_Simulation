@@ -607,6 +607,26 @@ mod tests {
         }
     }
 
+    /// P07.T12: scenes drive the motor through SVPWM → inverter → DC bus with the scene's
+    /// PSU, averaged by default and switching on request; energy closes through the chain.
+    #[test]
+    fn scenes_drive_through_inverter_and_bus() {
+        for mode in [
+            "",
+            "  fidelity: { inverter_mode: switching, dt_max: 0.5 us }\n",
+        ] {
+            let o = go(&format!(
+                "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: {{ preset: \"builtin:motors/4108-outrunner\" }}\n  inverter: {{ preset: \"builtin:inverters/small-24v-10a\" }}\n  supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n  controller: {{ preset: \"builtin:controllers/foc-default\" }}\n{mode}sample: 1 ms\nrecord: [motor.omega, bus.v, inverter.p_loss, energy.residual]\ntimeline:\n  - target: {{ kind: velocity, value: 20 rad/s, ramp: 0.05 s }}\n  - wait: 0.1 s\n"
+            ));
+            let last = o.rows.last().unwrap();
+            assert!((last[1] - 20.0).abs() < 1.0, "{mode}: ω {}", last[1]);
+            // A brief regen at the end of the ramp can lift a blocking PSU bus above 24 V.
+            assert!(last[2] > 22.0 && last[2] < 25.0, "{mode}: bus {}", last[2]);
+            assert!(last[3] > 0.0, "{mode}: inverter loss");
+            assert!(last[4].abs() < 1e-3, "{mode}: residual {}", last[4]);
+        }
+    }
+
     #[test]
     fn cogging_follows_the_fidelity_tier() {
         let dir = std::env::temp_dir().join(format!("bldc-cog-{}", std::process::id()));

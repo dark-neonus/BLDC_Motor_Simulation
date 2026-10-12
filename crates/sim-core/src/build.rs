@@ -15,7 +15,9 @@ use sim_model::units::Kind;
 
 use crate::engine::commands::{ChangeSource, EngineCommand};
 use crate::engine::engine::Engine;
+use crate::engine::fidelity::InverterMode;
 use crate::engine::fidelity::{FidelityConfig, Tier};
+use crate::physics::inverter::leg::Devices;
 use crate::physics::mech::backlash::{Backlash, DEFAULT_STIFFNESS, DEFAULT_ZETA};
 use crate::physics::mech::friction::Friction;
 use crate::physics::mech::gearbox::Gearbox;
@@ -25,8 +27,12 @@ use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::CoggingParams;
 use crate::physics::motor::electrical::SatParams;
 use crate::physics::motor::iron_loss::IronLossParams;
+use crate::physics::supply::battery::Battery;
+use crate::physics::supply::bus::{Chopper, Source};
 use crate::physics::thermal::ThermalParams;
-use crate::skeleton::adapter::{SkeletonOptions, ThermalOptions, build_engine_with};
+use crate::skeleton::adapter::{
+    Drive, InverterOptions, SkeletonOptions, ThermalOptions, build_engine_with,
+};
 use crate::skeleton::foc::FocConfig;
 use crate::skeleton::params::PmsmParams;
 
@@ -317,6 +323,114 @@ fn gearbox(scene: &ResolvedScene) -> Result<Gearbox, BuildError> {
     })
 }
 
+/// Bus capacitance when the scene gives none [F] (supply.md's example drive, 470 µF).
+pub const DEFAULT_C_BUS: f64 = 470e-6;
+
+/// The terminal drive (P07.T12): `fidelity.inverter_mode` (else the tier's) picks the
+/// ideal source, or SVPWM → averaged / switching inverter → DC bus with the scene's source
+/// and chopper. Also returns its step cap: τ_bus/2 for a PSU or battery (D-018) and, in
+/// switching mode, T_pwm/200 (EQ-NUM step table).
+fn drive(scene: &ResolvedScene) -> Result<(Drive, f64), BuildError> {
+    let mode = match scene
+        .fidelity
+        .as_ref()
+        .and_then(|f| f.inverter_mode.as_deref())
+    {
+        Some("ideal") => InverterMode::Ideal,
+        Some("averaged") => InverterMode::Averaged,
+        Some("switching") => InverterMode::Switching,
+        Some(other) => {
+            return Err(BuildError::Param(
+                "fidelity.inverter_mode".into(),
+                format!("`{other}`: expected ideal, averaged or switching"),
+            ));
+        }
+        None => FidelityConfig::preset(tier(scene)).inverter_mode,
+    };
+    if mode == InverterMode::Ideal {
+        return Ok((Drive::Ideal, f64::INFINITY));
+    }
+    let i = &scene.inverter;
+    let t = |p: &Param, n: &str| si(p, Kind::Time, &format!("inverter.{n}"));
+    let f_pwm = si(&i.f_pwm, Kind::Frequency, "inverter.f_pwm")?;
+    let c_bus = match &scene.bus {
+        Some(b) => si(&b.capacitance, Kind::Capacitance, "bus.capacitance")?,
+        None => DEFAULT_C_BUS,
+    };
+    let source = match &scene.supply {
+        SupplyParams::Ideal { voltage } => Source::Ideal {
+            v: si(voltage, Kind::Voltage, "supply.voltage")?,
+        },
+        SupplyParams::Psu {
+            voltage,
+            current_limit,
+            r_out,
+        } => Source::Psu {
+            v_set: si(voltage, Kind::Voltage, "supply.voltage")?,
+            i_lim: si(current_limit, Kind::Current, "supply.current_limit")?,
+            r_out: si(r_out, Kind::Resistance, "supply.r_out")?,
+        },
+        SupplyParams::Battery {
+            series,
+            parallel,
+            capacity_cell,
+            r0_cell,
+            r1_cell,
+            c1_cell,
+            soc_init,
+            ocv_cell,
+            ..
+        } => Source::Battery {
+            pack: Battery::from_cells(
+                ocv_cell,
+                *series,
+                *parallel,
+                si(r0_cell, Kind::Resistance, "supply.r0_cell")?,
+                si(r1_cell, Kind::Resistance, "supply.r1_cell")?,
+                si(c1_cell, Kind::Capacitance, "supply.c1_cell")?,
+                si(capacity_cell, Kind::Charge, "supply.capacity_cell")? / 3600.0,
+            ),
+            soc0: *soc_init,
+        },
+    };
+    let tau_bus = match &source {
+        Source::Ideal { .. } => f64::INFINITY,
+        Source::Psu { r_out, .. } => r_out * c_bus,
+        Source::Battery { pack, .. } => pack.r0 * c_bus,
+    };
+    let chopper = match scene.bus.as_ref().and_then(|b| b.chopper.as_ref()) {
+        Some(c) => Some(Chopper {
+            r_brake: si(&c.r_brake, Kind::Resistance, "bus.chopper.r_brake")?,
+            v_on: si(&c.v_on, Kind::Voltage, "bus.chopper.v_on")?,
+            v_off: si(&c.v_off, Kind::Voltage, "bus.chopper.v_off")?,
+        }),
+        None => None,
+    };
+    let switching = mode == InverterMode::Switching;
+    let mut cap = 0.5 * tau_bus;
+    if switching {
+        cap = cap.min(1.0 / f_pwm / 200.0);
+    }
+    let o = InverterOptions {
+        switching,
+        devices: Devices {
+            r_on: si(&i.r_on, Kind::Resistance, "inverter.r_on")?,
+            v_f: si(&i.v_f, Kind::Voltage, "inverter.v_f")?,
+        },
+        f_pwm,
+        dead_time: t(&i.dead_time, "dead_time")?,
+        t_rise_fall: t(&i.t_rise, "t_rise")? + t(&i.t_fall, "t_fall")?,
+        i_eps: match &i.i_eps {
+            Some(p) => si(p, Kind::Current, "inverter.i_eps")?,
+            None => 0.01,
+        },
+        source,
+        c_bus,
+        chopper,
+    };
+    Ok((Drive::Inverter(o), cap))
+}
+
 /// Default ambient temperature when the scene gives none [K] (25 °C).
 pub const DEFAULT_AMBIENT: f64 = 298.15;
 /// Default reference temperature of R and λ [K] (20 °C).
@@ -572,11 +686,13 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
     let (load, conserve_momentum) = load(scene)?;
     let (backlash, dt_contact) = backlash(scene, mp.j)?;
     let (theta_l0, omega_l0) = initial_load(scene)?;
+    let (drive, dt_drive) = drive(scene)?;
     let dt_max = match scene.fidelity.as_ref().and_then(|f| f.dt_max.as_ref()) {
         Some(p) => si(p, Kind::Time, "fidelity.dt_max")?,
         None => cfg.dt / 10.0,
     }
-    .min(dt_contact);
+    .min(dt_contact)
+    .min(dt_drive);
     let engine = build_engine_with(
         mp,
         cfg,
@@ -592,6 +708,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             friction: friction(scene)?,
             backlash,
             thermal: thermal(scene)?,
+            drive,
             ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
             cogging: cogging(scene)?,
             iron: iron(scene)?,
