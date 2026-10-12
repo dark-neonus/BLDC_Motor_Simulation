@@ -45,7 +45,7 @@
   - **Verify:** Test V-INV averaged ≡ switching: over a steady-state run, the period-averaged phase currents agree within 1 % of rated current.
   - **Done when:** Passing.
 
-- [ ] **P07.T04** — Modulators: SPWM, SVPWM, six-step patterns
+- [x] **P07.T04** — Modulators: SPWM, SVPWM, six-step patterns
   - **Depends:** P07.T02
   - **Do:** Pure functions: (v_α, v_β, V_bus) → duties for SPWM and SVPWM (min-max injection), with an overmodulation clamp (keep the angle, scale the magnitude) and six-step leg patterns per sector (High/Low/Off). These are used by the controllers in P09.
   - **Files:** `crates/sim-core/src/physics/inverter/modulation.rs`
