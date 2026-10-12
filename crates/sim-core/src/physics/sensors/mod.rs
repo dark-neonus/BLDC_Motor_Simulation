@@ -1,4 +1,5 @@
 //! Sensors (EQ-SENS-*): the common non-ideality pipeline and the sensor blocks.
 
+pub mod encoder_magnetic;
 pub mod hall;
 pub mod pipeline;

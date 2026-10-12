@@ -4,6 +4,7 @@ encoder:
   kind: magnetic
   chip: AS5047P
   bits: 14
-  inl: { value: 0.34 deg, source: estimated }
+  inl: { value: 0.8 deg, source: datasheet, note: "±0.8° at optimal placement (±1.0° over temperature), sensors.md" }
+  noise: { value: 0.068 deg, source: datasheet, note: "1σ with DAEC on" }
   update_rate: { value: 10 kHz, source: estimated, note: SPI polling rate }
   latency: { value: 10 us, source: estimated, note: "DAEC: near-zero latency" }

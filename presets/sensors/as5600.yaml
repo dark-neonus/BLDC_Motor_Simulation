@@ -4,6 +4,7 @@ encoder:
   kind: magnetic
   chip: AS5600
   bits: 12
-  inl: { value: 1 deg, source: estimated, note: "typical for diametric-magnet setups; see _sources.md" }
+  inl: { value: 1 deg, source: datasheet, note: "±1°, sensors.md" }
+  noise: { value: 0.015 deg, source: datasheet, note: "1σ, slow filter SF = 00" }
   update_rate: { value: 1 kHz, source: estimated, note: "I2C polling rate, not the chip's internal rate" }
   latency: { value: 1 ms, source: estimated }

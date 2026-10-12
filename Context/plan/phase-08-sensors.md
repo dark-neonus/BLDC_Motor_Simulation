@@ -26,7 +26,7 @@
   - **Verify:** Test: transitions every 60° electrical at the correct angles; offsets shift them.
   - **Done when:** Passing.
 
-- [ ] **P08.T03** — On-axis magnetic encoder (+ chip presets)
+- [x] **P08.T03** — On-axis magnetic encoder (+ chip presets)
   - **Depends:** P08.T01
   - **Do:** Per EQ-SENS: bits, INL harmonics, eccentricity first-harmonic error, air-gap → noise approximation, update rate and latency. Presets AS5600/AS5047P/MT6701 load from `presets/sensors/`. Signals `sensors.encoder.angle_raw`, `sensors.encoder.angle` (rad), `sensors.encoder.error` (true − measured, diagnostic).
   - **Files:** `crates/sim-core/src/physics/sensors/encoder_magnetic.rs`

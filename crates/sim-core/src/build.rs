@@ -7,8 +7,8 @@
 use sim_model::constraints::{self, Severity};
 use sim_model::param::Param;
 use sim_model::params::{
-    ControllerParams, EmfShape, GearboxParams, LoadParams, MotorParams, OnChange, SupplyParams,
-    TierParam, Topology,
+    ControllerParams, EmfShape, EncoderParams, GearboxParams, LoadParams, MotorParams, OnChange,
+    SupplyParams, TierParam, Topology,
 };
 use sim_model::scene::ResolvedScene;
 use sim_model::units::Kind;
@@ -17,6 +17,7 @@ use crate::engine::commands::{ChangeSource, EngineCommand};
 use crate::engine::engine::Engine;
 use crate::engine::fidelity::InverterMode;
 use crate::engine::fidelity::{FidelityConfig, Tier};
+use crate::engine::time::SimTime;
 use crate::physics::inverter::leg::Devices;
 use crate::physics::mech::backlash::{Backlash, DEFAULT_STIFFNESS, DEFAULT_ZETA};
 use crate::physics::mech::friction::Friction;
@@ -27,6 +28,7 @@ use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::CoggingParams;
 use crate::physics::motor::electrical::SatParams;
 use crate::physics::motor::iron_loss::IronLossParams;
+use crate::physics::sensors::encoder_magnetic::{AirGap, MagneticEncoderConfig};
 use crate::physics::supply::battery::Battery;
 use crate::physics::supply::bus::{Chopper, Source};
 use crate::physics::thermal::ThermalParams;
@@ -732,4 +734,53 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
         ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
         ctrl_dt: cfg.dt,
     })
+}
+
+/// Encoder sample rate when the preset gives none [Hz] (a typical SPI/SSI polling rate).
+pub const DEFAULT_ENCODER_RATE: f64 = 10e3;
+
+/// A magnetic encoder's model and sample period from its parameters (EQ-SENS-03/04);
+/// `None` for other encoder kinds. The air-gap model needs all of `air_gap`, `gap_min`
+/// and `gap_max`.
+pub fn magnetic_encoder(
+    p: &EncoderParams,
+) -> Result<Option<(MagneticEncoderConfig, SimTime)>, BuildError> {
+    let EncoderParams::Magnetic {
+        bits,
+        inl,
+        eccentricity,
+        air_gap,
+        gap_min,
+        gap_max,
+        mount_offset,
+        common,
+        ..
+    } = p
+    else {
+        return Ok(None);
+    };
+    let n = |s: &str| format!("sensors.encoder.{s}");
+    let gap = match (air_gap, gap_min, gap_max) {
+        (Some(z), Some(lo), Some(hi)) => Some(AirGap {
+            z: si(z, Kind::Length, &n("air_gap"))?,
+            z_min: si(lo, Kind::Length, &n("gap_min"))?,
+            z_max: si(hi, Kind::Length, &n("gap_max"))?,
+        }),
+        _ => None,
+    };
+    let rate = match &common.update_rate {
+        Some(r) => si(r, Kind::Frequency, &n("update_rate"))?,
+        None => DEFAULT_ENCODER_RATE,
+    };
+    let cfg = MagneticEncoderConfig {
+        bits: *bits,
+        inl: opt(inl, Kind::Angle, &n("inl"))?,
+        displacement: opt(eccentricity, Kind::Length, &n("eccentricity"))?,
+        mount_offset: opt(mount_offset, Kind::Angle, &n("mount_offset"))?,
+        noise: opt(&common.noise, Kind::Angle, &n("noise"))?,
+        air_gap: gap,
+        latency_ns: (opt(&common.latency, Kind::Time, &n("latency"))? * 1e9).round() as i64,
+        bypass: common.bypass,
+    };
+    Ok(Some((cfg, SimTime::from_secs_f64(1.0 / rate))))
 }

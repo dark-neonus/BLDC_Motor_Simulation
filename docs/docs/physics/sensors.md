@@ -72,6 +72,13 @@ $$
 | $e_{ecc}$ | magnet–chip lateral displacement $r_d$: first-harmonic error $a_{ecc}\sin(\theta_m + \varphi_{ecc})$. **Approximation:** $a_{ecc}$ scales linearly with $r_d$, from the datasheet's "INL at displacement" figure |
 | $\sigma(z)$ | noise grows outside the recommended air gap (EQ-SENS-04) |
 
+**Fixed shapes** (datasheets give only the INL peak, so the model fixes the shape):
+
+- $e_{INL}$ uses relative amplitudes $(a_1, a_2, a_3) \propto (0.25,\ 1,\ 0.5)$ and phases $(\varphi_1, \varphi_2, \varphi_3) = (0,\ \pi/3,\ \pi/2)$: the second harmonic dominates, as for a diametric magnet over a Hall array. The sum is scaled so that its peak $\max_\theta |e_{INL}|$ equals the INL value.
+- $e_{ecc}$: $a_{ecc} = k_{ecc}\,r_d$ with $k_{ecc} = 0.8°/\mathrm{mm}$, from the AS5047P figure (INL ±0.8° → ±1.2° at 0.5 mm displacement); the same slope is used for chips without such a figure. $\varphi_{ecc} = 0$.
+
+The block reports `sensors.encoder.angle_raw` (the register, $[0, 2\pi)$), `sensors.encoder.angle` (the same, unwrapped by counting turns: $\theta_k = \theta_{k-1} + \mathrm{wrap}_{\pi}(raw_k - raw_{k-1})$, started within half a turn of the true angle) and `sensors.encoder.error` $= \mathrm{wrap}_{\pi}(\theta_m - raw)$ (diagnostic).
+
 ### EQ-SENS-04 — Air gap and noise (approximation) {/* #eq-sens-04 */}
 
 The magnet's field at the chip falls roughly like a dipole far from the magnet, $B \propto z^{-3}$. The chips work over a field window $[B_{min}, B_{max}]$, which corresponds to a recommended gap $[z_{min}, z_{max}]$ for a given magnet. The model:

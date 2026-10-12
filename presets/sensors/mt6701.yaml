@@ -7,3 +7,4 @@ encoder:
   inl: { value: 1 deg, source: datasheet, note: "±1° typ. (reseller copy of datasheet)" }
   update_rate: { value: 10 kHz, source: estimated, note: SSI polling rate }
   latency: { value: 5 us, source: datasheet }
+  noise: { value: 0.05 deg, source: estimated, note: "not specified by the datasheet (sensors.md)" }

@@ -467,3 +467,10 @@
 ## 2026-10-12 — P08.T02 Hall sensors
 - `physics::sensors::hall` (EQ-SENS-02): `hall_states(θe, cfg, prev)` with placement offsets δ_x and hysteresis h (on at +h/2, off at −h/2 of the normalised field), `code` = 4a + 2b + c, `sector` 1–6 in rotation order (0 for codes 0/7). `HallBlock` (id `sensors.hall`, fixed rate) runs θe through the pipeline (latency, angle noise), writes `sensors.hall.{a,b,c,code,sector}`; bypass = ideal set (no offsets or hysteresis). `sensors.hall.sector` added to signals.md.
 - Tests: codes change every 60° at 30° + 60°k and match the EQ-SENS-02 table and the EQ-INV-07 six-step pairs; δ_a = 10° moves a's edges to 40°/220°; h = 0.2 moves them to 35.74°/215.74°; the block writes code/sector and bypass ignores a 40° offset.
+
+## 2026-10-12 — P08.T03 On-axis magnetic encoder
+- Spec first (sensors.md EQ-SENS-03): the datasheets give only the INL peak, so the shape is fixed: harmonics (0.25, 1, 0.5) with phases (0, π/3, π/2), scaled to the INL peak; eccentricity slope k_ecc = 0.8°/mm (AS5047P: ±0.8° → ±1.2° at 0.5 mm), φ_ecc = 0; outputs `angle_raw` [0, 2π), `angle` (turn-counted), `error` = wrap(θm − raw). signals.md updated.
+- `physics::sensors::encoder_magnetic`: `MagneticEncoderConfig` (bits, INL, displacement, mount offset, σ_nom, air gap, latency, bypass) → pipeline with error fn θ0 + e_INL + e_ecc, noise σ(z) = σ_nom·max(1, (z/z_max)³), INL(z) = INL·(1 + max(0, z_min − z)/z_min), Δ = 2π/2^b, wrap 2π; `MagneticEncoder` block (id `sensors.encoder`, reads `motor.theta`).
+- `build::magnetic_encoder(&EncoderParams)` → config + period (default 10 kHz when the preset gives no rate).
+- Presets aligned with the spec's chip table: AS5047P INL 0.34° (estimated) → 0.8° (datasheet), noise 0.068°; AS5600 INL 1° now datasheet, noise 0.015°; MT6701 noise 0.05° (estimated). `_sources.md` updated.
+- Tests: V-SENS-001 (14-bit ramp steps exactly 2π/16384, every code boundary once), eccentricity −a sin θ with a = 0.4° at 0.5 mm, INL peak = 0.8°, air gap (σ ×8 at 2·z_max within 5 % over 1e4 samples, INL ×1.5 at z_min/2), block unwrap/error over three turns, presets build with the table values.
