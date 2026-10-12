@@ -776,7 +776,7 @@ impl PlantModule for MotorElectrical {
         serde_json::json!({
             "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda,
             "open": self.open, "pending": self.pending, "pending_sign": self.pending_sign,
-            "last_theta_e": self.last_theta_e, "last_lambda": self.last_lambda, "jump": self.jump,
+            "last_theta_e": self.last_theta_e, "last_lambda": self.last_lambda, "jump": self.jump, "warned": self.warned,
         })
     }
     fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
@@ -801,6 +801,10 @@ impl PlantModule for MotorElectrical {
         (self.open, self.pending, self.pending_sign) = (open, pending, sign);
         (self.last_theta_e, self.last_lambda, self.jump) = (th, lam, jump);
         self.cache = None;
+        self.warned = v
+            .get("warned")
+            .and_then(serde_json::Value::as_bool)
+            .ok_or("missing `warned`")?;
         Ok(())
     }
 }

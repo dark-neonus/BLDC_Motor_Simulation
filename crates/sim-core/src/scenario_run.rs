@@ -585,6 +585,28 @@ mod tests {
         assert!(last[3].abs() < 1e-3, "residual {}", last[3]);
     }
 
+    /// Review B1: a backlash gearbox with no inertia behind it (no `j_out`, no load)
+    /// builds rigid instead of dividing by a zero load-side inertia.
+    #[test]
+    fn backlash_without_load_inertia_runs_rigid() {
+        let o = go(
+            "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: { preset: \"builtin:motors/6020-outrunner\" }\n  gearbox: { preset: \"builtin:gearboxes/planetary-9\" }\n  inverter: { preset: \"builtin:inverters/small-24v-10a\" }\n  supply: { preset: \"builtin:supplies/psu-24v-5a\" }\n  controller: { preset: \"builtin:controllers/foc-default\" }\nsample: 10 ms\nrecord: [load.omega]\ntimeline:\n  - target: { kind: velocity, value: 2 rad/s, ramp: 0.05 s }\n  - wait: 0.2 s\n",
+        );
+        assert!(o.rows.last().unwrap()[1].is_finite());
+    }
+
+    /// Review M1: `initial.theta` sets the electrical angle too, so the motor starts with
+    /// zero current (it started 180° off for θ_L = 90°, p = 10: i_d = −2λ/L_d).
+    #[test]
+    fn initial_angle_starts_with_aligned_flux() {
+        let o = go(
+            "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: { preset: \"builtin:motors/6020-outrunner\" }\n  load: { preset: \"builtin:loads/arm-20cm-0.5kg\" }\n  inverter: { preset: \"builtin:inverters/small-24v-10a\" }\n  supply: { preset: \"builtin:supplies/psu-24v-5a\" }\n  controller: { preset: \"builtin:controllers/foc-default\" }\n  initial: { theta: 90 deg }\nsample: 0.1 ms\nrecord: [motor.i_d]\ntimeline:\n  - wait: 0.5 ms\n",
+        );
+        for r in &o.rows {
+            assert!(r[1].abs() < 0.05, "i_d = {} at t = {}", r[1], r[0]);
+        }
+    }
+
     #[test]
     fn cogging_follows_the_fidelity_tier() {
         let dir = std::env::temp_dir().join(format!("bldc-cog-{}", std::process::id()));

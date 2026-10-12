@@ -68,7 +68,8 @@ pub fn continuous_current(m: &ThermalModel, t_amb: f64) -> Option<f64> {
 
 /// Time to bring the winding from ambient to T_max at a constant peak phase current
 /// `i` (EQ-THERM-06): integrate EQ-THERM-01 with R(T) (RK4) and bisect the crossing
-/// step to 1 µs. `None` if T_max is never reached (i ≤ Î_cont) or T_max ≤ T_a.
+/// step to 1 µs. `None` if T_max is never reached (i ≤ Î_cont), T_max ≤ T_a, or it
+/// takes longer than 1000× the network's slowest time scale (currents just above Î_cont).
 pub fn peak_time(m: &ThermalModel, t_amb: f64, i: f64) -> Option<f64> {
     if m.t_max <= t_amb || continuous_current(m, t_amb).is_none_or(|ic| i <= ic) {
         return None;

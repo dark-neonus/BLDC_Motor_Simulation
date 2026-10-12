@@ -61,13 +61,20 @@ impl Thermal {
     /// produces them needs the temperature signals first).
     pub fn new(p: ThermalParams, bus: &mut SignalBus) -> Result<Self, SignalError> {
         let mut r = |path: &str, d: &str| bus.register(path, "K", d, SignalKind::State);
+        let (t_w, t_s, t_h) = (
+            r("thermal.t_winding", "winding temperature")?,
+            r("thermal.t_stator", "stator iron temperature")?,
+            r("thermal.t_housing", "housing / can temperature")?,
+        );
         Ok(Self {
-            t_w: r("thermal.t_winding", "winding temperature")?,
-            t_s: r("thermal.t_stator", "stator iron temperature")?,
-            t_h: r("thermal.t_housing", "housing / can temperature")?,
-            t_mag: r(
+            t_w,
+            t_s,
+            t_h,
+            t_mag: bus.register(
                 "thermal.t_magnet",
+                "K",
                 "magnet temperature (housing or stator node)",
+                SignalKind::Output,
             )?,
             p,
             inp: ThermalInputs::default(),
@@ -197,5 +204,23 @@ impl PlantModule for Thermal {
     }
     fn take_warnings(&mut self) -> Vec<String> {
         std::mem::take(&mut self.warnings)
+    }
+    fn save(&self) -> serde_json::Value {
+        let p = &self.p;
+        serde_json::json!({
+            "r_ws": p.r_ws, "r_sh": p.r_sh, "r_ha": p.r_ha,
+            "c_w": p.c_w, "c_s": p.c_s, "c_h": p.c_h, "kappa": p.kappa,
+        })
+    }
+    fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
+        let f = |k: &str| {
+            v.get(k)
+                .and_then(serde_json::Value::as_f64)
+                .ok_or(format!("missing `{k}`"))
+        };
+        let p = &mut self.p;
+        (p.r_ws, p.r_sh, p.r_ha) = (f("r_ws")?, f("r_sh")?, f("r_ha")?);
+        (p.c_w, p.c_s, p.c_h, p.kappa) = (f("c_w")?, f("c_s")?, f("c_h")?, f("kappa")?);
+        Ok(())
     }
 }

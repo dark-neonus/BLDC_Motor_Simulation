@@ -110,7 +110,19 @@
   - **Verify:** `just test && just validate && just e2e` green.
   - **Done when:** Green, and the UI still spins the motor.
 
+- [ ] **P07.T13** — P06 review carry-overs
+  - **Depends:** P06
+  - **Do:**
+    1. Gear loss τ_in counts the load's share of the lumped friction as part of T_L (mechanical.md EQ-MECH-05 clarifications); today `t_l` excludes it.
+    2. Snapshot format: add a version bump/migration note (the P06 rotor and FOC block need new fields, so older snapshots fail with "missing …").
+    3. `get_param("load.disturbance.duration")` and `gearbox.stiffness`/`damping` return `None`; expose them (duration is a state: read through the engine).
+    4. Interim torque mode (until P09): reset the speed integrator on a mode switch (bumpless), state in a comment that the command ignores η and uses K_t(λ_ref).
+    5. Tests: V-THERM-002 through the motor's own R(T) path (locked motor at Î_cont) instead of a restated copper formula; a λ(T) torque-drop check (K_t at 80 °C ≈ 7 % lower, EQ-THERM-03).
+  - **Files:** `crates/sim-core/src/physics/mech/rotor.rs`, `crates/sim-core/src/skeleton/{adapter,foc}.rs`, `crates/sim-core/src/engine/snapshot.rs`, tests
+  - **Verify:** `cargo nextest run -p sim-core` green with the new tests.
+  - **Done when:** Green.
+
 - [ ] **P07.T11** — Phase gate
-  - **Depends:** P07.T01, P07.T02, P07.T03, P07.T04, P07.T05, P07.T06, P07.T07, P07.T08, P07.T09, P07.T10, P07.T12
+  - **Depends:** P07.T01, P07.T02, P07.T03, P07.T04, P07.T05, P07.T06, P07.T07, P07.T08, P07.T09, P07.T10, P07.T12, P07.T13
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-07-done`.

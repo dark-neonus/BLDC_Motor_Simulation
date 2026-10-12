@@ -306,7 +306,7 @@ impl PlantModule for Pd {
 
 /// V-MECH-005: a slowly reversing motor with backlash b: the load lags by b (the
 /// deflection swings between ±b/2 plus the contact penetration T_c/k), atol 1e-4 rad.
-/// Contact loss is never negative and the balance closes; no NaN at dt_max.
+/// Contact loss is never negative and the balance closes; no NaN at the dt_max cap.
 #[test]
 fn v_mech_005_backlash_lost_motion() {
     let gb = Gearbox {
@@ -325,10 +325,80 @@ fn v_mech_005_backlash_lost_motion() {
         t_c: 0.01,
         b: 0.0,
     };
+    let cap = {
+        let j_ms = 81.0 * J_M;
+        bl.dt_limit(j_ms * 0.01 / (j_ms + 0.01))
+    };
+    for (dt, tol) in [(2e-5, 1e-6), (cap, 1e-5)] {
+        let mut bus = SignalBus::new();
+        let tq = bus
+            .register("test.torque", "N*m", "drive", SignalKind::Output)
+            .unwrap();
+        let p = RotorParams {
+            j: J_M,
+            j_load: 0.0,
+            b: 0.0,
+            pole_pairs: 7.0,
+            theta0: 0.0,
+            omega0: 0.0,
+        };
+        let rotor = RotorRigid::new(p, &mut bus, vec![], vec![tq])
+            .unwrap()
+            .with_gearbox(gb)
+            .with_load(Load::Flywheel { j: 0.01 }, false)
+            .with_friction(Friction::default(), fr_l)
+            .with_backlash(bl);
+        let pd = Pd {
+            out: tq,
+            th: bus.id("motor.theta").unwrap(),
+            w: bus.id("motor.omega").unwrap(),
+            n: 9.0,
+        };
+        let mut plant = Plant::new();
+        plant.add(Box::new(rotor));
+        plant.add(Box::new(pd));
+        // A fine step, and the build's step cap for this contact (EQ-NUM step table): no
+        // chatter or NaN there; RK4 error at the 3.5× larger step allows a 1e-5 residual.
+        let mut e = Engine::new(plant, bus, vec![], dt);
+        // δ at the stroke mid-points (max speed, zero acceleration, contact settled): forward
+        // at t = 2 s, backward at t = 1 s and 3 s. The re-engagement impact makes the peak δ
+        // larger for a few ms, so peaks are not used.
+        let at = |t: f64, e: &mut Engine| {
+            let mut s = e.time.as_secs_f64();
+            while s < t {
+                s = (s + 1e-3).min(t);
+                e.step_until(SimTime::from_secs_f64(s)).unwrap();
+                assert!(sig(e, "gearbox.delta").is_finite() && sig(e, "load.omega").is_finite());
+            }
+            sig(e, "gearbox.delta")
+        };
+        let back1 = at(1.0, &mut e);
+        let fwd = at(2.0, &mut e);
+        let back2 = at(3.0, &mut e);
+        let lost = bl.width + 2.0 * fr_l.t_c / bl.k;
+        for back in [back1, back2] {
+            assert!(((fwd - back) - lost).abs() < 1e-4, "{fwd} {back}");
+        }
+        assert!(sig(&e, "energy.loss.backlash") >= 0.0);
+        assert!(
+            sig(&e, "energy.residual").abs() < tol,
+            "dt {dt}: {}",
+            sig(&e, "energy.residual")
+        );
+    }
+}
+
+/// Review B1: with backlash, a live edit that leaves no inertia behind the teeth is
+/// rejected and nothing changes.
+#[test]
+fn backlash_rejects_a_massless_load_side() {
+    let gb = Gearbox {
+        n: 9.0,
+        eta: 1.0,
+        j_in: 0.0,
+        j_out: 0.0,
+    };
     let mut bus = SignalBus::new();
-    let tq = bus
-        .register("test.torque", "N*m", "drive", SignalKind::Output)
-        .unwrap();
     let p = RotorParams {
         j: J_M,
         j_load: 0.0,
@@ -337,45 +407,28 @@ fn v_mech_005_backlash_lost_motion() {
         theta0: 0.0,
         omega0: 0.0,
     };
-    let rotor = RotorRigid::new(p, &mut bus, vec![], vec![tq])
+    let rotor = RotorRigid::new(p, &mut bus, vec![], vec![])
         .unwrap()
         .with_gearbox(gb)
         .with_load(Load::Flywheel { j: 0.01 }, false)
-        .with_friction(Friction::default(), fr_l)
-        .with_backlash(bl);
-    let pd = Pd {
-        out: tq,
-        th: bus.id("motor.theta").unwrap(),
-        w: bus.id("motor.omega").unwrap(),
-        n: 9.0,
-    };
+        .with_backlash(Backlash {
+            width: 0.01,
+            k: 3438.0,
+            d: 2.0,
+        });
     let mut plant = Plant::new();
     plant.add(Box::new(rotor));
-    plant.add(Box::new(pd));
     let mut e = Engine::new(plant, bus, vec![], 2e-5);
-    // δ at the stroke mid-points (max speed, zero acceleration, contact settled): forward
-    // at t = 2 s, backward at t = 1 s and 3 s. The re-engagement impact makes the peak δ
-    // larger for a few ms, so peaks are not used.
-    let at = |t: f64, e: &mut Engine| {
-        let mut s = e.time.as_secs_f64();
-        while s < t {
-            s = (s + 1e-3).min(t);
-            e.step_until(SimTime::from_secs_f64(s)).unwrap();
-            assert!(sig(e, "gearbox.delta").is_finite() && sig(e, "load.omega").is_finite());
-        }
-        sig(e, "gearbox.delta")
-    };
-    let back1 = at(1.0, &mut e);
-    let fwd = at(2.0, &mut e);
-    let back2 = at(3.0, &mut e);
-    let lost = bl.width + 2.0 * fr_l.t_c / bl.k;
-    for back in [back1, back2] {
-        assert!(((fwd - back) - lost).abs() < 1e-4, "{fwd} {back}");
-    }
-    assert!(sig(&e, "energy.loss.backlash") >= 0.0);
-    assert!(
-        sig(&e, "energy.residual").abs() < 1e-6,
-        "{}",
-        sig(&e, "energy.residual")
-    );
+    e.queue(EngineCommand::SetParam {
+        path: "load.inertia".into(),
+        value: 0.0,
+        source: ChangeSource::Internal,
+    });
+    e.apply_pending();
+    assert!(e.drain_events().iter().any(|ev| matches!(
+        ev,
+        sim_core::engine::commands::EngineEvent::CommandRejected { .. }
+    )));
+    assert_eq!(e.get_param("load.inertia"), Some(0.01));
+    e.step_until(SimTime::from_secs_f64(0.01)).unwrap();
 }

@@ -42,7 +42,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `fault.<id>.active`, `protect.<id>.tripped` | – | fault / protection flags | faults | P10 |
 | `energy.in`, `energy.loss`, `energy.loss.<term>`, `energy.stored`, `energy.external`, `energy.residual`, `energy.ok` | J, J, J, J, J, –, – | energy accounting | engine | EQ-ENER |
 
-Two engine-only live parameters are not scene fields: `motor.open_phase` (−1 reconnect, 0/1/2 open a/b/c; the `fault.phase_open.<x>` actions set it once faults are wired) and `motor.mechanical.locked` (0/1, holds the rotor for locked-rotor tests). The interim skeleton FOC (until P09) also takes `ctrl.mode` (0 velocity, 1 torque: `ctrl.torque_ref`, load side, sets i_q = T/(N·K_t) with the speed loop off).
+Two engine-only live parameters are not scene fields: `motor.open_phase` (−1 reconnect, 0/1/2 open a/b/c; the `fault.phase_open.<x>` actions set it once faults are wired) and `motor.mechanical.locked` (0/1, holds the rotor for locked-rotor tests). A disturbance pulse (EQ-MECH-08) is `load.disturbance.duration` then `load.disturbance.torque` (the `Disturbance`/`Impulse` engine commands set both; `load.disturbance` is the signal). The interim skeleton FOC (until P09) also takes `ctrl.mode` (0 velocity, 1 torque: `ctrl.torque_ref`, load side, sets i_q = T/(N·K_t) with the speed loop off).
 
 **Clarifications (spec Q&A, P11.T01):**
 - Parquet/CSV outputs use the column `t` [s] for time (the bus signal `sim.t` is the same value).

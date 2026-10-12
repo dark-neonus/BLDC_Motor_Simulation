@@ -394,11 +394,12 @@ fn backlash(scene: &ResolvedScene, j_m: f64) -> Result<(Option<Backlash>, f64), 
     // Reduced inertia of the contact, both sides seen from the output.
     let j_ms = gb.n * gb.n * (j_m + gb.j_in);
     let j_ls = gb.j_out + load.inertia();
-    let j_red = if j_ls > 0.0 {
-        j_ms * j_ls / (j_ms + j_ls)
-    } else {
-        j_ms
-    };
+    if j_ls <= 0.0 {
+        // No inertia behind the teeth (no `j_out`, a massless load): the load side has no
+        // dynamics of its own, so backlash is only lost motion with nothing to move. Rigid.
+        return Ok((None, f64::INFINITY));
+    }
+    let j_red = j_ms * j_ls / (j_ms + j_ls);
     let k = match &g.stiffness {
         Some(p) => si(p, Kind::TorsionalStiffness, "gearbox.stiffness")?,
         None => DEFAULT_STIFFNESS,

@@ -126,7 +126,7 @@ $$
 
 **Transitions** (state events):
 
-- **slip → stick:** $\omega$ crosses zero while $|T_a| \le T_s$. The remaining kinetic energy $\tfrac12 J\omega^2$ (tiny, at most one step's worth) is booked as friction loss.
+- **slip → stick:** $\omega$ crosses zero while $|T_a| \le T_s$. The remaining kinetic energy $\tfrac12 J\omega^2$ (bisection-sized, ~$10^{-20}$ J) leaves the balance as an external jump, since the engine has no loss-jump path; it is not added to the friction heat.
 - **stick → slip:** $|T_a| > T_s$. Motion starts in the direction of $T_a$.
 
 Why a hybrid stick state instead of Karnopp's original velocity band `[Karnopp1985]`? It keeps the exact "holds still" behaviour that holding-torque lessons need, and it avoids the band's slow creep. Verified numerically: a torque of $0.98\,T_s$ leaves $\theta$ exactly unchanged, a pulse above $T_s$ moves the shaft and it sticks again, and the energy balance closes to integrator accuracy.

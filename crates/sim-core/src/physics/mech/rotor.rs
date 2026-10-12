@@ -387,7 +387,13 @@ impl RotorRigid {
     ) -> Result<f64, String> {
         let e0 = self.energy(x_own);
         let (j0, jl0) = (self.j_eq(), self.j_load_side());
+        let (gb0, load0, p0) = (self.gb, self.load.clone(), self.p);
         let old = f(self)?;
+        if self.backlash.is_some() && self.j_load_side() <= 0.0 {
+            // The two-inertia model needs mass behind the teeth (EQ-MECH-04).
+            (self.gb, self.load, self.p) = (gb0, load0, p0);
+            return Err("with backlash the load side needs inertia (J_go + J_load > 0)".into());
+        }
         if conserve {
             match self.backlash {
                 None => x_own[1] *= j0 / self.j_eq(),
@@ -532,7 +538,7 @@ impl PlantModule for RotorRigid {
         x[2] = 0.0;
         if self.backlash.is_some() {
             x[3] = self.p.theta0 / self.gb.n;
-            x[4] = self.p.omega0 / self.gb.n;
+            x[4] = w0 / self.gb.n;
         }
     }
     fn outputs(&mut self, _t: f64, x: &[f64], off: usize, bus: &mut SignalBus) {
@@ -722,9 +728,15 @@ impl PlantModule for RotorRigid {
         // each advance, so an already-negative g would never cross).
         // 5: contact, |δ| − b/2 (backlash).
         g[1..6].fill(1.0);
+        let fr_m = self.fr_motor();
+        let hybrid_m = !self.locked && fr_m.is_hybrid();
+        let hybrid_l = self.backlash.is_some() && self.fr_l.is_hybrid();
+        if !(hybrid_m || hybrid_l || self.backlash.is_some()) {
+            return; // nothing to watch: skip the dynamics evaluation
+        }
         let d = self.dynamics(s, bus);
-        if !self.locked {
-            self.friction_g(d.motor, self.mode, &self.fr_motor(), s[1], &mut g[1..3]);
+        if hybrid_m {
+            self.friction_g(d.motor, self.mode, &fr_m, s[1], &mut g[1..3]);
         }
         if let Some(bl) = self.backlash {
             self.friction_g(d.load_side, self.mode_l, &self.fr_l, s[4], &mut g[3..5]);
@@ -746,7 +758,8 @@ impl PlantModule for RotorRigid {
             }
             1 | 2 => self.friction_event(false, idx - 1, x_own, bus),
             3 | 4 => self.friction_event(true, idx - 3, x_own, bus),
-            // 5: contact change; located only (the contact law is continuous in δ).
+            // 5: contact change; located only (the damping term makes τ_c jump by
+            // d·|δ̇| at engagement, so the step must land on it).
             _ => {}
         }
     }

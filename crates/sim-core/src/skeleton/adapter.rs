@@ -281,7 +281,8 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         shape: opts.shape.clone(),
         i_d0: 0.0,
         i_q0: 0.0,
-        theta_e0: 0.0,
+        // θe = p·θm with θm = N·θ_L (the flux starts aligned with the rotor).
+        theta_e0: mp.p * opts.theta_l0 * opts.gearbox.n,
         saturation: opts.saturation,
     };
     let thermal = opts.thermal.map(|o| {

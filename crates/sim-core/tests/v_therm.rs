@@ -238,3 +238,25 @@ fn overheat_warnings_fire_once_each() {
     assert_eq!(w.len(), 2, "{w:?}");
     assert!(w[0].contains("within") && w[1].contains("over"));
 }
+
+/// Review M2: live thermal edits survive a snapshot restored into a fresh engine.
+#[test]
+fn thermal_edits_survive_snapshot_restore() {
+    use sim_core::engine::commands::{ChangeSource, EngineCommand};
+    use sim_core::engine::snapshot::Snapshot;
+    let mut a = network([10.0, 1.0, 0.5], TP);
+    a.step_until(SimTime::from_secs_f64(50.0)).unwrap();
+    a.queue(EngineCommand::SetParam {
+        path: "motor.thermal.r_ha".into(),
+        value: 2.0,
+        source: ChangeSource::Internal,
+    });
+    a.step_until(SimTime::from_secs_f64(60.0)).unwrap();
+    let snap = Snapshot::from_bytes(&a.snapshot().to_bytes().unwrap()).unwrap();
+    let mut b = network([10.0, 1.0, 0.5], TP);
+    b.restore(&snap).unwrap();
+    assert_eq!(b.get_param("motor.thermal.r_ha"), Some(2.0));
+    a.step_until(SimTime::from_secs_f64(200.0)).unwrap();
+    b.step_until(SimTime::from_secs_f64(200.0)).unwrap();
+    assert_eq!(a.snapshot().x, b.snapshot().x);
+}
