@@ -77,7 +77,19 @@
   - **Verify:** `cargo nextest run -p sim-core v_sens`
   - **Done when:** Green.
 
+- [ ] **P08.T10** — P07 review carry-overs (minors)
+  - **Depends:** P07
+  - **Do:**
+    1. Averaged pulse dropping (EQ-INV-03): add the case to the spec first, then use an effective dead fraction min(t_d/T, d, 1 − d) (or clamp to the diode bounds) so d = 0 / 1 matches switching mode.
+    2. Two legs Off: no "two or more legs Off" warning during dead-time transients (only when legs are commanded Off), and a pending zero crossing per Off leg (`electrical.rs` after_discrete).
+    3. `motor.open_phase` fault overrides a leg-driven float instead of failing with "already open".
+    4. Supply parameter paths: `supply.voltage`/`r_out`/`current_limit`/`r0_cell` (code) vs `supply.psu.*`/`supply.battery.*` (supply.md, signals.md): pick one (decision entry, migration if the YAML changes); give `DcBus` params/get/set (`bus.capacitance`, supply values).
+    5. The switching inverter sets the Off-leg diode latch in `outputs()` (trial stages): move it to `after_discrete`/the reconnect event (D-017 rule), e.g. from the motor's reconnect sign on the bus.
+  - **Files:** `crates/sim-core/src/physics/inverter/leg.rs`, `crates/sim-core/src/physics/motor/electrical.rs`, `crates/sim-core/src/physics/supply/bus.rs`, `docs/docs/physics/{inverter,supply,signals}.md`
+  - **Verify:** `cargo nextest run -p sim-core` with a test per item.
+  - **Done when:** Green.
+
 - [ ] **P08.T09** — Phase gate
-  - **Depends:** P08.T01, P08.T02, P08.T03, P08.T04, P08.T05, P08.T06, P08.T07, P08.T08
+  - **Depends:** P08.T01, P08.T02, P08.T03, P08.T04, P08.T05, P08.T06, P08.T07, P08.T08, P08.T10
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-08-done`.

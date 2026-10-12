@@ -123,7 +123,7 @@
   - **Verify:** `cargo nextest run -p sim-core` green with the new tests.
   - **Done when:** Green.
 
-- [ ] **P07.T11** — Phase gate
+- [x] **P07.T11** — Phase gate
   - **Depends:** P07.T01, P07.T02, P07.T03, P07.T04, P07.T05, P07.T06, P07.T07, P07.T08, P07.T09, P07.T10, P07.T12, P07.T13
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-07-done`.

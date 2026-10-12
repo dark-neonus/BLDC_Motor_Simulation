@@ -441,3 +441,20 @@
 - Interim FOC: torque → velocity restarts the speed integrator from the present i_q (`Foc::bumpless_to_velocity`); the P term still acts on the speed error at the switch (cancelling it as well made the loop push the wrong way while recovering). Comment: the torque command uses K_t(λ_ref) and ignores η and λ(T).
 - Tests: V-THERM-002 through the motor's own R(T) (locked motor at V = 1.5·R(T_max)·Î_cont, network capacitances ×1e-4; T_w within 1 K, i_a = Î_cont to 1e-3); λ(T) at 80 °C lowers the torque per amp by 7.2 % (rtol 1e-9).
 - Li-ion OCV: no published numeric full-cell NMC table found (the papers have curves only in figures; two sites blocked). By the user's choice: the provenance is now explicit (the NMC table is the Li-ion preset's; LiPo borrows it as an estimated proxy), and the search for a measured table is carried to P11.T07.
+
+## 2026-10-12 — P07.T11 Phase 07 gate
+- **Exit criteria (evidence):**
+  - All V-INV and V-SUP cases pass: `cargo nextest run -p sim-core` (195 Rust tests in `just check`, all green); every catalog id has a test (V-INV-001…008, V-SUP-001…005).
+  - Averaged vs switching agree on period-averaged currents: `inverter_avg.rs` (4.6 A operating point, 1 %) and V-INV-001, now loaded (0.45 N·m brake, i_q ≈ 1.5 A), within 0.05 A.
+  - Regen: V-SUP-002 (bus rises above 24.5 V with a blocking PSU, under the lossless bound) and V-SUP-003 (chopper holds ≤ V_on + 0.01 V at 10 µs sampling; the resistor takes > 50 % of the kinetic energy, E_brake = ∫p_brake dt within the sampling bound).
+  - Switching mode measured at 0.19× real time (P07.T10 entry).
+- **Review** (phase-end subagent; 6 majors, 8 minors). Fixed:
+  - PWM: at T − high < 2·t_d the Low turn-on ended after the period and was dropped (leg stuck Off, then a direct Low→High switch). Edges at or after the new period start now carry over; a conflicting start transition waits t_d after them. Sweep test d = 0.97…1.0.
+  - Supply/bus validation: `supply.r_out`, `r0_cell`, `r1_cell` must be > 0; new `validate_bus` (C_bus > 0, R_b > 0, 0 < V_off < V_on, rating > 0); the build refuses a zero bus step cap.
+  - Bus step rule: numerics.md EQ-NUM-04 and `fidelity::dt_max` now use τ_bus/2 (D-018), one rule everywhere.
+  - Diode latch at a reconnect: chosen from the bound the terminal reached when |i| ≤ 1e-9 A (round-off sign), unit test.
+  - V-SUP-004 at the catalog's rtol 1e-6: exact references with the bus eliminated (κ = C(1/C₁ + OCV'/3600Q), source current lag R₀C), charging and a new relaxation phase (I = 0, decay with τ = R₁C₁); the rig's load step is sampled by RK4's last stage with weight 1/6 (effective stop t₁ − h/6).
+  - V-INV-007: averaged p_loss against the EQ-INV-09 terms computed independently (rtol 1e-9). V-INV-001 loaded. V-SUP-003 as above.
+  - Minors fixed: chopper starts on above V_on; signals.md (`inverter.pwm_count`, averaged legs held +1); INVARIANT comment on the front-end constructors; the SVPWM saturation flag is noted as P09's anti-windup.
+  - Carried to **P08.T10**: averaged pulse dropping (spec first), two-legs-Off warning/tracking, open-phase fault vs leg float, supply parameter paths + DcBus params, latch out of `outputs()`.
+- `just check` green.
