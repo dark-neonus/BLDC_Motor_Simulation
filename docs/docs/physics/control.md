@@ -129,6 +129,7 @@ $$
 
 - Speed comes from a PLL on $\hat\theta_e$. The radial convergence rate is $\gamma\lambda_m^2$; default $\gamma = 1000/\lambda_m^2$.
 - `est.valid` is set when $|\hat\omega_e| > \omega_{min}$ and $\big||\eta| - \lambda_m\big| < 0.2\lambda_m$.
+- **Convergence:** started from $\eta = 0$ ($x = L_s i$), with the default $\gamma$ and exact parameters, the angle error falls below 5° within 100 ms at $\omega_e \ge 10\,\%$ of rated speed and stays there (P08.T07 test: about 55 ms at 200 rad/s for $\lambda_m$ = 10 mWb). The integration is forward Euler at the control rate, with the voltage applied over the last period.
 - **Expected low-speed failure:** the back-EMF shrinks with speed while errors in $R$, offsets and dead time do not. Verified with a 3 % resistance error:
 
   | $\omega_e$ [rad/s] | 700 | 140 | 14 | 1.4 |

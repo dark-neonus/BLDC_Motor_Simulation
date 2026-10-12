@@ -62,7 +62,7 @@
     - PLL step response bandwidth matches the design formula
   - **Done when:** Passing.
 
-- [ ] **P08.T07** — Sensorless nonlinear flux observer + PLL
+- [x] **P08.T07** — Sensorless nonlinear flux observer + PLL
   - **Depends:** P08.T05, P08.T06
   - **Do:** Implement the [Lee2010] observer per EQ-CTRL using the measured currents and the commanded voltages. Gain γ. A PLL for speed. Outputs `est.theta`, `est.omega`, `est.valid` (a validity heuristic: speed above a threshold and flux magnitude near λ).
   - **Files:** `crates/sim-core/src/control/estimators/flux_observer.rs`

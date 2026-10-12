@@ -37,7 +37,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `sensors.encoder.angle_raw`, `sensors.encoder.angle`, `sensors.encoder.error` | rad | register angle [0, 2π), unwrapped measured angle, true − measured (wrapped) | encoder | EQ-SENS-03/05 |
 | `sensors.encoder.count`, `sensors.encoder.index`, `sensors.encoder.indexed` | – | incremental encoder: ×4 count, 1 at the sample that saw the index, 1 once absolute | encoder | EQ-SENS-05 |
 | `sensors.adc.i_a`, `.i_b`, `.i_c`, `sensors.adc.v_bus` | A, V | measured currents / bus | ADC | EQ-SENS-06 |
-| `est.theta`, `est.omega`, `est.valid` | rad, rad/s, – | estimator outputs | estimators | EQ-CTRL-08/09 |
+| `est.theta`, `est.omega`, `est.valid` | rad, rad/s, – | estimator outputs, in the frame of the estimator's input (velocity estimator on a shaft encoder: mechanical; flux observer: electrical) | estimators | EQ-CTRL-08/09 |
 | `ctrl.omega_ref`, `ctrl.theta_ref`, `ctrl.torque_ref` | rad/s, rad, N·m | active setpoints | setpoint | EQ-CTRL-04/07 |
 | `ctrl.foc.id_ref`, `ctrl.foc.iq_ref`, `ctrl.foc.v_d`, `ctrl.foc.v_q`, `ctrl.foc.v_alpha`, `ctrl.foc.v_beta`, `ctrl.foc.saturated` | A, V, – | FOC internals (αβ = commands after inverse Park, held until the next tick) | FOC | EQ-CTRL-03 |
 | `ctrl.six_step.sector`, `ctrl.open_loop.theta_ref` | –, rad | controller internals | controllers | EQ-CTRL-05/06 |
