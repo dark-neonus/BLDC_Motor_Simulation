@@ -33,7 +33,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `inverter.pwm_count` | – | PWM periods so far (+1 at each period start, the ADC trigger) | PWM | EQ-INV-02 |
 | `bus.v`, `bus.i_chopper`, `bus.chopper_on`, `bus.p_brake` | V, A, –, W | DC bus and chopper | bus | EQ-SUP-01/05 |
 | `supply.i`, `supply.mode`, `supply.soc`, `supply.v_terminal`, `supply.battery.v_rc` | A, –, –, V, V | source state | supply | EQ-SUP-02…04 |
-| `sensors.hall.a`, `.b`, `.c`, `sensors.hall.code` | – | Hall outputs and code | halls | EQ-SENS-02 |
+| `sensors.hall.a`, `.b`, `.c`, `sensors.hall.code`, `sensors.hall.sector` | – | Hall outputs, code 4a + 2b + c, sector 1–6 in rotation order (0 for codes 0/7) | halls | EQ-SENS-02 |
 | `sensors.encoder.angle`, `sensors.encoder.error` | rad | measured angle, true − measured | encoder | EQ-SENS-03/05 |
 | `sensors.adc.i_a`, `.i_b`, `.i_c`, `sensors.adc.v_bus` | A, V | measured currents / bus | ADC | EQ-SENS-06 |
 | `est.theta`, `est.omega`, `est.valid` | rad, rad/s, – | estimator outputs | estimators | EQ-CTRL-08/09 |

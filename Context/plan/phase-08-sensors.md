@@ -19,7 +19,7 @@
     - bypass is exact
   - **Done when:** Passing.
 
-- [ ] **P08.T02** — Hall sensors
+- [x] **P08.T02** — Hall sensors
   - **Depends:** P08.T01
   - **Do:** 3 digital outputs from θe with per-sensor placement offset, optional hysteresis, and a sector output `sensors.hall.sector` (1–6).
   - **Files:** `crates/sim-core/src/physics/sensors/hall.rs`
