@@ -89,7 +89,7 @@ mod tests {
     }
 
     #[test]
-    fn svpwm_matches_the_sector_reference_and_the_worked_example() {
+    fn v_inv_002_svpwm_matches_the_sector_reference_and_the_worked_example() {
         let v_bus = 24.0;
         for k in 0..36 {
             let th = 2.0 * PI * k as f64 / 36.0;
@@ -109,7 +109,7 @@ mod tests {
     }
 
     #[test]
-    fn linear_limits() {
+    fn v_inv_003_linear_limits() {
         let v_bus = 24.0;
         // SVPWM reaches V_bus/√3 with duties exactly spanning [0, 1].
         let lim = v_bus / 3f64.sqrt();

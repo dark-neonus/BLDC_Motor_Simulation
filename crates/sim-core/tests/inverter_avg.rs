@@ -119,7 +119,7 @@ fn sig(e: &Engine, n: &str) -> f64 {
 }
 
 #[test]
-fn v_inv_avg_matches_switching_period_averages() {
+fn v_inv_avg_locked_rotor_matches_switching_period_averages() {
     let (mut sw, mut av) = (rig(false), rig(true));
     // τ = L/R = 2.5 ms: 40 ms is 16 τ.
     let t0 = 0.04;
@@ -157,7 +157,7 @@ fn v_inv_avg_matches_switching_period_averages() {
 /// P07.T05: DC input = phase output + inverter loss (conduction, diodes, switching) in
 /// both modes, so the balance closes; the switching-loss current scales with f_pwm.
 #[test]
-fn inverter_losses_close_the_balance_and_scale_with_f_pwm() {
+fn v_inv_007_008_losses_close_the_balance_and_scale_with_f_pwm() {
     for averaged in [false, true] {
         let mut e = rig(averaged);
         e.step_until(SimTime::from_secs_f64(0.02)).unwrap();

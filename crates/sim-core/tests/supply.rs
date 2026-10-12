@@ -80,7 +80,7 @@ fn constant_discharge_is_linear() {
 /// T07: 8 A from a 5 A PSU → CC at I_lim and the bus sags at 3 A/C; a regen current
 /// cannot be sunk → blocking, the bus rises at 2 A/C. Energy closes throughout.
 #[test]
-fn psu_current_limit_and_blocking() {
+fn v_sup_001_psu_current_limit_and_blocking() {
     let src = Source::Psu {
         v_set: 24.0,
         i_lim: 5.0,
@@ -115,7 +115,7 @@ fn pack() -> Battery {
 /// T08: a 10 A step sags by I·R0 at once (after the fast bus RC), the RC branch relaxes
 /// with R1·C1, and SoC falls by ∫I dt / (3600·Q).
 #[test]
-fn battery_sag_relaxation_and_soc() {
+fn v_sup_004_battery_sag_relaxation_and_soc() {
     let b = pack();
     let (r0, r1, c1) = (b.r0, b.r1, b.c1);
     let ocv0 = b.ocv(0.8);

@@ -178,6 +178,10 @@ impl SwitchingInverter {
             )
         };
         let legs = [leg("a")?, leg("b")?, leg("c")?];
+        // Start Low (the PWM's zero vector); 0.0 would read as Off and float a phase.
+        for id in legs {
+            bus.set(id, LegState::Low.to_signal());
+        }
         let mut volt = |x: &str| {
             bus.register(
                 &format!("inverter.v_{x}"),
@@ -393,7 +397,7 @@ mod tests {
     };
 
     #[test]
-    fn terminal_voltage_per_state() {
+    fn v_inv_005_terminal_voltage_per_state() {
         // On-resistance drop in both directions.
         assert_eq!(
             terminal_voltage(LegState::High, 5.0, 24.0, &D),
