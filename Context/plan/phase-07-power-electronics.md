@@ -64,7 +64,7 @@
     - switching loss scales linearly with f_pwm
   - **Done when:** Passing.
 
-- [ ] **P07.T06** — DC bus capacitor
+- [x] **P07.T06** — DC bus capacitor
   - **Depends:** P07.T05
   - **Do:** Plant module: V_bus state, C·dV/dt = i_src − i_dc − i_chopper. Report the stored energy ½CV². Signal `bus.v`.
     - **Performance:** with a stiff source (R_o·C_bus ≈ 10 µs) the explicit step limit `tau_bus/20` (EQ-NUM-04, P03.T06) forces sub-µs steps. Treat the bus node with an exact/semi-implicit update over each substep (it is linear in V_bus for PSU/battery) and drop `tau_bus` from `StepLimits` once the energy tests prove it accurate (record a decision).
@@ -72,7 +72,7 @@
   - **Verify:** Test: a constant discharge current gives a linear voltage drop.
   - **Done when:** Passing.
 
-- [ ] **P07.T07** — Lab PSU (CV/CC, unidirectional) and ideal source
+- [x] **P07.T07** — Lab PSU (CV/CC, unidirectional) and ideal source
   - **Depends:** P07.T06
   - **Do:** PSU per EQ-SUP: setpoint V, current limit, output resistance, CC mode, **cannot sink** (i_src ≥ 0). Mode signal `supply.mode` (CV/CC). The ideal source is for tests.
   - **Files:** `crates/sim-core/src/physics/supply/psu.rs`
@@ -81,7 +81,7 @@
     - regen with no chopper → V_bus rises per the energy balance (V-SUP regen case)
   - **Done when:** Passing.
 
-- [ ] **P07.T08** — Battery model
+- [x] **P07.T08** — Battery model
   - **Depends:** P07.T06
   - **Do:** The model chosen in P02.T07 (Thevenin 1-RC or Tremblay). SoC state; OCV(SoC) table from presets; bidirectional. Signals `supply.soc`, `supply.v_terminal`.
   - **Files:** `crates/sim-core/src/physics/supply/battery.rs`
