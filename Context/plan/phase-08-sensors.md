@@ -53,7 +53,7 @@
     - an offset error produces the expected dq ripple at ωe (diagnostic test)
   - **Done when:** Passing.
 
-- [ ] **P08.T06** — Velocity estimation (difference + LPF, and PLL)
+- [x] **P08.T06** — Velocity estimation (difference + LPF, and PLL)
   - **Depends:** P08.T03, P08.T04
   - **Do:** Estimator blocks taking an angle signal → `est.omega`, `est.theta`. Options: finite difference + 1st-order LPF, or a PLL (Kp, Ki) per EQ-CTRL.
   - **Files:** `crates/sim-core/src/control/estimators/velocity.rs`

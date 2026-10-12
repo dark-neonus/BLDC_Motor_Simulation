@@ -3,6 +3,7 @@
 
 #![forbid(unsafe_code)]
 pub mod build;
+pub mod control;
 pub mod energy;
 pub mod engine;
 #[cfg(any(test, feature = "fixtures"))]

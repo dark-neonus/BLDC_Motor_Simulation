@@ -482,3 +482,8 @@
 ## 2026-10-12 — P08.T05 Current & voltage ADC
 - `physics::sensors::adc` (EQ-SENS-06): `Adc` block (id `sensors.adc`) with one pipeline per channel (RNG substreams `sensors.adc.i_a` …): sat_[±fs](Q_Δ((1 + g)·i + off + n)), Δ = 2·fs/2^b; two shunts reconstruct i_c = −i_a − i_b, three measure all; optional bus-voltage channel (`bus.v` → `sensors.adc.v_bus`) with its own full scale. Period T_pwm with phase 0 samples at `pwm.center`; the controller period in averaged mode.
 - Tests: quantisation, clamping at ±fs, two-shunt reconstruction vs a measured third shunt, gain/offset, bypass; V-SENS-005 (switching rig, 12-bit two-shunt ADC at the PWM centre = period average centred on the sample within 1 % of the 4.6 A operating current); V-SENS-006 (offset 0.1 A on a → αβ error vector of constant length 2·i_off/√3, i_d and i_q ripple at ωe within 5 %; the Python half is P11).
+
+## 2026-10-12 — P08.T06 Velocity estimation
+- New `control` module. `control::estimators::velocity` (EQ-CTRL-08): `DiffLpf` (wrap-safe difference + first-order LPF, α = T/(T + τ_f)), `Pll::design(T, ω_n, ζ)` (K_p = 2ζω_n, K_i = ω_n²; θ̂ unwrapped, initialised to the first sample), `VelocityEstimator` block (id `est.velocity`, priority ESTIMATOR) on any angle signal → `est.theta`, `est.omega`; snapshot/restore.
+- control.md: θ̂ after a PLL step is the prediction for the next sample (one-sample lead, no ramp lag); found by the ramp test.
+- Tests: the LPF on a wrapped ramp follows ω0·(1 − (1 − α)^k) to 1e-9; the PLL tracks a ramp with zero steady-state error and ω̂ = ω0; |H| at 2.48·ω_n = 1/√2 and at ω_n/10 ≈ 1 (2 %); block restore reproduces the estimates.

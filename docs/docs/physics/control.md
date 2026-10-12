@@ -117,7 +117,7 @@ e = \mathrm{wrap}(\theta_{meas} - \hat\theta),\qquad
 \hat\theta \mathrel{+}= T(\hat\omega + K_p e)
 $$
 
-with $K_p = 2\zeta\omega_n$ and $K_i = \omega_n^2$. For $\zeta = 1$ the −3 dB bandwidth is $2.48\,\omega_n$ (verified).
+with $K_p = 2\zeta\omega_n$ and $K_i = \omega_n^2$. For $\zeta = 1$ the −3 dB bandwidth is $2.48\,\omega_n$ (verified). With this update order, $\hat\theta$ after step $k$ is the prediction for the next sample, $\theta(t_k + T)$; on a constant-speed ramp the loop (type 2) settles with no lag beyond that.
 
 ### EQ-CTRL-09 — Nonlinear flux observer `[Lee2010]` {/* #eq-ctrl-09 */}
 
