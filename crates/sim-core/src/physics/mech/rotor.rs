@@ -14,6 +14,7 @@ use crate::energy::PowerKind;
 use crate::engine::plant::PlantModule;
 use crate::engine::signals::{SignalBus, SignalError, SignalId, SignalKind};
 
+use super::friction::{self, Friction, Mode};
 use super::gearbox::Gearbox;
 use super::load::{Load, LoadTorques};
 
@@ -53,6 +54,12 @@ struct Dyn {
     load: LoadTorques,
     /// Σ external motor-side torques.
     t_ext_m: f64,
+    /// Applied torque on the motor shaft except friction and gear loss.
+    t_a: f64,
+    /// Lumped friction torque (EQ-MECH-05).
+    t_f: f64,
+    /// Stuck: ω ≡ 0.
+    held: bool,
 }
 
 pub struct RotorRigid {
@@ -70,6 +77,11 @@ pub struct RotorRigid {
     /// Disturbance pulse torque on the load shaft while one runs (EQ-MECH-08); its
     /// remaining time is state 2, and a state event ends it.
     dist: f64,
+    /// Motor-bearing static/Coulomb friction (its viscous part is `p.b`).
+    fr_m: Friction,
+    /// Load-side friction, lumped onto the motor shaft (rigid drivetrain).
+    fr_l: Friction,
+    mode: Mode,
 }
 
 impl RotorRigid {
@@ -126,6 +138,9 @@ impl RotorRigid {
             ids,
             jump: 0.0,
             dist: 0.0,
+            fr_m: Friction::default(),
+            fr_l: Friction::default(),
+            mode: Mode::Stick,
         })
     }
 
@@ -154,6 +169,33 @@ impl RotorRigid {
         self
     }
 
+    /// Stick–slip friction (EQ-MECH-05): motor static/Coulomb (`motor.b` comes from
+    /// `RotorParams::b`) and load-side friction. Starts slipping if ω0 ≠ 0.
+    pub fn with_friction(mut self, motor: Friction, load: Friction) -> Self {
+        self.fr_m = motor;
+        self.fr_l = load;
+        let w0 = if self.locked { 0.0 } else { self.p.omega0 };
+        self.mode = if w0 != 0.0 {
+            Mode::Slip { dir: w0.signum() }
+        } else {
+            Mode::Stick
+        };
+        self
+    }
+
+    /// The friction lumped on ω_m.
+    fn friction(&self) -> Friction {
+        let motor = Friction {
+            b: self.p.b,
+            ..self.fr_m
+        };
+        Friction::lumped(&motor, &self.fr_l, self.gb.n)
+    }
+
+    fn hybrid(&self) -> bool {
+        !self.locked && self.friction().is_hybrid()
+    }
+
     fn j_eq(&self) -> f64 {
         self.gb.j_eq(self.p.j + self.p.j_load, self.load.inertia())
     }
@@ -166,14 +208,37 @@ impl RotorRigid {
         let t_ext_m: f64 = self.external.iter().map(|&id| bus.get(id)).sum();
         let t_int: f64 = self.internal.iter().map(|&id| bus.get(id)).sum();
         let j_eq = self.j_eq();
+        let t_a = t_int + t_ext_m + t_l / n;
+        let fr = self.friction();
+        let (t_f, held) = if fr.is_hybrid() {
+            let e = friction::eval(&fr, self.mode, t_a, w);
+            (e.torque, e.held)
+        } else {
+            (-fr.b * w, false)
+        };
+        if held {
+            // While sticking T_gl = 0 (EQ-MECH-05 clarifications).
+            return Dyn {
+                a: 0.0,
+                t_gl: 0.0,
+                load,
+                t_ext_m,
+                t_a,
+                t_f,
+                held,
+            };
+        }
         // Lossless acceleration first; the gear loss uses it (EQ-MECH-03, one pass).
-        let a0 = (t_int + t_ext_m - self.p.b * w + t_l / n) / j_eq;
+        let a0 = (t_a + t_f) / j_eq;
         let t_gl = self.gb.loss_torque(a0, t_l, self.load.inertia(), w);
         Dyn {
             a: a0 + t_gl / j_eq,
             t_gl,
             load,
             t_ext_m,
+            t_a,
+            t_f,
+            held,
         }
     }
 
@@ -194,6 +259,19 @@ impl RotorRigid {
         x_own[1] = w1;
         self.jump += 0.5 * j1 * w1 * w1 - 0.5 * j0 * w * w + (u1 - u0);
         Ok(old)
+    }
+
+    fn set_friction(&mut self, load: bool, field: &str, v: f64) -> Result<f64, String> {
+        Friction::check(field, v)?;
+        let f = if load { &mut self.fr_l } else { &mut self.fr_m };
+        let slot = match (field, load) {
+            ("static_torque", _) => &mut f.t_s,
+            ("coulomb", _) => &mut f.t_c,
+            ("viscous", true) => &mut f.b,
+            ("viscous", false) => &mut self.p.b,
+            _ => return Err(format!("unknown friction parameter `{field}`")),
+        };
+        Ok(std::mem::replace(slot, v))
     }
 
     fn set_gear(&mut self, name: &str, v: f64, x_own: &mut [f64]) -> Result<f64, String> {
@@ -273,8 +351,9 @@ impl PlantModule for RotorRigid {
             return;
         }
         let (th, w) = (x[off], x[off + 1]);
-        dx[0] = w;
-        dx[1] = self.dynamics(th, w, bus).a;
+        let d = self.dynamics(th, w, bus);
+        dx[0] = if d.held { 0.0 } else { w };
+        dx[1] = d.a;
     }
     fn params(&self) -> Vec<(String, String)> {
         let mut v = vec![
@@ -292,6 +371,11 @@ impl PlantModule for RotorRigid {
         match name {
             "j_rotor" => Some(self.p.j),
             "friction.viscous" => Some(self.p.b),
+            "friction.static_torque" => Some(self.fr_m.t_s),
+            "friction.coulomb" => Some(self.fr_m.t_c),
+            "load.friction.static_torque" => Some(self.fr_l.t_s),
+            "load.friction.coulomb" => Some(self.fr_l.t_c),
+            "load.friction.viscous" => Some(self.fr_l.b),
             "locked" => Some(f64::from(u8::from(self.locked))),
             "gearbox.ratio" => Some(self.gb.n),
             "gearbox.efficiency" => Some(self.gb.eta),
@@ -322,6 +406,9 @@ impl PlantModule for RotorRigid {
             }
             _ => {}
         }
+        if let Some(field) = name.strip_prefix("load.friction.") {
+            return self.set_friction(true, field, v);
+        }
         if name.starts_with("load.") {
             let conserve = self.conserve_momentum;
             let name = name.to_string();
@@ -335,15 +422,14 @@ impl PlantModule for RotorRigid {
                 // D-007: keep ω; the kinetic-energy change is an external jump.
                 self.change_inertia(x_own, false, |s| Ok(std::mem::replace(&mut s.p.j, v)))
             }
-            "friction.viscous" => {
-                if !(v.is_finite() && v >= 0.0) {
-                    return Err(format!("viscous friction must be ≥ 0, got {v}"));
-                }
-                Ok(std::mem::replace(&mut self.p.b, v))
+            "friction.viscous" | "friction.static_torque" | "friction.coulomb" => {
+                self.set_friction(false, &name["friction.".len()..], v)
             }
             "locked" => {
                 let old = f64::from(u8::from(self.locked));
                 self.locked = v != 0.0;
+                // Locking stops the shaft; releasing starts from rest.
+                self.mode = Mode::Stick;
                 if self.locked {
                     // Stopping the shaft removes its kinetic energy.
                     self.jump -= 0.5 * self.j_eq() * x_own[1] * x_own[1];
@@ -370,7 +456,7 @@ impl PlantModule for RotorRigid {
         let (th, w) = (x[off], x[off + 1]);
         let d = self.dynamics(th, w, bus);
         let w_l = w / self.gb.n;
-        p[0] = self.p.b * w * w;
+        p[0] = -d.t_f * w;
         p[1] = -d.t_gl * w;
         p[2] = -d.load.loss * w_l;
         p[3] = d.t_ext_m * w + d.load.ext * w_l;
@@ -383,28 +469,65 @@ impl PlantModule for RotorRigid {
         std::mem::take(&mut self.jump)
     }
     fn n_events(&self) -> usize {
-        1
+        3
     }
-    fn event_functions(&self, _t: f64, x: &[f64], off: usize, _bus: &SignalBus, g: &mut [f64]) {
-        // The pulse ends when its remaining time crosses zero.
+    fn event_functions(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, g: &mut [f64]) {
+        // 0: the pulse ends when its remaining time crosses zero.
         g[0] = if self.dist != 0.0 { x[off + 2] } else { 1.0 };
+        // 1: slip → ω crosses zero; stick → |T_a| crosses T_s (EQ-MECH-05).
+        // 2: stick but already moving (a step started past breakaway, e.g. after an edit).
+        (g[1], g[2]) = (1.0, 1.0);
+        if self.hybrid() {
+            let (th, w) = (x[off], x[off + 1]);
+            match self.mode {
+                Mode::Slip { dir } => g[1] = dir * w,
+                Mode::Stick => {
+                    let t_a = self.dynamics(th, w, bus).t_a;
+                    g[1] = self.friction().t_s - t_a.abs();
+                    g[2] = 1e-12 - w.abs();
+                }
+            }
+        }
     }
     fn on_event(
         &mut self,
-        _idx: usize,
+        idx: usize,
         _rising: bool,
         _t: f64,
         x_own: &mut [f64],
-        _bus: &mut SignalBus,
+        bus: &mut SignalBus,
     ) {
-        self.dist = 0.0;
-        x_own[2] = 0.0;
+        let (th, w) = (x_own[0], x_own[1]);
+        match (idx, self.mode) {
+            (0, _) => {
+                self.dist = 0.0;
+                x_own[2] = 0.0;
+            }
+            (1, Mode::Slip { .. }) => {
+                let t_a = self.dynamics(th, w, bus).t_a;
+                if t_a.abs() <= self.friction().t_s {
+                    // Stick: the leftover ½Jω² (bisection-sized) leaves with the jump.
+                    self.jump -= 0.5 * self.j_eq() * w * w;
+                    x_own[1] = 0.0;
+                    self.mode = Mode::Stick;
+                } else {
+                    self.mode = Mode::Slip { dir: t_a.signum() };
+                }
+            }
+            (1, Mode::Stick) => {
+                let t_a = self.dynamics(th, w, bus).t_a;
+                self.mode = Mode::Slip { dir: t_a.signum() };
+            }
+            (2, Mode::Stick) => self.mode = Mode::Slip { dir: w.signum() },
+            _ => {}
+        }
     }
     fn save(&self) -> serde_json::Value {
         serde_json::json!({
             "j": self.p.j, "b": self.p.b, "locked": self.locked,
             "eta": self.gb.eta, "j_in": self.gb.j_in, "j_out": self.gb.j_out,
             "load": self.load, "jump": self.jump, "dist": self.dist,
+            "fr_m": self.fr_m, "fr_l": self.fr_l, "mode": self.mode,
         })
     }
     fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
@@ -425,6 +548,10 @@ impl PlantModule for RotorRigid {
         (self.p.j, self.p.b, self.locked) = (j, b, locked);
         (self.gb.eta, self.gb.j_in, self.gb.j_out) = (eta, j_in, j_out);
         (self.load, self.jump, self.dist) = (load, jump, dist);
+        let de = |k: &str| v.get(k).cloned().ok_or(format!("missing `{k}`"));
+        self.fr_m = serde_json::from_value(de("fr_m")?).map_err(|e| e.to_string())?;
+        self.fr_l = serde_json::from_value(de("fr_l")?).map_err(|e| e.to_string())?;
+        self.mode = serde_json::from_value(de("mode")?).map_err(|e| e.to_string())?;
         Ok(())
     }
 }

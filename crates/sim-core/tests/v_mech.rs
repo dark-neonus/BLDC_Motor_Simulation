@@ -7,6 +7,7 @@ use sim_core::engine::engine::Engine;
 use sim_core::engine::plant::Plant;
 use sim_core::engine::signals::SignalBus;
 use sim_core::engine::time::SimTime;
+use sim_core::physics::mech::friction::Friction;
 use sim_core::physics::mech::gearbox::Gearbox;
 use sim_core::physics::mech::load::Load;
 use sim_core::physics::mech::load_arm::{Arm, G};
@@ -195,4 +196,78 @@ fn basic_loads_book_their_energy() {
         }
         assert!(sig(&e, "energy.residual").abs() < 1e-6, "{load:?}");
     }
+}
+
+const FR: Friction = Friction {
+    t_s: 0.05,
+    t_c: 0.03,
+    b: 0.0,
+};
+const B: f64 = 1e-4;
+
+/// Motor-side friction FR + viscous B, a constant load torque `t0` (N = 1).
+fn friction_rig(t0: f64) -> Engine {
+    let mut bus = SignalBus::new();
+    let p = RotorParams {
+        j: J_M,
+        j_load: 0.0,
+        b: B,
+        pole_pairs: 7.0,
+        theta0: 0.3,
+        omega0: 0.0,
+    };
+    let rotor = RotorRigid::new(p, &mut bus, vec![], vec![])
+        .unwrap()
+        .with_load(Load::Constant { t0 }, false)
+        .with_friction(FR, Friction::default());
+    let mut plant = Plant::new();
+    plant.add(Box::new(rotor));
+    Engine::new(plant, bus, vec![], 1e-4)
+}
+
+/// V-MECH-006: 0.98·T_s on a stuck shaft leaves θ bit-identical.
+#[test]
+fn v_mech_006_stays_stuck_below_breakaway() {
+    let mut e = friction_rig(0.98 * FR.t_s);
+    e.step_until(SimTime::from_secs_f64(1.0)).unwrap();
+    assert_eq!(sig(&e, "motor.theta"), 0.3);
+    assert_eq!(sig(&e, "motor.omega"), 0.0);
+}
+
+/// V-MECH-007: 1.2·T_s breaks the shaft loose; after the torque is removed it coasts down
+/// per Coulomb + viscous, ω(t) = (ω₀ + T_c/b)·e^{−bt/J} − T_c/b, and sticks again at
+/// ω = 0. Energy closes (rtol 1e-3).
+#[test]
+fn v_mech_007_breakaway_coast_and_restick() {
+    let mut e = friction_rig(1.2 * FR.t_s);
+    e.step_until(SimTime::from_secs_f64(0.05)).unwrap();
+    // Slipping under 1.2·T_s − T_c − b·ω from rest.
+    let a = (1.2 * FR.t_s - FR.t_c) / J_M;
+    let w_drive = a * J_M / B * (1.0 - (-B / J_M * 0.05f64).exp());
+    let w0 = sig(&e, "motor.omega");
+    assert!((w0 / w_drive - 1.0).abs() < 1e-3, "{w0} vs {w_drive}");
+    e.queue(EngineCommand::SetParam {
+        path: "load.torque".into(),
+        value: 0.0,
+        source: ChangeSource::Internal,
+    });
+    e.step_until(SimTime::from_secs_f64(0.07)).unwrap();
+    let tc_b = FR.t_c / B;
+    let expect = (w0 + tc_b) * (-B / J_M * 0.02f64).exp() - tc_b;
+    let w = sig(&e, "motor.omega");
+    assert!((w / expect - 1.0).abs() < 1e-3, "{w} vs {expect}");
+    // Stop time from the same law, then stuck for good.
+    let t_stop = J_M / B * ((w0 + tc_b) / tc_b).ln();
+    e.step_until(SimTime::from_secs_f64(0.05 + t_stop + 0.05))
+        .unwrap();
+    let th = sig(&e, "motor.theta");
+    assert_eq!(sig(&e, "motor.omega"), 0.0);
+    e.step_until(SimTime::from_secs_f64(0.05 + t_stop + 0.5))
+        .unwrap();
+    assert_eq!(sig(&e, "motor.theta"), th, "re-stuck");
+    assert!(
+        sig(&e, "energy.residual").abs() < 1e-3,
+        "{}",
+        sig(&e, "energy.residual")
+    );
 }

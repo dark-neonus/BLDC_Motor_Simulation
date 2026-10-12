@@ -28,7 +28,7 @@
     - no chatter-induced NaN at dt_max
   - **Done when:** Passing.
 
-- [ ] **P06.T03** — Karnopp friction (static/Coulomb/viscous)
+- [x] **P06.T03** — Karnopp friction (static/Coulomb/viscous)
   - **Depends:** P06.T01
   - **Do:** Implement per EQ-MECH, with the stick state handled via the velocity band and event logic from EQ-NUM. Friction applies on the motor bearing and optionally on the load side.
   - **Files:** `crates/sim-core/src/physics/mech/friction.rs`

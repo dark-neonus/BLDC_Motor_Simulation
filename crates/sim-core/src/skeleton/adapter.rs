@@ -11,6 +11,7 @@ use crate::engine::plant::Plant;
 use crate::engine::signals::{SignalBus, SignalId, SignalKind};
 use crate::engine::time::{SimTime, period_from_hz};
 use crate::physics::inverter::ideal::IdealVoltageSource;
+use crate::physics::mech::friction::Friction;
 use crate::physics::mech::gearbox::Gearbox;
 use crate::physics::mech::load::Load;
 use crate::physics::mech::rotor::{RotorParams, RotorRigid};
@@ -107,6 +108,8 @@ pub struct SkeletonOptions {
     pub conserve_momentum: bool,
     /// Initial load angle θ_L [rad] (arm mounting offset).
     pub theta_l0: f64,
+    /// Stick–slip friction: motor static/Coulomb (viscous is `PmsmParams::b`) and load.
+    pub friction: (Friction, Friction),
     /// Gear ratio N (load-side setpoints × N = motor side).
     pub ratio: f64,
     /// Cogging (EQ-MOT-08), when the fidelity tier enables it.
@@ -129,6 +132,7 @@ impl Default for SkeletonOptions {
             load: Load::None,
             conserve_momentum: false,
             theta_l0: 0.0,
+            friction: (Friction::default(), Friction::default()),
             ratio: 1.0,
             cogging: None,
             iron: None,
@@ -201,7 +205,8 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         .expect("unique skeleton signal")
         .with_locked(opts.locked)
         .with_gearbox(opts.gearbox)
-        .with_load(opts.load.clone(), opts.conserve_momentum);
+        .with_load(opts.load.clone(), opts.conserve_momentum)
+        .with_friction(opts.friction.0, opts.friction.1);
     let id = |bus: &SignalBus, p: &str| bus.id(p).expect("registered above");
     let inp = ElectricalInputs {
         v: source.outputs_ids(),

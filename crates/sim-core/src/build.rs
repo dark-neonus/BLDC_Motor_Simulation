@@ -16,6 +16,7 @@ use sim_model::units::Kind;
 use crate::engine::commands::{ChangeSource, EngineCommand};
 use crate::engine::engine::Engine;
 use crate::engine::fidelity::{FidelityConfig, Tier};
+use crate::physics::mech::friction::Friction;
 use crate::physics::mech::gearbox::Gearbox;
 use crate::physics::mech::load::Load;
 use crate::physics::mech::load_arm::Arm;
@@ -314,6 +315,40 @@ fn gearbox(scene: &ResolvedScene) -> Result<Gearbox, BuildError> {
     })
 }
 
+/// Stick–slip friction (EQ-MECH-05): the motor's static/Coulomb part (its viscous part
+/// is `PmsmParams::b`) and the arm's load-side friction.
+fn friction(scene: &ResolvedScene) -> Result<(Friction, Friction), BuildError> {
+    let conv = |f: &sim_model::params::Friction, at: &str| -> Result<Friction, BuildError> {
+        Ok(Friction {
+            t_s: si(
+                &f.static_torque,
+                Kind::Torque,
+                &format!("{at}.static_torque"),
+            )?,
+            t_c: si(&f.coulomb, Kind::Torque, &format!("{at}.coulomb"))?,
+            b: si(
+                &f.viscous,
+                Kind::RotationalDamping,
+                &format!("{at}.viscous"),
+            )?,
+        })
+    };
+    let motor = match &scene.motor.mechanical.friction {
+        Some(f) => Friction {
+            b: 0.0,
+            ..conv(f, "motor.mechanical.friction")?
+        },
+        None => Friction::default(),
+    };
+    let load = match &scene.load {
+        Some(LoadParams::Arm {
+            friction: Some(f), ..
+        }) => conv(f, "load.friction")?,
+        _ => Friction::default(),
+    };
+    Ok((motor, load))
+}
+
 /// Initial arm angle (mounting offset, EQ-MECH-06) [rad].
 fn mount_angle(scene: &ResolvedScene) -> Result<f64, BuildError> {
     match &scene.load {
@@ -453,6 +488,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             load,
             conserve_momentum,
             theta_l0: mount_angle(scene)?,
+            friction: friction(scene)?,
             ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
             cogging: cogging(scene)?,
             iron: iron(scene)?,
