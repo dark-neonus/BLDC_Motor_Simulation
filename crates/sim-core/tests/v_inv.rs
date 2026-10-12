@@ -144,6 +144,11 @@ fn v_inv_004_dead_time_voltage_error() {
         );
     }
     assert!(m[2] > 0.0 && m[3] < 0.0, "both current signs covered");
+    // Legs b and c share their dead time (equal duties): a PWM transient, no warning.
+    let two_off = e.drain_events().into_iter().any(|ev| {
+        matches!(ev, sim_core::engine::commands::EngineEvent::Warning { ref msg, .. } if msg.contains("legs stay Off"))
+    });
+    assert!(!two_off, "two-legs-Off warning during dead time");
 }
 
 /// V-INV-006: locked rotor, leg a PWM at D, leg b Low (D = 0), phase c disconnected,

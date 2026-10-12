@@ -159,3 +159,25 @@ fn floating_terminal_reconnects_through_its_diode() {
         "opened {opened}, reconnected {closed}"
     );
 }
+
+/// P07 review #9: the `motor.open_phase` fault takes over a leg-driven float (same
+/// phase) instead of failing with "already open"; turning the leg back on then does not
+/// reconnect the faulted phase.
+#[test]
+fn open_phase_fault_overrides_a_leg_float() {
+    use LegState::*;
+    let mut e = rig(true, 0.0, [High, Low, Low]);
+    e.step_until(SimTime::from_secs_f64(0.06)).unwrap();
+    set_leg(&mut e, "a", Off);
+    e.step_until(SimTime::from_secs_f64(0.08)).unwrap();
+    assert_eq!(sig(&e, "motor.open_phase"), 0.0, "leg float");
+    e.queue(EngineCommand::SetParam {
+        path: "motor.open_phase".into(),
+        value: 0.0,
+        source: ChangeSource::Internal,
+    });
+    set_leg(&mut e, "a", High);
+    e.step_until(SimTime::from_secs_f64(0.1)).unwrap();
+    assert_eq!(sig(&e, "motor.open_phase"), 0.0, "the fault holds it open");
+    assert_eq!(sig(&e, "motor.i_a"), 0.0);
+}

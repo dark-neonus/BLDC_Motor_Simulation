@@ -77,7 +77,7 @@
   - **Verify:** `cargo nextest run -p sim-core v_sens`
   - **Done when:** Green.
 
-- [ ] **P08.T10** — P07 review carry-overs (minors)
+- [x] **P08.T10** — P07 review carry-overs (minors)
   - **Depends:** P07
   - **Do:**
     1. Averaged pulse dropping (EQ-INV-03): add the case to the spec first, then use an effective dead fraction min(t_d/T, d, 1 − d) (or clamp to the diode bounds) so d = 0 / 1 matches switching mode.

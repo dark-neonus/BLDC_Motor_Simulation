@@ -75,6 +75,8 @@ pub struct SwitchingInverter {
     i_dc: SignalId,
     /// `motor.open_phase` (−1 none, k: phase k floats).
     open_phase: Option<SignalId>,
+    /// `motor.diode_x`: the diode a reconnect went through (−1 high, +1 low, 0 none).
+    diode: Option<[SignalId; 3]>,
     /// Conducting diode of an Off leg: +1 low diode (i > 0), −1 high diode (i < 0), 0 none.
     /// Latched when the leg turns Off (or a floating terminal reaches a bound) and held
     /// until the motor reports the phase floating: the clamp must not flip with the sign
@@ -121,6 +123,11 @@ pub fn duty_ids(bus: &mut SignalBus) -> Result<[SignalId; 3], SignalError> {
 
 /// Period-average terminal voltage of a complementary PWM leg (EQ-INV-03), including the
 /// dead-time error with σ(i) = tanh(i/i_ε).
+/// Effective dead fraction with pulse dropping (EQ-INV-03): min(t_d/T, d, 1 − d).
+pub fn dead_eff(d: f64, dead_frac: f64) -> f64 {
+    dead_frac.min(d).min(1.0 - d).max(0.0)
+}
+
 pub fn averaged_voltage(
     d: f64,
     i: f64,
@@ -130,6 +137,7 @@ pub fn averaged_voltage(
     i_eps: f64,
 ) -> f64 {
     let sigma = (i / i_eps).tanh();
+    let dead_frac = dead_eff(d, dead_frac);
     d * v_bus
         - dev.r_on * i
         - sigma * dead_frac * (v_bus + 2.0 * dev.v_f - 2.0 * dev.r_on * i.abs())
@@ -209,6 +217,7 @@ impl SwitchingInverter {
             v,
             i_dc,
             open_phase: None,
+            diode: None,
             latch: [0.0; 3],
             prev: [LegState::Low; 3],
             averaged: None,
@@ -230,6 +239,11 @@ impl SwitchingInverter {
         self.e = [id("motor.e_a")?, id("motor.e_b")?, id("motor.e_c")?];
         self.v_n = id("motor.v_n")?;
         self.open_phase = Some(id("motor.open_phase")?);
+        self.diode = Some([
+            id("motor.diode_a")?,
+            id("motor.diode_b")?,
+            id("motor.diode_c")?,
+        ]);
         Ok(self)
     }
 
@@ -241,9 +255,30 @@ impl SwitchingInverter {
     }
 }
 
-/// Below this phase current [A] an Off leg's diode is chosen from the terminal voltage,
-/// not from the sign of i (round-off at a diode reconnect).
+/// Below this phase current [A] the fallback diode choice uses the terminal voltage,
+/// not the sign of i (round-off).
 const LATCH_I_MIN: f64 = 1e-9;
+
+impl SwitchingInverter {
+    /// The conducting diode of Off leg k that is not floating (−1 high, +1 low), without
+    /// mutating state (D-017): the motor's reconnect diode, else the latch set at the
+    /// turn-off (`after_discrete`), else the current's sign, or at i ≈ 0 the bound the
+    /// terminal is nearer.
+    fn diode_of(&self, k: usize, i: f64, v_bus: f64, bus: &SignalBus) -> f64 {
+        let from_motor = self.diode.map_or(0.0, |d| bus.get(d[k]));
+        if from_motor != 0.0 {
+            from_motor
+        } else if self.latch[k] != 0.0 {
+            self.latch[k]
+        } else if i.abs() > LATCH_I_MIN {
+            i.signum()
+        } else if bus.get(self.v_n) + bus.get(self.e[k]) >= 0.5 * v_bus {
+            -1.0
+        } else {
+            1.0
+        }
+    }
+}
 
 impl PlantModule for SwitchingInverter {
     fn name(&self) -> &str {
@@ -270,32 +305,17 @@ impl PlantModule for SwitchingInverter {
                 terminal_voltage(s, i, v_bus, &self.d).unwrap_or(0.0)
             } else if open == k as f64 {
                 // Floating: v_n + e_x (EQ-MOT-12); i = 0, no diode conducts.
-                self.latch[k] = 0.0;
                 (bus.get(self.v_n) + bus.get(self.e[k])).clamp(-self.d.v_f, v_bus + self.d.v_f)
             } else {
-                if self.latch[k] == 0.0 {
-                    // Not floating and no diode yet: the terminal reached a bound (diode
-                    // reconnect) or the current is already flowing; pick the diode. Right
-                    // after a reconnect i is round-off around 0, so its sign means nothing:
-                    // the bound the floating terminal reached decides (high → −1).
-                    let v_float = bus.get(self.v_n) + bus.get(self.e[k]);
-                    self.latch[k] = if i.abs() > LATCH_I_MIN {
-                        i.signum()
-                    } else if v_float >= 0.5 * v_bus {
-                        -1.0
-                    } else {
-                        1.0
-                    };
-                }
-                terminal_voltage(s, self.latch[k], v_bus, &self.d).unwrap_or(0.0)
+                terminal_voltage(s, self.diode_of(k, i, v_bus, bus), v_bus, &self.d).unwrap_or(0.0)
             };
             bus.set(self.v[k], v);
             if let (Some(a), true) = (self.averaged, s != LegState::Off) {
                 // EQ-INV-08 averaged: the dead time changes the effective high-side duty.
                 let d = bus.get(a.duty[k]).clamp(0.0, 1.0);
-                i_dc += (d - (i / a.i_eps).tanh() * a.dead_frac) * i;
+                i_dc += (d - (i / a.i_eps).tanh() * dead_eff(d, a.dead_frac)) * i;
             } else if s == LegState::High
-                || (s == LegState::Off && open != k as f64 && self.latch[k] < 0.0)
+                || (s == LegState::Off && open != k as f64 && self.diode_of(k, i, v_bus, bus) < 0.0)
             {
                 i_dc += i;
             }
@@ -420,8 +440,32 @@ mod tests {
         }
     }
 
-    /// Review P07 #4: a terminal reconnected at the high bound latches the high diode
-    /// even when the round-off current is a hair positive.
+    /// Pulse dropping (EQ-INV-03): the averaged voltage is exact at d = 0 and d = 1 and
+    /// continuous near them.
+    #[test]
+    fn averaged_pulse_dropping_matches_the_full_low_and_high_legs() {
+        let f = 0.01;
+        for i in [3.0, -3.0] {
+            assert_eq!(averaged_voltage(0.0, i, 24.0, &D, f, 0.01), -D.r_on * i);
+            assert_eq!(
+                averaged_voltage(1.0, i, 24.0, &D, f, 0.01),
+                24.0 - D.r_on * i
+            );
+            // Continuous: a tiny duty is close to d = 0.
+            let v = averaged_voltage(1e-6, i, 24.0, &D, f, 0.01);
+            assert!((v + D.r_on * i).abs() < 1e-4, "{v}");
+        }
+        // In the linear range the full dead fraction applies.
+        assert_eq!(dead_eff(0.5, f), f);
+        assert_eq!(
+            (dead_eff(0.004, f), dead_eff(0.997, f)),
+            (0.004, 1.0 - 0.997)
+        );
+    }
+
+    /// Review P07 #4 / P08.T10: a terminal reconnected at the high bound uses the high
+    /// diode even when the round-off current is a hair positive; the choice comes from
+    /// the motor (`motor.diode_x`) and `outputs` mutates nothing (D-017).
     #[test]
     fn reconnect_latch_follows_the_bound_not_round_off() {
         let mut bus = SignalBus::new();
@@ -430,6 +474,11 @@ mod tests {
         let (ia, ib, ic) = (reg("motor.i_a"), reg("motor.i_b"), reg("motor.i_c"));
         let (ea, _, _) = (reg("motor.e_a"), reg("motor.e_b"), reg("motor.e_c"));
         let (vn, open) = (reg("motor.v_n"), reg("motor.open_phase"));
+        let (da, _, _) = (
+            reg("motor.diode_a"),
+            reg("motor.diode_b"),
+            reg("motor.diode_c"),
+        );
         let mut inv = SwitchingInverter::new(D, v_bus, &mut bus)
             .unwrap()
             .with_motor(&bus)
@@ -443,7 +492,15 @@ mod tests {
         bus.set(ia, 1e-15);
         bus.set(ib, -1.0);
         bus.set(ic, 1.0);
+        // Without the motor's word: the fallback picks the bound the terminal is at.
         inv.outputs(0.0, &[], 0, &mut bus);
-        assert_eq!(bus.get(inv.v[0]), 24.8, "high diode");
+        assert_eq!(bus.get(inv.v[0]), 24.8, "high diode (fallback)");
+        // The motor's reconnect diode decides, even against the terminal estimate.
+        bus.set(vn, 0.0);
+        bus.set(da, -1.0);
+        inv.outputs(0.0, &[], 0, &mut bus);
+        assert_eq!(bus.get(inv.v[0]), 24.8, "high diode (motor)");
+        // outputs() keeps no state: the latch is untouched.
+        assert_eq!(inv.latch, [0.0; 3]);
     }
 }

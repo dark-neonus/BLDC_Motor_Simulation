@@ -162,6 +162,9 @@ impl Magnetics {
     }
 }
 
+/// Two legs Off for longer than this [s] is not a dead-time transient (warning).
+const TWO_OFF_WARN: f64 = 10e-6;
+
 /// Magnet temperature input for λ(T) = λ_ref·(1 + α_Br·(T − T_ref)) (EQ-THERM-03).
 #[derive(Debug, Clone, Copy)]
 pub struct LambdaTemperature {
@@ -213,6 +216,7 @@ struct Out {
     torque: SignalId,
     p_cu: SignalId,
     open_phase: SignalId,
+    diode: [SignalId; 3],
 }
 
 /// Currents and rotor-frame fluxes at one state.
@@ -245,10 +249,14 @@ pub struct MotorElectrical {
     /// Open-phase mode (EQ-MOT-11): the disconnected phase; state 0 is then the line
     /// flux ψ_yz of the two connected phases (y = k+1, z = k+2 mod 3).
     open: Option<usize>,
-    /// Requested open phase, entered when its current crosses zero (state event), and
-    /// the sign of that current at the request (so g starts positive: no false crossing).
-    pending: Option<usize>,
-    pending_sign: f64,
+    /// Requested open phases, per phase: the sign of its current at the request (so g
+    /// starts positive: no false crossing). The first to cross zero opens (state event).
+    pending: [Option<f64>; 3],
+    /// Since when two or more legs have been Off (for the zero-current-mode warning).
+    two_off_since: Option<f64>,
+    /// The diode a floating terminal reconnected through (−1 high, +1 low, 0 none), per
+    /// phase; published as `motor.diode_x` so the inverter needs no guess (EQ-MOT-12).
+    diode: [f64; 3],
     /// Last solve from the outputs pass: (ψ0, ψ1, θe, λ) → result. The derivatives and
     /// powers of the same RK stage reuse it when the inputs match exactly.
     cache: Option<([f64; 4], Solved)>,
@@ -319,6 +327,26 @@ impl MotorElectrical {
                 "open phase: -1 none, 0/1/2 = a/b/c",
                 o,
             )?,
+            diode: [
+                r(
+                    "motor.diode_a",
+                    "-",
+                    "diode a reconnect went through: -1 high, +1 low, 0 none",
+                    o,
+                )?,
+                r(
+                    "motor.diode_b",
+                    "-",
+                    "diode b reconnect went through: -1 high, +1 low, 0 none",
+                    o,
+                )?,
+                r(
+                    "motor.diode_c",
+                    "-",
+                    "diode c reconnect went through: -1 high, +1 low, 0 none",
+                    o,
+                )?,
+            ],
         };
         let lambda = p.lambda;
         Ok(Self {
@@ -335,8 +363,9 @@ impl MotorElectrical {
             jump: 0.0,
             last_lambda: lambda,
             open: None,
-            pending: None,
-            pending_sign: 1.0,
+            pending: [None; 3],
+            two_off_since: None,
+            diode: [0.0; 3],
             cache: None,
             unconverged: std::cell::Cell::new(false),
             warned: false,
@@ -555,11 +584,21 @@ impl MotorElectrical {
         inv_clarke(s.i_alpha, s.i_beta)[k]
     }
 
-    /// `motor.open_phase`: −1 reconnects, 0/1/2 opens a/b/c at its next current zero.
+    /// The first phase waiting for its current zero.
+    fn first_pending(&self) -> Option<usize> {
+        (0..3).find(|&k| self.pending[k].is_some())
+    }
+
+    /// `motor.open_phase`: −1 reconnects, 0/1/2 opens a/b/c at its next current zero. A
+    /// fault overrides a float that follows an Off inverter leg.
     fn set_open_phase(&mut self, v: f64, x_own: &mut [f64]) -> Result<f64, String> {
-        let old = self.open.or(self.pending).map_or(-1.0, |k| k as f64);
+        let old = self
+            .open
+            .or(self.first_pending())
+            .map_or(-1.0, |k| k as f64);
         if v == -1.0 {
-            self.pending = None;
+            self.pending = [None; 3];
+            self.diode = [0.0; 3];
             self.fault_open = false;
             self.reconnect(x_own);
             return Ok(old);
@@ -567,11 +606,22 @@ impl MotorElectrical {
         if !matches!(v, 0.0 | 1.0 | 2.0) {
             return Err(format!("open_phase must be -1, 0, 1 or 2, got {v}"));
         }
-        if self.open.is_some() {
-            return Err("a phase is already open; reconnect it first".into());
+        let k = v as usize;
+        if let Some(open) = self.open {
+            if self.fault_open {
+                return Err("a phase is already open; reconnect it first".into());
+            }
+            // Leg-driven float: the fault takes it over (same phase) or replaces it.
+            if open == k {
+                self.pending = [None; 3];
+                self.fault_open = true;
+                return Ok(old);
+            }
+            self.reconnect(x_own);
         }
+        self.pending = [None; 3];
         self.fault_open = true;
-        self.request_open(v as usize, x_own);
+        self.request_open(k, x_own);
         Ok(old)
     }
 
@@ -594,8 +644,7 @@ impl MotorElectrical {
             self.enter_open(k, x_own);
             return;
         }
-        self.pending_sign = if i_k < 0.0 { -1.0 } else { 1.0 };
-        self.pending = Some(k);
+        self.pending[k] = Some(if i_k < 0.0 { -1.0 } else { 1.0 });
     }
 
     /// Switch to the open-phase state (EQ-MOT-11) with phase k's current at zero.
@@ -608,6 +657,7 @@ impl MotorElectrical {
         x_own[0] = f[y] - f[z];
         x_own[1] = 0.0;
         self.open = Some(k);
+        self.diode = [0.0; 3];
         // i_k ≈ 0 at the event (bisection tolerance): book the tiny W_mag difference.
         let after = self.solve_open(x_own[0], th, lam, k);
         self.jump += self.w_mag(&after, lam) - self.w_mag(&before, lam);
@@ -693,6 +743,9 @@ impl PlantModule for MotorElectrical {
         };
         bus.set(o.v_n, v_n);
         bus.set(o.open_phase, self.open.map_or(-1.0, |k| k as f64));
+        for (id, d) in o.diode.iter().zip(self.diode) {
+            bus.set(*id, d);
+        }
         bus.set(o.torque, self.torque(&s, th, lambda));
         bus.set(
             o.p_cu,
@@ -730,7 +783,10 @@ impl PlantModule for MotorElectrical {
     fn get_param(&self, name: &str) -> Option<f64> {
         let p = &self.p;
         Some(match name {
-            "open_phase" => self.open.or(self.pending).map_or(-1.0, |k| k as f64),
+            "open_phase" => self
+                .open
+                .or(self.first_pending())
+                .map_or(-1.0, |k| k as f64),
             "electrical.r_phase" => p.r,
             "electrical.l_d" => p.ld,
             "electrical.l_q" => p.lq,
@@ -794,18 +850,23 @@ impl PlantModule for MotorElectrical {
         std::mem::take(&mut self.jump)
     }
     fn n_events(&self) -> usize {
-        3
+        5
     }
     fn event_functions(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, g: &mut [f64]) {
-        // 0: the pending phase's current; constant (no crossing) otherwise.
-        g[0] = match self.pending {
-            Some(k) => self.pending_sign * Self::phase_current(&self.state(x, off, bus).0, k),
-            None => 1.0,
-        };
-        // 1, 2: a leg-driven floating terminal v_kT = v_n + e_k reaching V_bus + V_f (high
+        // 0, 1, 2: each pending phase's current; constant (no crossing) otherwise.
+        (g[0], g[1], g[2]) = (1.0, 1.0, 1.0);
+        if self.pending.iter().any(Option::is_some) {
+            let s = self.state(x, off, bus).0;
+            for (k, gk) in g.iter_mut().take(3).enumerate() {
+                if let Some(sign) = self.pending[k] {
+                    *gk = sign * Self::phase_current(&s, k);
+                }
+            }
+        }
+        // 3, 4: a leg-driven floating terminal v_kT = v_n + e_k reaching V_bus + V_f (high
         // diode) or −V_f (low diode) (EQ-MOT-12). v_n from the connected pair's terminal
         // voltages and EMFs on the bus (this outputs pass).
-        (g[1], g[2]) = (1.0, 1.0);
+        (g[3], g[4]) = (1.0, 1.0);
         if let (Some(k), Some(l), false) = (self.open, self.legs, self.fault_open) {
             let (y, z) = ((k + 1) % 3, (k + 2) % 3);
             let (v, e) = (
@@ -814,8 +875,8 @@ impl PlantModule for MotorElectrical {
             );
             let v_n = 0.5 * (v[y] + v[z] - e[y] - e[z]);
             let v_k = v_n + e[k];
-            g[1] = bus.get(l.v_bus) + l.v_f - v_k;
-            g[2] = v_k + l.v_f;
+            g[3] = bus.get(l.v_bus) + l.v_f - v_k;
+            g[4] = v_k + l.v_f;
         }
     }
     fn on_event(
@@ -827,9 +888,12 @@ impl PlantModule for MotorElectrical {
         _bus: &mut SignalBus,
     ) {
         match idx {
-            0 => {
-                if let Some(k) = self.pending.take() {
-                    self.enter_open(k, x_own);
+            0..=2 => {
+                // The first pending phase to reach zero opens (one floating phase at a
+                // time; two at zero is the zero-current mode, P10).
+                if self.pending[idx].is_some() {
+                    self.pending = [None; 3];
+                    self.enter_open(idx, x_own);
                 }
             }
             _ => {
@@ -838,12 +902,13 @@ impl PlantModule for MotorElectrical {
                 // the high diode (i < 0) or into the low one (i > 0) and the phase opens
                 // again at its next zero while the leg stays Off.
                 self.reconnect(x_own);
-                self.pending = Some(k);
-                self.pending_sign = if idx == 1 { -1.0 } else { 1.0 };
+                let d = if idx == 3 { -1.0 } else { 1.0 };
+                self.pending[k] = Some(d);
+                self.diode[k] = d;
             }
         }
     }
-    fn after_discrete(&mut self, _t: f64, x_own: &mut [f64], bus: &SignalBus) {
+    fn after_discrete(&mut self, t: f64, x_own: &mut [f64], bus: &SignalBus) {
         let Some(l) = self.legs else { return };
         if self.fault_open {
             return;
@@ -854,22 +919,36 @@ impl PlantModule for MotorElectrical {
         {
             self.reconnect(x_own);
         }
-        if let Some(k) = self.pending
-            && !off[k]
-        {
-            self.pending = None;
+        for (k, &leg_off) in off.iter().enumerate() {
+            if !leg_off {
+                self.pending[k] = None;
+                self.diode[k] = 0.0;
+            }
         }
-        if self.open.is_none() && self.pending.is_none() {
-            let offs: Vec<usize> = (0..3).filter(|&k| off[k]).collect();
-            if offs.len() > 1 && !self.warned_two_off {
-                // Zero-current mode (all/two legs Off) is not modelled yet (P10).
+        let offs: Vec<usize> = (0..3).filter(|&k| off[k]).collect();
+        // Two legs Off together for longer than any dead time: a commanded state (e.g.
+        // all-Off), not a PWM transient. Zero-current mode is not modelled yet (P10).
+        if offs.len() > 1 {
+            let since = *self.two_off_since.get_or_insert(t);
+            if t - since > TWO_OFF_WARN && !self.warned_two_off {
                 self.warned_two_off = true;
                 self.warnings.push(
-                    "two or more inverter legs are Off: only the first is modelled as floating (zero-current mode arrives with faults, P10)".into(),
+                    "two or more inverter legs stay Off: one phase at a time is modelled as floating (zero-current mode arrives with faults, P10)".into(),
                 );
             }
-            if let Some(&k) = offs.first() {
-                self.request_open(k, x_own);
+        } else {
+            self.two_off_since = None;
+        }
+        // Every Off leg waits for its current zero; the first to reach it opens.
+        if self.open.is_none() {
+            for &k in &offs {
+                if self.pending[k].is_none() {
+                    self.request_open(k, x_own);
+                }
+                if self.open.is_some() {
+                    self.pending = [None; 3];
+                    break;
+                }
             }
         }
     }
@@ -886,7 +965,8 @@ impl PlantModule for MotorElectrical {
         let p = &self.p;
         serde_json::json!({
             "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda,
-            "open": self.open, "pending": self.pending, "pending_sign": self.pending_sign,
+            "open": self.open, "pending": self.pending, "two_off_since": self.two_off_since,
+            "diode": self.diode,
             "last_theta_e": self.last_theta_e, "last_lambda": self.last_lambda, "jump": self.jump, "warned": self.warned,
             "fault_open": self.fault_open,
         })
@@ -902,15 +982,30 @@ impl PlantModule for MotorElectrical {
             serde_json::from_value(v.get(key).cloned().unwrap_or_default())
                 .map_err(|e| e.to_string())
         };
-        let (open, pending) = (k("open")?, k("pending")?);
-        let (sign, th, lam, jump) = (
-            f("pending_sign")?,
-            f("last_theta_e")?,
-            f("last_lambda")?,
-            f("jump")?,
-        );
+        let open = k("open")?;
+        // Per-phase pending signs; snapshots from before P08.T10 hold one phase + sign.
+        let raw = v.get("pending").cloned().unwrap_or_default();
+        let pending: [Option<f64>; 3] = match serde_json::from_value(raw.clone()) {
+            Ok(p) => p,
+            Err(_) => {
+                let one: Option<usize> = serde_json::from_value(raw).map_err(|e| e.to_string())?;
+                let mut p = [None; 3];
+                if let Some(k) = one.filter(|&k| k < 3) {
+                    p[k] = Some(f("pending_sign")?);
+                }
+                p
+            }
+        };
+        let two_off_since: Option<f64> =
+            serde_json::from_value(v.get("two_off_since").cloned().unwrap_or_default())
+                .map_err(|e| e.to_string())?;
+        let (th, lam, jump) = (f("last_theta_e")?, f("last_lambda")?, f("jump")?);
         (self.p.r, self.p.ld, self.p.lq, self.p.lambda) = (r, ld, lq, lambda);
-        (self.open, self.pending, self.pending_sign) = (open, pending, sign);
+        (self.open, self.pending, self.two_off_since) = (open, pending, two_off_since);
+        self.diode = match v.get("diode") {
+            Some(d) => serde_json::from_value(d.clone()).map_err(|e| e.to_string())?,
+            None => [0.0; 3],
+        };
         (self.last_theta_e, self.last_lambda, self.jump) = (th, lam, jump);
         self.cache = None;
         self.warned = v

@@ -34,6 +34,15 @@ pub fn psu_current(v_set: f64, i_lim: f64, r_out: f64, v: f64) -> f64 {
     ((v_set - v) / r_out).clamp(0.0, i_lim)
 }
 
+/// Source resistance R_o (PSU) or R0 (battery); ∞ for the ideal source (no bus state).
+fn r_src(s: &Source) -> f64 {
+    match s {
+        Source::Ideal { .. } => f64::INFINITY,
+        Source::Psu { r_out, .. } => *r_out,
+        Source::Battery { pack, .. } => pack.r0,
+    }
+}
+
 struct Ids {
     v: SignalId,
     i_src: SignalId,
@@ -57,6 +66,10 @@ pub struct DcBus {
     /// Inverter DC-link and switching-loss currents (EQ-INV-08/09).
     load: Vec<SignalId>,
     ids: Ids,
+    /// R_src·C at build time: the D-018 step cap; live edits may not go below it.
+    tau_build: f64,
+    /// Energy injected by parameter changes (½ΔC·V²) since the last take.
+    jump: f64,
 }
 
 impl DcBus {
@@ -88,6 +101,7 @@ impl DcBus {
         };
         // A bus that starts above V_on starts with the chopper conducting (EQ-SUP-05).
         let ch_on = chopper.is_some_and(|ch| v0 > ch.v_on);
+        let tau_build = r_src(&src) * c;
         Ok(Self {
             src,
             c,
@@ -96,6 +110,8 @@ impl DcBus {
             v0,
             load: vec![],
             ids,
+            tau_build,
+            jump: 0.0,
         })
     }
 
@@ -148,6 +164,70 @@ impl PlantModule for DcBus {
     }
     fn param_roots(&self) -> Vec<String> {
         vec!["supply".into()]
+    }
+    fn params(&self) -> Vec<(String, String)> {
+        let mut v = vec![("capacitance".to_string(), "F".to_string())];
+        match self.src {
+            Source::Ideal { .. } => v.push(("supply.voltage".into(), "V".into())),
+            Source::Psu { .. } => {
+                v.push(("supply.voltage".into(), "V".into()));
+                v.push(("supply.current_limit".into(), "A".into()));
+                v.push(("supply.r_out".into(), "ohm".into()));
+            }
+            Source::Battery { .. } => {}
+        }
+        v
+    }
+    fn get_param(&self, name: &str) -> Option<f64> {
+        match (name, &self.src) {
+            ("capacitance", _) => Some(self.c),
+            ("supply.voltage", Source::Ideal { v }) => Some(*v),
+            ("supply.voltage", Source::Psu { v_set, .. }) => Some(*v_set),
+            ("supply.current_limit", Source::Psu { i_lim, .. }) => Some(*i_lim),
+            ("supply.r_out", Source::Psu { r_out, .. }) => Some(*r_out),
+            _ => None,
+        }
+    }
+    fn set_param(&mut self, name: &str, v: f64, x_own: &mut [f64]) -> Result<f64, String> {
+        if !(v.is_finite() && v > 0.0) {
+            return Err(format!("`{name}` must be > 0, got {v}"));
+        }
+        // R·C below the build-time value would break the D-018 step cap.
+        let check_tau = |r: f64, c: f64, tau: f64| {
+            if r * c < tau * (1.0 - 1e-12) {
+                Err(format!(
+                    "`{name}` = {v} makes R·C = {:.3e} s, below the {:.3e} s the step size was chosen for: rebuild (reset) to apply it",
+                    r * c,
+                    tau
+                ))
+            } else {
+                Ok(())
+            }
+        };
+        let tau = self.tau_build;
+        match (name, &mut self.src) {
+            ("capacitance", src) => {
+                check_tau(r_src(src), v, tau)?;
+                if let Some(&vb) = x_own.first() {
+                    // ½ΔC·V² enters the stored energy at once (EQ-ENER-02 jump).
+                    self.jump += 0.5 * (v - self.c) * vb * vb;
+                }
+                Ok(std::mem::replace(&mut self.c, v))
+            }
+            ("supply.voltage", Source::Ideal { v: old }) => Ok(std::mem::replace(old, v)),
+            ("supply.voltage", Source::Psu { v_set, .. }) => Ok(std::mem::replace(v_set, v)),
+            ("supply.current_limit", Source::Psu { i_lim, .. }) => Ok(std::mem::replace(i_lim, v)),
+            ("supply.r_out", Source::Psu { r_out, .. }) => {
+                check_tau(v, self.c, tau)?;
+                Ok(std::mem::replace(r_out, v))
+            }
+            _ => Err(format!(
+                "unknown parameter `{name}` for this source (battery parameters change on a rebuild)"
+            )),
+        }
+    }
+    fn take_external_energy(&mut self) -> f64 {
+        std::mem::take(&mut self.jump)
     }
     fn n_states(&self) -> usize {
         match self.src {
@@ -295,13 +375,41 @@ impl PlantModule for DcBus {
         }
     }
     fn save(&self) -> serde_json::Value {
-        serde_json::json!({ "ch_on": self.ch_on })
+        let (v, i_lim, r_out) = match self.src {
+            Source::Ideal { v } => (v, 0.0, 0.0),
+            Source::Psu {
+                v_set,
+                i_lim,
+                r_out,
+            } => (v_set, i_lim, r_out),
+            Source::Battery { .. } => (0.0, 0.0, 0.0),
+        };
+        serde_json::json!({
+            "ch_on": self.ch_on, "c": self.c, "jump": self.jump,
+            "v": v, "i_lim": i_lim, "r_out": r_out,
+        })
     }
     fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
         self.ch_on = v
             .get("ch_on")
             .and_then(serde_json::Value::as_bool)
             .ok_or("missing `ch_on`")?;
+        let f = |k: &str| {
+            v.get(k)
+                .and_then(serde_json::Value::as_f64)
+                .ok_or(format!("missing `{k}`"))
+        };
+        let (c, jump, sv, si, sr) = (f("c")?, f("jump")?, f("v")?, f("i_lim")?, f("r_out")?);
+        (self.c, self.jump) = (c, jump);
+        match &mut self.src {
+            Source::Ideal { v } => *v = sv,
+            Source::Psu {
+                v_set,
+                i_lim,
+                r_out,
+            } => (*v_set, *i_lim, *r_out) = (sv, si, sr),
+            Source::Battery { .. } => {}
+        }
         Ok(())
     }
 }

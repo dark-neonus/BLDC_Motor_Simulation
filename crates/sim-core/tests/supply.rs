@@ -246,3 +246,47 @@ fn chopper_starts_on_above_v_on() {
     run(&mut e, 1e-5);
     assert_eq!(sig(&e, "bus.chopper_on"), 1.0);
 }
+
+/// D-019 / P07 review #11: bus and PSU parameters are readable and live-settable under
+/// their flat paths; a C change books ½ΔC·V² (energy closes); R·C below the build-time
+/// value (the D-018 step cap) is refused.
+#[test]
+fn bus_and_supply_parameters_live() {
+    use sim_core::engine::commands::{ChangeSource, EngineCommand};
+    let src = Source::Psu {
+        v_set: 24.0,
+        i_lim: 5.0,
+        r_out: 0.02,
+    };
+    let mut e = rig(src, None, |_| 2.0, 5e-6);
+    assert_eq!(e.get_param("bus.capacitance"), Some(C));
+    assert_eq!(e.get_param("supply.r_out"), Some(0.02));
+    assert_eq!(e.get_param("supply.voltage"), Some(24.0));
+    run(&mut e, 1e-3);
+    let set = |e: &mut Engine, path: &str, value: f64| {
+        e.queue(EngineCommand::SetParam {
+            path: path.into(),
+            value,
+            source: ChangeSource::Internal,
+        });
+    };
+    set(&mut e, "bus.capacitance", 2.0 * C);
+    set(&mut e, "supply.current_limit", 1.0);
+    // With C doubled, R = 0.005 gives half the build-time R·C.
+    set(&mut e, "supply.r_out", 0.005);
+    run(&mut e, 3e-3);
+    assert_eq!(e.get_param("bus.capacitance"), Some(2.0 * C));
+    assert_eq!(e.get_param("supply.current_limit"), Some(1.0));
+    assert_eq!(
+        e.get_param("supply.r_out"),
+        Some(0.02),
+        "R·C below the build value: refused"
+    );
+    // The 2 A load now exceeds the 1 A limit: CC mode, the bus sags.
+    assert_eq!(sig(&e, "supply.mode"), 1.0);
+    assert!(
+        sig(&e, "energy.residual").abs() < 1e-6,
+        "{}",
+        sig(&e, "energy.residual")
+    );
+}

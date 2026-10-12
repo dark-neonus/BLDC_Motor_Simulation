@@ -23,7 +23,7 @@ The driver runs from a **DC bus**: a capacitor fed by a lab power supply or a ba
 | $i_{src}$ | current from the source into the bus (+ = supplying) | A | `supply.i` |
 | $i_{dc}, i_{sw}$ | inverter DC-link and switching-loss currents (EQ-INV-08/09) | A | `inverter.i_dc`, `inverter.i_sw` |
 | $i_{ch}$ | brake chopper current | A | `bus.i_chopper` |
-| $V_{set}, I_{lim}, R_o$ | PSU voltage setpoint, current limit, output resistance | V, A, Ω | `supply.psu.*` |
+| $V_{set}, I_{lim}, R_o$ | PSU voltage setpoint, current limit, output resistance | V, A, Ω | `supply.voltage`, `supply.current_limit`, `supply.r_out` (flat paths, D-019) |
 | $SoC$ | battery state of charge (**state**, 0…1) | – | `supply.soc` |
 | $v_1$ | battery RC-branch voltage (**state**) | V | `supply.battery.v_rc` |
 

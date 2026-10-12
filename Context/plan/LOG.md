@@ -495,3 +495,11 @@
 
 ## 2026-10-12 — P08.T08 V-SENS sweep
 - Every V-SENS catalog case has a test named by its id; `cargo nextest run -p sim-core v_sens` → 7/7 pass: 001 (encoder resolution), 002 (latency, pipeline), 003 (noise σ and seed), 004 (Halls), 005 (ADC at pwm.center, switching rig), 006 (offset → dq ripple; the Python half is P11), 007 (quadrature counts and index). Tests renamed, no expectations changed.
+
+## 2026-10-12 — P08.T10 P07 review carry-overs (minors)
+1. Averaged pulse dropping: inverter.md EQ-INV-03 first (effective dead fraction min(t_d/T, d, 1 − d), also in EQ-INV-08), then `leg::dead_eff`; exact at d = 0 (−R_on·i) and d = 1 (V − R_on·i), continuous. Test.
+2. Two legs Off: the motor tracks a pending zero crossing per Off leg (events 0–2; diode bounds moved to 3–4), the first to cross opens. The warning fires only when two legs stay Off for more than 10 µs across discrete events (dead time is shorter). V-INV-004 (b and c share their dead time) asserts no warning.
+3. `motor.open_phase` fault over a leg-driven float: takes it over (same phase) or reconnects and requests the new one; test with the leg turned back on (the fault holds the phase open).
+4. D-019: supply parameters keep the flat `supply.*` paths of the YAML (supply.md, signals.md fixed). `DcBus` exposes `bus.capacitance`, `supply.voltage`, `supply.current_limit`, `supply.r_out` (get/set; C change books ½ΔC·V²; R·C below the build value is refused, D-018 step cap). Test: live edits, CC after a lower limit, residual < 1e-6, refused R.
+5. The Off-leg diode is no longer latched in `outputs()`: the motor publishes the reconnect diode per phase (`motor.diode_x`, set at the event, cleared at the float and when the leg turns on); the inverter reads it, else its turn-off latch (`after_discrete`), else the sign of i / the nearer bound, all without mutation (D-017). Motor snapshots carry `diode`, per-phase `pending`; older single-pending snapshots still restore.
+- `just check-fast` green.

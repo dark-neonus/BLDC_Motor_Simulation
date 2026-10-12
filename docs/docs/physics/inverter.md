@@ -83,6 +83,8 @@ The last term is the **dead-time voltage error**. A diode conducts in **both** d
 - $i_x > 0$: the high side loses $t_d$ of on-time per period;
 - $i_x < 0$: it gains $t_d$.
 
+**Pulse dropping.** Within $t_d$ of $d = 0$ or $d = 1$ the switching model keeps the leg Low or High all period (EQ-INV-02), so there is no dead time to lose. The averaged model uses the effective dead fraction $\min(t_d/T_{pwm},\ d,\ 1-d)$ in place of $t_d/T_{pwm}$ (here and in EQ-INV-08): it is exact at $d = 0$ ($\bar v = -R_{on} i$) and $d = 1$ ($\bar v = V_{bus} - R_{on} i$), and continuous in between.
+
 $\sigma$ smooths the sign with $i_\epsilon$ ≈ 1 % of rated current. A leg commanded Off uses the same diode / floating rule as EQ-INV-01, so six-step floating phases behave the same in both modes.
 
 Validation (V-INV-avg): in steady state, the period-averaged phase currents of the switching model match the averaged model within 1 % of rated current.
