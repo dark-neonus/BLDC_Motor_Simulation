@@ -351,3 +351,10 @@
 - Rule `motor.ratings_thermal` (Warn, `constraints/thermal.rs`): rated continuous current > 1.01·Î_cont at 25 °C. No preset trips it.
 - Tests: closed form + its defining property (steady T_w = T_max exactly); peak time decreasing in current, above the quick bound, and within 5 % of the exact adiabatic R(T) solution at 20·Î_cont (the quick bound with R(T_max) is ~15 % short at high current because R rises during heating: test expectation corrected, not the code); rule fires / stays quiet; sim-core `tests/thermal_limits.rs` V-THERM-002: the engine network held at Î_cont settles at T_max ± 1 K (6020 preset network).
 - `just check` green (155 Rust tests).
+
+## 2026-10-12 — P06.T08 V-MECH/V-THERM sweep + hold-heats-motor
+- All V-MECH (001–009) and V-THERM (001–004) cases have tests: `tests/v_mech.rs`, rotor unit tests renamed `v_mech_003_*` / `v_mech_004_*`, `tests/v_therm.rs`, `tests/thermal_limits.rs` (002), `validation/tests/test_thermal.py` (004). `cargo nextest run -p sim-core v_mech v_therm` → 12 tests.
+- Interim torque mode for the skeleton FOC (INTERIM until P09): block param `ctrl.mode` (0 velocity, 1 torque) and input `ctrl.torque_ref` (load side) → i_q = T/(N·K_t), speed loop off. Scenario `target: {kind: torque}` switches the mode (no ramp); velocity targets switch back. Position targets still error (P09).
+- `presets/scenarios/hold-heats-motor.yaml`: 6020 motor holds 0.75 kg at 20 cm horizontal (θ_L = 90°, gravity torque 1.52 N·m) for 30 s, load friction holds it as K_t drops with magnet temperature. CLI: 5/5 asserts pass, T_w 25 → 33.9 °C, ω exactly 0 after the first sag (10.6 s wall, release). Python V-THERM-004: T_w(t) matches the exact linear network driven by the mean copper loss within 5 % of the rise at 5–30 s.
+- Removed my T04 `load.mount_angle`: the scene already has `initial.theta` / `initial.omega`, which the build ignored; it now uses them (θ_L, ω_L load side). Presets fixed to EQ-CONV-05 (0 = hanging down): arm-servo starts at 0°, arm-step targets 90° (was −90°/0°).
+- `just check` green apart from schemas-check before commit (regenerated schema).

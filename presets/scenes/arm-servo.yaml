@@ -16,4 +16,5 @@ controller:
   position: { rate: 1 kHz, bandwidth: 8 Hz }
   limits: { current: 20 A }
 seed: 1
-initial: { theta: -90 deg }
+# load.theta: 0 = hanging straight down, 90 deg = horizontal (EQ-CONV-05).
+initial: { theta: 0 deg }

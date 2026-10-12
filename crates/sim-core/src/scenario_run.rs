@@ -14,6 +14,7 @@ use crate::engine::time::SimTime;
 use crate::skeleton::scenario::COLUMNS;
 
 const OMEGA_REF: &str = "ctrl.omega_ref";
+const TORQUE_REF: &str = "ctrl.torque_ref";
 /// Ramp resolution: one setpoint step per millisecond.
 const RAMP_STEP: f64 = 1e-3;
 
@@ -49,6 +50,8 @@ enum Ev {
     Signal(String, f64),
     /// Load-shaft torque pulse (torque, duration) (EQ-MECH-08).
     Disturbance(f64, f64),
+    /// Controller mode: 0 velocity, 1 torque (INTERIM skeleton FOC, until P09).
+    Mode(f64),
     Snapshot(String),
     AssertStart(usize),
     AssertEnd(usize),
@@ -116,6 +119,7 @@ fn schedule(sc: &Scenario, asserts: bool) -> Result<Schedule, String> {
         v1: 0.0,
     };
     // A new reference at `t` replaces whatever the previous ramp still had scheduled.
+    let mut torque_mode = false;
     let restart = |s: &mut Schedule, t: f64| {
         s.events
             .retain(|(te, e)| !(matches!(e, Ev::Signal(p, _) if p == OMEGA_REF) && *te > t));
@@ -153,10 +157,30 @@ fn schedule(sc: &Scenario, asserts: bool) -> Result<Schedule, String> {
                 value,
                 ramp: r,
             } => {
-                if *kind != TargetKind::Velocity {
+                if *kind == TargetKind::Position {
                     return Err(format!(
-                        "{at}: {kind:?} targets need the position/torque controllers (P09); the current engine supports velocity"
+                        "{at}: position targets need the position controller (P09); the current engine supports velocity and torque"
                     ));
+                }
+                if *kind == TargetKind::Torque {
+                    // Load-side torque → i_q in the interim FOC; no ramp.
+                    if r.is_some() {
+                        return Err(format!("{at}: torque targets take no ramp"));
+                    }
+                    let tq = value
+                        .value
+                        .si(Kind::Torque)
+                        .map_err(|e| format!("{at}: {e}"))?;
+                    if !torque_mode {
+                        s.events.push((t, Ev::Mode(1.0)));
+                        torque_mode = true;
+                    }
+                    s.events.push((t, Ev::Signal(TORQUE_REF.into(), tq)));
+                    continue;
+                }
+                if torque_mode {
+                    s.events.push((t, Ev::Mode(0.0)));
+                    torque_mode = false;
                 }
                 let w = value
                     .value
@@ -336,6 +360,11 @@ pub fn run(sc: &Scenario, mut b: BuiltScene, asserts: bool) -> Result<RunOutput,
                     };
                     cmds.into_iter().for_each(|c| e.queue(c));
                 }
+                Ev::Mode(m) => e.queue(EngineCommand::SetParam {
+                    path: "ctrl.mode".into(),
+                    value: m,
+                    source: ChangeSource::Scenario,
+                }),
                 Ev::Disturbance(torque, duration) => e.queue(EngineCommand::Disturbance {
                     torque,
                     duration,

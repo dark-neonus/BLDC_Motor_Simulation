@@ -47,17 +47,27 @@ struct FocBlock {
     iq_ref: SignalId,
     /// Gear ratio N: `ctrl.omega_ref` is load-side, the speed loop runs on the motor side.
     ratio: f64,
+    /// `ctrl.torque_ref` (load side) and the design K_t that turns it into i_q.
+    torque_ref: SignalId,
+    kt: f64,
+    /// `ctrl.mode`: velocity (0) or torque (1). INTERIM until P09.
+    torque_mode: bool,
 }
 
 impl DiscreteBlock for FocBlock {
     fn save(&self) -> serde_json::Value {
-        serde_json::json!({ "foc": self.foc.save_state(), "open_loop_vq": self.open_loop_vq })
+        serde_json::json!({
+            "foc": self.foc.save_state(),
+            "open_loop_vq": self.open_loop_vq,
+            "torque_mode": self.torque_mode,
+        })
     }
     fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
         let st: [f64; 5] = serde_json::from_value(v["foc"].clone()).map_err(|e| e.to_string())?;
         self.foc.restore_state(st);
         self.open_loop_vq =
             serde_json::from_value(v["open_loop_vq"].clone()).map_err(|e| e.to_string())?;
+        self.torque_mode = v["torque_mode"].as_bool().ok_or("missing `torque_mode`")?;
         Ok(())
     }
     fn id(&self) -> &str {
@@ -65,6 +75,22 @@ impl DiscreteBlock for FocBlock {
     }
     fn period(&self) -> Option<SimTime> {
         Some(self.period)
+    }
+    fn get_param(&self, name: &str) -> Option<f64> {
+        (name == "mode").then_some(f64::from(u8::from(self.torque_mode)))
+    }
+    fn set_param(&mut self, name: &str, value: f64) -> Result<f64, String> {
+        if name != "mode" {
+            return Err(format!("unknown parameter `{name}`"));
+        }
+        if !matches!(value, 0.0 | 1.0) {
+            return Err(format!(
+                "mode must be 0 (velocity) or 1 (torque), got {value}"
+            ));
+        }
+        let old = f64::from(u8::from(self.torque_mode));
+        self.torque_mode = value == 1.0;
+        Ok(old)
     }
     fn priority(&self) -> u8 {
         priority::CONTROLLER
@@ -74,6 +100,9 @@ impl DiscreteBlock for FocBlock {
             Some(v) => (0.0, v),
             None => {
                 self.foc.omega_ref = self.ratio * ctx.bus.get(self.omega_ref);
+                self.foc.iq_cmd = self
+                    .torque_mode
+                    .then(|| ctx.bus.get(self.torque_ref) / (self.ratio * self.kt));
                 self.foc.update(
                     ctx.bus.get(self.s.i_d),
                     ctx.bus.get(self.s.i_q),
@@ -108,8 +137,9 @@ pub struct SkeletonOptions {
     pub load: Load,
     /// EQ-MECH-09: live load changes keep momentum instead of speed.
     pub conserve_momentum: bool,
-    /// Initial load angle θ_L [rad] (arm mounting offset).
+    /// Initial load angle θ_L [rad] (arm mounting offset) and speed ω_L [rad/s].
     pub theta_l0: f64,
+    pub omega_l0: f64,
     /// Stick–slip friction: motor static/Coulomb (viscous is `PmsmParams::b`) and load.
     pub friction: (Friction, Friction),
     /// Two-inertia backlash (EQ-MECH-04); `None` = rigid.
@@ -138,6 +168,7 @@ impl Default for SkeletonOptions {
             load: Load::None,
             conserve_momentum: false,
             theta_l0: 0.0,
+            omega_l0: 0.0,
             friction: (Friction::default(), Friction::default()),
             backlash: None,
             thermal: None,
@@ -203,6 +234,12 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         "speed setpoint (load side)",
         SignalKind::Input,
     );
+    let torque_ref = reg(
+        "ctrl.torque_ref",
+        "N*m",
+        "torque setpoint (load side; torque mode)",
+        SignalKind::Input,
+    );
     let iq_ref = reg(
         "ctrl.foc.iq_ref",
         "A",
@@ -217,7 +254,7 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         b: mp.b,
         pole_pairs: mp.p,
         theta0: opts.theta_l0 * opts.gearbox.n,
-        omega0: 0.0,
+        omega0: opts.omega_l0 * opts.gearbox.n,
     };
     let rotor = RotorRigid::new(rp, &mut bus, vec![], vec![])
         .expect("unique skeleton signal")
@@ -330,6 +367,9 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         omega_ref,
         iq_ref,
         ratio: opts.ratio,
+        torque_ref,
+        kt: 1.5 * mp.p * mp.lambda,
+        torque_mode: false,
     })];
     Engine::new(plant, bus, blocks, opts.dt_max)
 }

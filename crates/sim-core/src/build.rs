@@ -445,14 +445,14 @@ fn friction(scene: &ResolvedScene) -> Result<(Friction, Friction), BuildError> {
     Ok((motor, load))
 }
 
-/// Initial arm angle (mounting offset, EQ-MECH-06) [rad].
-fn mount_angle(scene: &ResolvedScene) -> Result<f64, BuildError> {
-    match &scene.load {
-        Some(LoadParams::Arm { mount_angle, .. }) => {
-            opt(mount_angle, Kind::Angle, "load.mount_angle")
-        }
-        _ => Ok(0.0),
-    }
+/// Initial load-side angle and speed from `initial.theta` / `initial.omega` (the arm's
+/// mounting offset, EQ-MECH-06: θ_L = 0 is straight down).
+fn initial_load(scene: &ResolvedScene) -> Result<(f64, f64), BuildError> {
+    let i = &scene.initial;
+    Ok((
+        opt(&i.theta, Kind::Angle, "initial.theta")?,
+        opt(&i.omega, Kind::AngularVelocity, "initial.omega")?,
+    ))
 }
 
 /// The scene's load and its EQ-MECH-09 rule (true: conserve momentum).
@@ -570,6 +570,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
     let mp = pmsm_from(&scene.motor, 0.0)?;
     let (load, conserve_momentum) = load(scene)?;
     let (backlash, dt_contact) = backlash(scene, mp.j)?;
+    let (theta_l0, omega_l0) = initial_load(scene)?;
     let dt_max = match scene.fidelity.as_ref().and_then(|f| f.dt_max.as_ref()) {
         Some(p) => si(p, Kind::Time, "fidelity.dt_max")?,
         None => cfg.dt / 10.0,
@@ -585,7 +586,8 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             gearbox: gearbox(scene)?,
             load,
             conserve_momentum,
-            theta_l0: mount_angle(scene)?,
+            theta_l0,
+            omega_l0,
             friction: friction(scene)?,
             backlash,
             thermal: thermal(scene)?,

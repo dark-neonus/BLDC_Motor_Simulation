@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=../../schemas/scenario.schema.json
+# Holding a weight still heats the motor: all the electrical power becomes copper heat.
+# INTERIM drive (P05.T11): the skeleton FOC in torque mode, i_q sized to the gravity
+# torque at 90 deg; the velocity/position loops are off. Load friction holds the arm
+# while the magnets warm up and K_t drops (EQ-THERM-03).
+schema_version: 1
+name: Hold heats motor
+description: A 6020-class motor holds 0.75 kg at 20 cm horizontal for 30 s; the winding warms while nothing moves.
+scene:
+  schema_version: 1
+  name: hold
+  motor: { preset: "builtin:motors/6020-outrunner" }
+  load:
+    kind: arm
+    arm_length: 20 cm
+    arm_mass: 50 g
+    mass: 0.75 kg
+    distance: 20 cm
+    friction: { static_torque: 0.1 N*m, coulomb: 0.08 N*m, viscous: 0.001 }
+  inverter: { preset: "builtin:inverters/small-24v-10a" }
+  supply: { preset: "builtin:supplies/psu-24v-5a" }
+  controller:
+    family: foc
+    current: { rate: 20 kHz, bandwidth: 500 Hz }
+    velocity: { rate: 5 kHz, bandwidth: 30 Hz }
+    position: { rate: 1 kHz, bandwidth: 5 Hz }
+    limits: { current: 5 A }
+  seed: 1
+  # load.theta: 0 = hanging down, 90 deg = horizontal (EQ-CONV-05).
+  initial: { theta: 90 deg, ambient: 25 degC }
+sample: 10 ms
+record: [load.theta, load.omega, motor.i_q, motor.p_cu, thermal.t_winding, thermal.t_stator, thermal.t_housing]
+timeline:
+  # g·M_eff = 9.80665·(0.05·0.2/2 + 0.75·0.2) = 1.52 N·m.
+  - target: { kind: torque, value: 1.52 N*m }
+  - wait: 1 s
+  - assert: { signal: thermal.t_winding, op: lt, value: 27 degC, message: "starts near ambient" }
+  - wait: 29 s
+  - assert: { signal: load.omega, op: eq, value: 0, tol: 0.01, window: 0 s, message: "the arm is held still" }
+  - assert: { signal: load.theta, op: eq, value: 90 deg, tol: 0.02, message: "still horizontal" }
+  - assert: { signal: thermal.t_winding, op: gt, value: 32 degC, message: "the winding has warmed while holding" }
+  - assert: { signal: thermal.t_winding, op: lt, value: 60 degC, message: "but not past the band" }
+  - stop

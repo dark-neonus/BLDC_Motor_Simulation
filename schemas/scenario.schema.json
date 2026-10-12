@@ -1467,17 +1467,6 @@
               "description": "Point mass on the arm.",
               "$ref": "#/$defs/Param"
             },
-            "mount_angle": {
-              "description": "Arm angle from straight down at the start (mounting offset, EQ-MECH-06); default 0.",
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/Param"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
             "on_change": {
               "description": "What a live mass change keeps: speed (default) or momentum (D-007).",
               "$ref": "#/$defs/OnChange",

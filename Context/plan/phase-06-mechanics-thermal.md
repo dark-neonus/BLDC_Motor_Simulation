@@ -77,7 +77,7 @@
   - **Verify:** Unit tests in sim-model against the closed form (EQ-THERM). An integration test **in sim-core** (`crates/sim-core/tests/thermal_limits.rs`, sim-core may depend on sim-model): running I_cont until steady state gives T_max ± 1 K.
   - **Done when:** Passing.
 
-- [ ] **P06.T08** — V-MECH/V-THERM sweep + "hold heats motor" scenario
+- [x] **P06.T08** — V-MECH/V-THERM sweep + "hold heats motor" scenario
   - **Depends:** P06.T02, P06.T03, P06.T04, P06.T05, P06.T07
   - **Do:** Implement all V-MECH and V-THERM catalog cases as Rust tests. Write the scenario `presets/scenarios/hold-heats-motor.yaml` (arm with mass held at 90° using the **interim drive** from P05.T11: the skeleton FOC current loop with a fixed i_q command sized to the gravity torque, and its velocity/position loops disabled; record temperatures; assert the final temperature band).
   - **Verify:** `cargo nextest run -p sim-core v_mech v_therm`; the scenario passes its asserts via the CLI.

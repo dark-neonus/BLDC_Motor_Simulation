@@ -80,6 +80,8 @@ pub struct Foc {
     pub omega_ref: f64,
     /// Last q-current reference [A] (diagnostic).
     pub iq_ref: f64,
+    /// Torque mode: a fixed q-current command [A] replaces the speed loop.
+    pub iq_cmd: Option<f64>,
     int_v: f64,
     int_d: f64,
     int_q: f64,
@@ -92,6 +94,7 @@ impl Foc {
             gains,
             omega_ref: 0.0,
             iq_ref: 0.0,
+            iq_cmd: None,
             int_v: 0.0,
             int_d: 0.0,
             int_q: 0.0,
@@ -131,12 +134,17 @@ impl Foc {
         let dt = self.cfg.dt;
         let g = self.gains;
 
-        // Velocity PI → iq_ref, clamped to ±I_max.
-        let e_v = self.omega_ref - omega;
-        let iq_unsat = g.velocity.kp * e_v + self.int_v;
-        self.iq_ref = iq_unsat.clamp(-self.cfg.i_max, self.cfg.i_max);
-        if iq_unsat == self.iq_ref {
-            self.int_v += g.velocity.ki * e_v * dt;
+        if let Some(i) = self.iq_cmd {
+            // Torque mode: the speed loop is off.
+            self.iq_ref = i.clamp(-self.cfg.i_max, self.cfg.i_max);
+        } else {
+            // Velocity PI → iq_ref, clamped to ±I_max.
+            let e_v = self.omega_ref - omega;
+            let iq_unsat = g.velocity.kp * e_v + self.int_v;
+            self.iq_ref = iq_unsat.clamp(-self.cfg.i_max, self.cfg.i_max);
+            if iq_unsat == self.iq_ref {
+                self.int_v += g.velocity.ki * e_v * dt;
+            }
         }
 
         // Current PIs (id_ref = 0).

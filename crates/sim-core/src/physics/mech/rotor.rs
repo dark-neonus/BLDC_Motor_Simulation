@@ -924,7 +924,7 @@ mod tests {
 
     /// V-MECH-003: a torque step through a rigid gearbox accelerates at T/J_eq.
     #[test]
-    fn torque_step_through_a_gearbox() {
+    fn v_mech_003_torque_step_through_a_gearbox() {
         let load = Load::Flywheel { j: 0.01 };
         let j_eq = 2e-5 + 3e-6 + (2e-4 + 0.01) / 81.0;
         let mut e = engine_with(0.02, params(0.0), GB, load, false);
@@ -940,7 +940,7 @@ mod tests {
     /// EQ-MECH-03: the meshing loss is (1−η)|τ_in·ω_m| whether the motor drives the
     /// flywheel or brakes it (power flowing back through the gearbox).
     #[test]
-    fn gear_loss_in_both_power_directions() {
+    fn v_mech_004_gear_loss_in_both_power_directions() {
         let gb = Gearbox { eta: 0.8, ..GB };
         let j_l = 0.01;
         for (t, w0) in [(0.02, 5.0), (-0.02, 50.0)] {
