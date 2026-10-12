@@ -1,5 +1,7 @@
-//! V-THERM-002 (P06.T07): holding the continuous current from `sim_model::thermal_limits`
-//! on the engine's thermal network settles at T_max (atol 1 K).
+//! V-THERM-002 (P06.T07), network-only form: holding the continuous current from
+//! `sim_model::thermal_limits` on the engine's thermal network settles at T_max (atol
+//! 1 K). The copper loss is restated here; `v_therm.rs` runs the same case through the
+//! motor's own R(T) path.
 
 use sim_core::engine::engine::Engine;
 use sim_core::engine::plant::{Plant, PlantModule};

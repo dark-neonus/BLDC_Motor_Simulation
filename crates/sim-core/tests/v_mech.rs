@@ -150,6 +150,7 @@ fn v_mech_008_impulse() {
     });
     e.step_until(SimTime::from_secs_f64(0.0005)).unwrap();
     assert!(sig(&e, "load.disturbance") > 0.0, "pulse running");
+    assert_eq!(e.get_param("load.disturbance.duration"), Some(0.001));
     e.step_until(SimTime::from_secs_f64(0.003)).unwrap();
     assert_eq!(sig(&e, "load.disturbance"), 0.0, "pulse over after 1 ms");
     let j_tot_l = 81.0 * gb.j_eq(J_M, 0.02);
@@ -360,6 +361,8 @@ fn v_mech_005_backlash_lost_motion() {
         // A fine step, and the build's step cap for this contact (EQ-NUM step table): no
         // chatter or NaN there; RK4 error at the 3.5× larger step allows a 1e-5 residual.
         let mut e = Engine::new(plant, bus, vec![], dt);
+        assert_eq!(e.get_param("gearbox.stiffness"), Some(bl.k));
+        assert_eq!(e.get_param("gearbox.damping"), Some(bl.d));
         // δ at the stroke mid-points (max speed, zero acceleration, contact settled): forward
         // at t = 2 s, backward at t = 1 s and 3 s. The re-engagement impact makes the peak δ
         // larger for a few ms, so peaks are not used.

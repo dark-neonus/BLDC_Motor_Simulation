@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use super::engine::Engine;
 use super::time::SimTime;
 
+/// Snapshot format version. 2: P06/P07 module data (drivetrain friction/backlash/
+/// disturbance, thermal, motor flags, inverter latches, bus chopper, FOC torque mode).
+pub const SNAPSHOT_VERSION: u32 = 2;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
     pub version: u32,
@@ -47,7 +51,7 @@ impl Snapshot {
 impl Engine {
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
-            version: 1,
+            version: SNAPSHOT_VERSION,
             time: self.time,
             x: self.x.clone(),
             bus: self.bus.values().to_vec(),
@@ -90,6 +94,12 @@ impl Engine {
     }
 
     fn restore_unchecked(&mut self, s: &Snapshot) -> Result<(), SnapshotError> {
+        if s.version != SNAPSHOT_VERSION {
+            return Err(SnapshotError::Mismatch(format!(
+                "snapshot format v{} (this build reads v{SNAPSHOT_VERSION}); module data changed",
+                s.version
+            )));
+        }
         // Validate everything before mutating anything (imported files may not match).
         let ids: Vec<&str> = self.blocks().iter().map(|b| b.id()).collect();
         let names: Vec<&str> = self.plant.modules().iter().map(|m| m.name()).collect();

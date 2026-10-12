@@ -129,6 +129,13 @@ impl Foc {
         self.int_q = 0.0;
     }
 
+    /// Bumpless transfer into velocity mode: the speed integrator restarts from the
+    /// present i_q reference (not the stale value from before torque mode); only the
+    /// P action on the speed error changes i_q at the switch.
+    pub fn bumpless_to_velocity(&mut self) {
+        self.int_v = self.iq_ref;
+    }
+
     /// One controller update from measured id, iq [A] and ω [rad/s]; returns (vd, vq) [V].
     pub fn update(&mut self, id: f64, iq: f64, omega: f64) -> (f64, f64) {
         let dt = self.cfg.dt;
@@ -171,6 +178,42 @@ impl Foc {
 mod tests {
     use super::*;
     use crate::fixtures::dq_pmsm::Pmsm;
+
+    /// Torque → velocity at zero speed error leaves i_q where torque mode had it.
+    #[test]
+    fn torque_to_velocity_is_bumpless() {
+        let mp = PmsmParams::skeleton_6020();
+        let cfg = FocConfig::skeleton();
+        let mut foc = Foc::new(cfg, FocGains::design(&mp, &cfg));
+        let mut motor = Pmsm::new(mp);
+        let substeps = (cfg.dt / 5e-6).round() as usize;
+        let mut run = |foc: &mut Foc, secs: f64| {
+            for _ in 0..(secs / cfg.dt).round() as usize {
+                let s = motor.state;
+                let (vd, vq) = foc.update(s.id, s.iq, s.omega);
+                for _ in 0..substeps {
+                    motor.step(vd, vq, 5e-6);
+                }
+            }
+            motor.state.omega
+        };
+        foc.omega_ref = 20.0;
+        run(&mut foc, 0.5);
+        let stale = foc.save_state()[0];
+        foc.iq_cmd = Some(0.5);
+        let w = run(&mut foc, 0.05);
+        assert!(
+            (stale - 0.5).abs() > 0.1,
+            "the test needs a stale integrator: {stale}"
+        );
+        foc.iq_cmd = None;
+        foc.omega_ref = w;
+        foc.bumpless_to_velocity();
+        let s = motor.state;
+        foc.update(s.id, s.iq, s.omega);
+        // Only the P term on the (tiny) speed change since `w` was read.
+        assert!((foc.iq_ref - 0.5).abs() < 1e-6, "{}", foc.iq_ref);
+    }
 
     /// Speed step 0 → 20 rad/s: enters the ±2 % band before 0.5 s and *stays* in it until
     /// the end of a 1 s run, overshoot < 20 %, and |i_q| never exceeds I_max.

@@ -75,6 +75,11 @@ impl DiscreteBlock for FocBlock {
         self.open_loop_vq =
             serde_json::from_value(v["open_loop_vq"].clone()).map_err(|e| e.to_string())?;
         self.torque_mode = v["torque_mode"].as_bool().ok_or("missing `torque_mode`")?;
+        // `iq_cmd` is rewritten every tick; clearing it keeps a stale torque command
+        // from looking like a mode switch on the first tick after the restore.
+        if !self.torque_mode {
+            self.foc.iq_cmd = None;
+        }
         Ok(())
     }
     fn id(&self) -> &str {
@@ -107,6 +112,12 @@ impl DiscreteBlock for FocBlock {
             Some(v) => (0.0, v),
             None => {
                 self.foc.omega_ref = self.ratio * ctx.bus.get(self.omega_ref);
+                if self.foc.iq_cmd.is_some() && !self.torque_mode {
+                    // Torque → velocity: restart the speed integrator from i_q.
+                    self.foc.bumpless_to_velocity();
+                }
+                // The torque command uses the design K_t = 1.5·p·λ_ref and the ideal
+                // ratio: it ignores λ(T) and the gearbox efficiency η (INTERIM, P09).
                 self.foc.iq_cmd = self
                     .torque_mode
                     .then(|| ctx.bus.get(self.torque_ref) / (self.ratio * self.kt));

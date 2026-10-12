@@ -9,7 +9,7 @@ use sim_core::engine::time::SimTime;
 use sim_core::physics::mech::rotor::{RotorParams, RotorRigid};
 use sim_core::physics::motor::backemf::Shape;
 use sim_core::physics::motor::electrical::{
-    ElectricalInputs, ElectricalParams, MotorElectrical, RTemperature,
+    ElectricalInputs, ElectricalParams, LambdaTemperature, MotorElectrical, RTemperature,
 };
 use sim_core::physics::thermal::{Thermal, ThermalInputs, ThermalParams};
 
@@ -218,6 +218,172 @@ fn steady_current(t_w: f64) -> f64 {
 fn v_therm_003_resistance_follows_winding_temperature() {
     let ratio = steady_current(293.15) / steady_current(373.15);
     assert!((ratio / 1.3144 - 1.0).abs() < 1e-9, "{ratio}");
+}
+
+/// Locked motor (rotor at θ_e = π/2, so a phase-a current is pure i_q) at a DC
+/// voltage on phase a, magnet held at `t_m` with α_Br = −0.0012/K: steady torque.
+fn locked_torque(t_m: f64) -> f64 {
+    let mut bus = SignalBus::new();
+    let v = ["inverter.v_a", "inverter.v_b", "inverter.v_c"]
+        .map(|n| bus.register(n, "V", "", SignalKind::Output).unwrap());
+    let tm = bus
+        .register("thermal.t_magnet", "K", "", SignalKind::Output)
+        .unwrap();
+    let rp = RotorParams {
+        j: 1e-4,
+        j_load: 0.0,
+        b: 0.0,
+        pole_pairs: 7.0,
+        theta0: std::f64::consts::FRAC_PI_2 / 7.0,
+        omega0: 0.0,
+    };
+    let rotor = RotorRigid::new(rp, &mut bus, vec![], vec![])
+        .unwrap()
+        .with_locked(true);
+    let inp = ElectricalInputs {
+        v,
+        theta_e: bus.id("motor.theta_e").unwrap(),
+        omega_e: bus.id("motor.omega_e").unwrap(),
+    };
+    let ep = ElectricalParams {
+        r: 1.0,
+        ld: 2.5e-3,
+        lq: 2.5e-3,
+        lambda: 0.03,
+        pole_pairs: 7.0,
+        shape: Shape::Sinusoidal,
+        i_d0: 0.0,
+        i_q0: 0.0,
+        theta_e0: std::f64::consts::FRAC_PI_2,
+        saturation: None,
+    };
+    let motor = MotorElectrical::new(ep, inp, &mut bus)
+        .unwrap()
+        .with_lambda_temperature(LambdaTemperature {
+            t_magnet: tm,
+            alpha_br: -0.0012,
+            t_ref: 293.15,
+            t_start: t_m,
+        });
+    let mut plant = Plant::new();
+    plant.add(Box::new(Fixed(vec![
+        (v[0], 1.0),
+        (v[1], 0.0),
+        (v[2], 0.0),
+        (tm, t_m),
+    ])));
+    plant.add(Box::new(rotor));
+    plant.add(Box::new(motor));
+    let mut e = Engine::new(plant, bus, vec![], 1e-5);
+    e.step_until(SimTime::from_secs_f64(0.1)).unwrap();
+    sig(&e, "motor.torque_em")
+}
+
+/// EQ-THERM-03: magnets at 80 °C vs 20 °C → K_t (torque at the same current) lower by
+/// α_Br·60 K = 7.2 %, rtol 1e-9.
+#[test]
+fn lambda_temperature_lowers_torque_per_amp() {
+    let (cold, hot) = (locked_torque(293.15), locked_torque(353.15));
+    // i_a = 2/3 A is −i_q here: T = 1.5·p·λ·i_q = −0.21 N·m at 20 °C.
+    assert!((cold + 0.21).abs() < 1e-9, "{cold}");
+    assert!(
+        (hot / cold / (1.0 - 0.0012 * 60.0) - 1.0).abs() < 1e-9,
+        "{hot} / {cold}"
+    );
+}
+
+/// V-THERM-002 through the motor's own R(T): a locked motor fed V = 1.5·R(T_max)·Î_cont
+/// on phase a (i_a = 2V/(3R) with a floating neutral) has its one equilibrium at
+/// T_w = T_max, i_a = Î_cont. The capacitances are scaled by 1e-4 so the network
+/// settles in seconds; Î_cont (EQ-THERM-05) does not depend on them. atol 1 K.
+#[test]
+fn v_therm_002_continuous_current_through_the_motor() {
+    use sim_model::thermal_limits::{ThermalModel, continuous_current};
+    let m = ThermalModel {
+        r_ref: 1.8,
+        t_ref: 293.15,
+        r_ws: 0.5,
+        r_sh: 0.3,
+        r_ha: 4.91583,
+        c_w: 27.027,
+        c_s: 75.348,
+        c_h: 168.48,
+        t_max: 398.15,
+    };
+    let t_amb = 298.15;
+    let ic = continuous_current(&m, t_amb).unwrap();
+    let mut bus = SignalBus::new();
+    let v = ["inverter.v_a", "inverter.v_b", "inverter.v_c"]
+        .map(|n| bus.register(n, "V", "", SignalKind::Output).unwrap());
+    let p = ThermalParams {
+        c_w: m.c_w * 1e-4,
+        c_s: m.c_s * 1e-4,
+        c_h: m.c_h * 1e-4,
+        r_ws: m.r_ws,
+        r_sh: m.r_sh,
+        r_ha: m.r_ha,
+        t_amb,
+        t_init: t_amb,
+        t_max: m.t_max,
+        kappa: 0.0,
+        outrunner: true,
+    };
+    let th = Thermal::new(p, &mut bus).unwrap();
+    let rp = RotorParams {
+        j: 1e-4,
+        j_load: 0.0,
+        b: 0.0,
+        pole_pairs: 7.0,
+        theta0: 0.0,
+        omega0: 0.0,
+    };
+    let rotor = RotorRigid::new(rp, &mut bus, vec![], vec![])
+        .unwrap()
+        .with_locked(true);
+    let inp = ElectricalInputs {
+        v,
+        theta_e: bus.id("motor.theta_e").unwrap(),
+        omega_e: bus.id("motor.omega_e").unwrap(),
+    };
+    let ep = ElectricalParams {
+        r: m.r_ref,
+        ld: 2.5e-3,
+        lq: 2.5e-3,
+        lambda: 0.03,
+        pole_pairs: 7.0,
+        shape: Shape::Sinusoidal,
+        i_d0: 0.0,
+        i_q0: 0.0,
+        theta_e0: 0.0,
+        saturation: None,
+    };
+    let motor = MotorElectrical::new(ep, inp, &mut bus)
+        .unwrap()
+        .with_r_temperature(RTemperature {
+            t_winding: bus.id("thermal.t_winding").unwrap(),
+            t_ref: m.t_ref,
+        });
+    let th = th.with_inputs(ThermalInputs {
+        p_cu: Some(bus.id("motor.p_cu").unwrap()),
+        ..Default::default()
+    });
+    let v_a = 1.5 * m.r(m.t_max) * ic;
+    let mut plant = Plant::new();
+    plant.add(Box::new(Fixed(vec![(v[0], v_a), (v[1], 0.0), (v[2], 0.0)])));
+    plant.add(Box::new(th));
+    plant.add(Box::new(rotor));
+    plant.add(Box::new(motor));
+    let mut e = Engine::new(plant, bus, vec![], 2e-5);
+    // Slowest time constant ≈ 0.13 s here: 3 s is steady.
+    e.step_until(SimTime::from_secs_f64(3.0)).unwrap();
+    let t_w = sig(&e, "thermal.t_winding");
+    assert!(
+        (t_w - m.t_max).abs() < 1.0,
+        "T_w = {t_w} K vs {} K",
+        m.t_max
+    );
+    let i_a = sig(&e, "motor.i_a");
+    assert!((i_a / ic - 1.0).abs() < 1e-3, "i_a = {i_a} vs Î_cont {ic}");
 }
 
 /// Overheat warnings: approaching (T_max − 10 K) and over T_max, each raised once.

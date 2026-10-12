@@ -101,6 +101,8 @@ pub struct RotorRigid {
     /// Disturbance pulse torque on the load shaft while one runs (EQ-MECH-08); its
     /// remaining time is state 2, and a state event ends it.
     dist: f64,
+    /// Length of the last commanded disturbance pulse [s] (for `get_param`).
+    dist_dur: f64,
     /// Motor-bearing static/Coulomb friction (its viscous part is `p.b`).
     fr_m: Friction,
     /// Load-side friction (lumped onto the motor shaft when rigid).
@@ -194,6 +196,7 @@ impl RotorRigid {
             ids,
             jump: 0.0,
             dist: 0.0,
+            dist_dur: 0.0,
             fr_m: Friction::default(),
             fr_l: Friction::default(),
             mode: start_mode(p.omega0),
@@ -304,11 +307,19 @@ impl RotorRigid {
                 w,
                 j_eq,
             );
-            // Gear loss from the lossless solution (EQ-MECH-03, one pass); 0 while stuck.
+            // Gear loss from the lossless solution (EQ-MECH-03, one pass); 0 while stuck. The
+            // load's share of the lumped friction counts in T_L for τ_in (EQ-MECH-05
+            // clarifications): −dir·T_c,L − b_L·ω_L on the load shaft while slipping.
             let t_gl = if m.held {
                 0.0
             } else {
-                self.gb.loss_torque(m.a, t_l, self.load.inertia(), w)
+                let dir = match self.mode {
+                    Mode::Slip { dir } => dir,
+                    Mode::Stick => m.t_a.signum(),
+                };
+                let fr_share = -dir * self.fr_l.t_c - self.fr_l.b * w_l;
+                self.gb
+                    .loss_torque(m.a, t_l + fr_share, self.load.inertia(), w)
             };
             m.a += t_gl / j_eq;
             return Dyn {
@@ -620,7 +631,10 @@ impl PlantModule for RotorRigid {
             "gearbox.j_in" => Some(self.gb.j_in),
             "gearbox.j_out" => Some(self.gb.j_out),
             "gearbox.backlash" => Some(self.backlash.map_or(0.0, |b| b.width)),
+            "gearbox.stiffness" => self.backlash.map(|b| b.k),
+            "gearbox.damping" => self.backlash.map(|b| b.d),
             "load.disturbance.torque" => Some(self.dist),
+            "load.disturbance.duration" => Some(self.dist_dur),
             _ => self.load.get(name),
         }
     }
@@ -633,6 +647,7 @@ impl PlantModule for RotorRigid {
                 if !(v.is_finite() && v > 0.0) {
                     return Err(format!("duration must be > 0, got {v}"));
                 }
+                self.dist_dur = v;
                 return Ok(std::mem::replace(&mut x_own[2], v));
             }
             "load.disturbance.torque" => {
@@ -767,7 +782,7 @@ impl PlantModule for RotorRigid {
         serde_json::json!({
             "j": self.p.j, "b": self.p.b, "locked": self.locked,
             "eta": self.gb.eta, "j_in": self.gb.j_in, "j_out": self.gb.j_out,
-            "load": self.load, "jump": self.jump, "dist": self.dist,
+            "load": self.load, "jump": self.jump, "dist": self.dist, "dist_dur": self.dist_dur,
             "fr_m": self.fr_m, "fr_l": self.fr_l, "mode": self.mode, "mode_l": self.mode_l,
         })
     }
@@ -778,7 +793,7 @@ impl PlantModule for RotorRigid {
                 .ok_or(format!("missing `{k}`"))
         };
         let de = |k: &str| v.get(k).cloned().ok_or(format!("missing `{k}`"));
-        let (j, b, dist) = (f("j")?, f("b")?, f("dist")?);
+        let (j, b, dist, dist_dur) = (f("j")?, f("b")?, f("dist")?, f("dist_dur")?);
         let (eta, j_in, j_out, jump) = (f("eta")?, f("j_in")?, f("j_out")?, f("jump")?);
         let locked = v
             .get("locked")
@@ -791,7 +806,7 @@ impl PlantModule for RotorRigid {
         let mode_l: Mode = serde_json::from_value(de("mode_l")?).map_err(|e| e.to_string())?;
         (self.p.j, self.p.b, self.locked) = (j, b, locked);
         (self.gb.eta, self.gb.j_in, self.gb.j_out) = (eta, j_in, j_out);
-        (self.load, self.jump, self.dist) = (load, jump, dist);
+        (self.load, self.jump, self.dist, self.dist_dur) = (load, jump, dist, dist_dur);
         (self.fr_m, self.fr_l, self.mode, self.mode_l) = (fr_m, fr_l, mode, mode_l);
         Ok(())
     }
