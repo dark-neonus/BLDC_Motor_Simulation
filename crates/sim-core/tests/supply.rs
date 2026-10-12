@@ -185,3 +185,18 @@ fn chopper_clamps_regen() {
         sig(&e, "energy.residual")
     );
 }
+
+/// V-SUP-005: constant discharge: 3600·Q·ΔSoC = ∫i_src dt = I·t + C·ΔV_bus exactly (RK4
+/// keeps this linear invariant), rtol 1e-9.
+#[test]
+fn v_sup_005_battery_soc_integration() {
+    let b = pack();
+    let q = b.q_ah;
+    let src = Source::Battery { pack: b, soc0: 0.8 };
+    let mut e = rig(src, None, |_| 10.0, 5e-6);
+    let v0 = sig(&e, "bus.v");
+    run(&mut e, 0.5);
+    let charge = 3600.0 * q * (0.8 - sig(&e, "supply.soc"));
+    let want = 10.0 * 0.5 + C * (sig(&e, "bus.v") - v0);
+    assert!((charge / want - 1.0).abs() < 1e-9, "{charge} vs {want}");
+}

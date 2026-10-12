@@ -609,14 +609,17 @@ mod tests {
 
     /// P07.T12: scenes drive the motor through SVPWM → inverter → DC bus with the scene's
     /// PSU, averaged by default and switching on request; energy closes through the chain.
+    /// V-INV-001: in FOC steady state the two modes agree on the (PWM-center-sampled,
+    /// i.e. ripple-averaged) currents within 1 % of rated (the 5 A limit).
     #[test]
-    fn scenes_drive_through_inverter_and_bus() {
+    fn v_inv_001_scenes_drive_through_inverter_and_bus() {
+        let mut iq = vec![];
         for mode in [
             "",
             "  fidelity: { inverter_mode: switching, dt_max: 0.5 us }\n",
         ] {
             let o = go(&format!(
-                "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: {{ preset: \"builtin:motors/4108-outrunner\" }}\n  inverter: {{ preset: \"builtin:inverters/small-24v-10a\" }}\n  supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n  controller: {{ preset: \"builtin:controllers/foc-default\" }}\n{mode}sample: 1 ms\nrecord: [motor.omega, bus.v, inverter.p_loss, energy.residual]\ntimeline:\n  - target: {{ kind: velocity, value: 20 rad/s, ramp: 0.05 s }}\n  - wait: 0.1 s\n"
+                "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: {{ preset: \"builtin:motors/4108-outrunner\" }}\n  inverter: {{ preset: \"builtin:inverters/small-24v-10a\" }}\n  supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n  controller: {{ preset: \"builtin:controllers/foc-default\" }}\n{mode}sample: 1 ms\nrecord: [motor.omega, bus.v, inverter.p_loss, energy.residual, motor.i_d, motor.i_q]\ntimeline:\n  - target: {{ kind: velocity, value: 20 rad/s, ramp: 0.05 s }}\n  - wait: 0.1 s\n"
             ));
             let last = o.rows.last().unwrap();
             assert!((last[1] - 20.0).abs() < 1.0, "{mode}: ω {}", last[1]);
@@ -624,7 +627,71 @@ mod tests {
             assert!(last[2] > 22.0 && last[2] < 25.0, "{mode}: bus {}", last[2]);
             assert!(last[3] > 0.0, "{mode}: inverter loss");
             assert!(last[4].abs() < 1e-3, "{mode}: residual {}", last[4]);
+            let tail = &o.rows[o.rows.len() - 20..];
+            let mean = |k: usize| tail.iter().map(|r| r[k]).sum::<f64>() / tail.len() as f64;
+            iq.push((mean(5), mean(6)));
         }
+        let ((d0, q0), (d1, q1)) = (iq[0], iq[1]);
+        assert!(
+            (d0 - d1).abs() < 0.05 && (q0 - q1).abs() < 0.05,
+            "avg ({d0}, {q0}) vs sw ({d1}, {q1})"
+        );
+    }
+
+    /// Resolve + build a scenario's scene, run it; also returns the shaft inertia J_eq.
+    fn go_with_j(yaml: &str) -> (RunOutput, f64) {
+        let dir =
+            std::env::temp_dir().join(format!("bldc-gj-{}-{}", std::process::id(), yaml.len()));
+        let lib = Library::new(None, dir.join("user"), vec![]).unwrap();
+        let sc: Scenario = parse_yaml(yaml, "t").unwrap();
+        let scene = sc
+            .scene
+            .resolve(&lib, "scene")
+            .unwrap()
+            .resolve(&lib)
+            .unwrap();
+        let b = build_engine(&scene).unwrap();
+        let j = b.engine.get_param("motor.mechanical.j_rotor").unwrap()
+            + b.engine.get_param("load.inertia").unwrap_or(0.0);
+        let out = run(&sc, b, true).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+        (out, j)
+    }
+
+    fn brake_scene(chopper: &str) -> String {
+        format!(
+            "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: {{ preset: \"builtin:motors/8010-outrunner\" }}\n  load: {{ kind: flywheel, inertia: 2.5e-4 kg*m^2 }}\n  inverter: {{ preset: \"builtin:inverters/small-24v-10a\" }}\n  supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n  bus: {{ capacitance: 470 uF{chopper} }}\n  controller: {{ preset: \"builtin:controllers/foc-default\" }}\n  initial: {{ omega: 60 rad/s }}\nsample: 0.5 ms\nrecord: [bus.v, motor.omega, energy.residual, energy.loss.brake]\ntimeline:\n  - target: {{ kind: velocity, value: 0 rad/s }}\n  - wait: 0.3 s\n"
+        )
+    }
+
+    /// V-SUP-002: braking a flywheel (low-R 8010 motor at 60 rad/s, so the machine
+    /// regenerates rather than burning it all in copper) into a blocking PSU (no chopper) lifts the bus, but
+    /// never above the lossless bound √(V₁² + Jω₀²/C); energy closes (rtol 1e-3).
+    #[test]
+    fn v_sup_002_regen_into_a_blocking_psu() {
+        let (o, j) = go_with_j(&brake_scene(""));
+        let v_max = o.rows.iter().map(|r| r[1]).fold(f64::MIN, f64::max);
+        let bound = (24.0f64.powi(2) + j * 60.0 * 60.0 / 470e-6).sqrt();
+        assert!(v_max > 24.5, "the bus rose: {v_max}");
+        assert!(v_max <= bound, "{v_max} > {bound}");
+        let last = o.rows.last().unwrap();
+        assert!(last[2].abs() < 1.0, "stopped: ω {}", last[2]);
+        assert!(o.rows.iter().all(|r| r[3].abs() < 1e-3), "residual");
+    }
+
+    /// V-SUP-003: the same with a chopper: the bus stays at V_on (events located: within
+    /// 0.01 V), the resistor takes part of the kinetic energy, energy closes.
+    #[test]
+    fn v_sup_003_regen_with_chopper() {
+        let (o, j) = go_with_j(&brake_scene(
+            ", chopper: { r_brake: 10 ohm, v_on: 25 V, v_off: 24.5 V }",
+        ));
+        let v_max = o.rows.iter().map(|r| r[1]).fold(f64::MIN, f64::max);
+        assert!(v_max <= 25.0 + 0.01, "{v_max}");
+        let last = o.rows.last().unwrap();
+        let ke = 0.5 * j * 60.0 * 60.0;
+        assert!(last[4] > 0.0 && last[4] < ke, "brake {} of {ke} J", last[4]);
+        assert!(o.rows.iter().all(|r| r[3].abs() < 1e-3), "residual");
     }
 
     #[test]
