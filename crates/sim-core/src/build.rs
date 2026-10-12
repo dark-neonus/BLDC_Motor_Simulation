@@ -350,8 +350,24 @@ fn load(scene: &ResolvedScene) -> Result<(Load, bool), BuildError> {
             }),
             *on_change == OnChange::ConserveMomentum,
         ),
-        // INTERIM until P06.T05: constant/brake/viscous loads.
-        Some(_) => (Load::None, false),
+        Some(LoadParams::Constant { torque }) => (
+            Load::Constant {
+                t0: si(torque, Kind::Torque, "load.torque")?,
+            },
+            false,
+        ),
+        Some(LoadParams::Brake { torque }) => (
+            Load::Brake {
+                t0: si(torque, Kind::Torque, "load.torque")?,
+            },
+            false,
+        ),
+        Some(LoadParams::Viscous { coefficient }) => (
+            Load::Viscous {
+                c: si(coefficient, Kind::RotationalDamping, "load.coefficient")?,
+            },
+            false,
+        ),
     })
 }
 

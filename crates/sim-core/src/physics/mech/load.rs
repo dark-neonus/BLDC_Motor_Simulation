@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::load_arm::Arm;
+use super::load_basic;
 
 /// Load-side torques [N·m], split by where their energy goes.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -31,6 +32,12 @@ pub enum Load {
     Flywheel { j: f64 },
     /// Arm + point mass under gravity (EQ-MECH-06).
     Arm(Arm),
+    /// Constant torque T₀ [N·m] (EQ-MECH-07).
+    Constant { t0: f64 },
+    /// Brake −T₀·tanh(ω_L/ω_ε) [N·m] (EQ-MECH-07).
+    Brake { t0: f64 },
+    /// Viscous −c·ω_L [N·m·s/rad] (EQ-MECH-07).
+    Viscous { c: f64 },
 }
 
 impl Load {
@@ -40,17 +47,20 @@ impl Load {
             Load::None => 0.0,
             Load::Flywheel { j } => *j,
             Load::Arm(a) => a.inertia(),
+            Load::Constant { .. } | Load::Brake { .. } | Load::Viscous { .. } => 0.0,
         }
     }
 
-    pub fn torques(&self, theta_l: f64, _omega_l: f64) -> LoadTorques {
+    pub fn torques(&self, theta_l: f64, omega_l: f64) -> LoadTorques {
+        let mut t = LoadTorques::default();
         match self {
-            Load::Arm(a) => LoadTorques {
-                gravity: a.torque(theta_l),
-                ..Default::default()
-            },
-            _ => LoadTorques::default(),
+            Load::Arm(a) => t.gravity = a.torque(theta_l),
+            Load::Constant { t0 } => t.ext = load_basic::constant(*t0),
+            Load::Brake { t0 } => t.loss = load_basic::brake(*t0, omega_l),
+            Load::Viscous { c } => t.loss = load_basic::viscous(*c, omega_l),
+            Load::None | Load::Flywheel { .. } => {}
         }
+        t
     }
 
     /// Potential energy U(θ_L) [J].
@@ -70,6 +80,10 @@ impl Load {
                 .iter()
                 .map(|(p, u)| ((*p).into(), (*u).into()))
                 .collect(),
+            Load::Constant { .. } | Load::Brake { .. } => {
+                vec![("load.torque".into(), "N*m".into())]
+            }
+            Load::Viscous { .. } => vec![("load.coefficient".into(), "N*m*s/rad".into())],
         }
     }
 
@@ -77,6 +91,8 @@ impl Load {
         match (self, path) {
             (Load::Flywheel { j }, "load.inertia") => Some(*j),
             (Load::Arm(a), p) => a.get(p),
+            (Load::Constant { t0 } | Load::Brake { t0 }, "load.torque") => Some(*t0),
+            (Load::Viscous { c }, "load.coefficient") => Some(*c),
             _ => None,
         }
     }
@@ -92,6 +108,16 @@ impl Load {
                 Ok(std::mem::replace(j, v))
             }
             (Load::Arm(a), p) => a.set(p, v),
+            (Load::Constant { t0 }, "load.torque") if v.is_finite() => Ok(std::mem::replace(t0, v)),
+            (Load::Brake { t0 }, "load.torque") if v.is_finite() && v >= 0.0 => {
+                Ok(std::mem::replace(t0, v))
+            }
+            (Load::Viscous { c }, "load.coefficient") if v.is_finite() && v >= 0.0 => {
+                Ok(std::mem::replace(c, v))
+            }
+            (Load::Brake { .. } | Load::Viscous { .. }, _) if v < 0.0 => {
+                Err(format!("`{path}` must be ≥ 0, got {v}"))
+            }
             _ => Err(format!("unknown parameter `{path}`")),
         }
     }

@@ -47,6 +47,8 @@ pub struct RunOutput {
 enum Ev {
     Set(String, serde_json::Value),
     Signal(String, f64),
+    /// Load-shaft torque pulse (torque, duration) (EQ-MECH-08).
+    Disturbance(f64, f64),
     Snapshot(String),
     AssertStart(usize),
     AssertEnd(usize),
@@ -183,9 +185,15 @@ fn schedule(sc: &Scenario, asserts: bool) -> Result<Schedule, String> {
             Action::Fault { id, .. } => s.warnings.push(format!(
                 "{at}: fault `{id}` ignored (fault injection arrives in P10)"
             )),
-            Action::Disturbance { .. } => s.warnings.push(format!(
-                "{at}: disturbance ignored (load torque input arrives in P05)"
-            )),
+            Action::Disturbance { torque, duration } => {
+                let tq = torque
+                    .value
+                    .si(Kind::Torque)
+                    .map_err(|e| format!("{at}: disturbance torque: {e}"))?;
+                let d = secs(duration, &format!("{at}: disturbance duration"))?;
+                s.events.push((t, Ev::Disturbance(tq, d)));
+                s.end = s.end.max(t + d);
+            }
             Action::Snapshot(name) => s.events.push((t, Ev::Snapshot(name.clone()))),
             Action::Assert(a) if asserts => {
                 let t0 =
@@ -328,6 +336,11 @@ pub fn run(sc: &Scenario, mut b: BuiltScene, asserts: bool) -> Result<RunOutput,
                     };
                     cmds.into_iter().for_each(|c| e.queue(c));
                 }
+                Ev::Disturbance(torque, duration) => e.queue(EngineCommand::Disturbance {
+                    torque,
+                    duration,
+                    source: ChangeSource::Scenario,
+                }),
                 Ev::Signal(path, v) => e.queue(EngineCommand::SetSignal {
                     path,
                     value: v,

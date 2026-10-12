@@ -51,7 +51,7 @@
     - live mass change follows the D-007 rule
   - **Done when:** Passing.
 
-- [ ] **P06.T05** — Constant/viscous loads & disturbance torque input
+- [x] **P06.T05** — Constant/viscous loads & disturbance torque input
   - **Depends:** P06.T01
   - **Do:** Constant-torque and viscous load modules. A `load.disturbance` input: torque pulse `{torque, duration}` or an impulse (converted to a pulse over max(1 ms, 5·dt)) — this is used by the mouse "push/flick". It is commanded via `Command::Disturbance`.
   - **Files:** `crates/sim-core/src/physics/mech/load_basic.rs`

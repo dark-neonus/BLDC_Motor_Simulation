@@ -41,6 +41,7 @@ struct Ids {
     torque_gravity: SignalId,
     torque_ext: SignalId,
     p_gear: SignalId,
+    disturbance: SignalId,
 }
 
 /// One evaluation of the drivetrain dynamics.
@@ -66,6 +67,9 @@ pub struct RotorRigid {
     ids: Ids,
     /// Energy injected by parameter changes since the last `take_external_energy`.
     jump: f64,
+    /// Disturbance pulse torque on the load shaft while one runs (EQ-MECH-08); its
+    /// remaining time is state 2, and a state event ends it.
+    dist: f64,
 }
 
 impl RotorRigid {
@@ -109,6 +113,7 @@ impl RotorRigid {
                 "load torque (constant/brake/viscous)",
             )?,
             p_gear: out("gearbox.p_loss", "W", "gearbox meshing loss")?,
+            disturbance: out("load.disturbance", "N*m", "disturbance torque pulse")?,
         };
         Ok(Self {
             p,
@@ -120,6 +125,7 @@ impl RotorRigid {
             external,
             ids,
             jump: 0.0,
+            dist: 0.0,
         })
     }
 
@@ -154,7 +160,8 @@ impl RotorRigid {
 
     fn dynamics(&self, th: f64, w: f64, bus: &SignalBus) -> Dyn {
         let n = self.gb.n;
-        let load = self.load.torques(th / n, w / n);
+        let mut load = self.load.torques(th / n, w / n);
+        load.ext += self.dist;
         let t_l = load.total();
         let t_ext_m: f64 = self.external.iter().map(|&id| bus.get(id)).sum();
         let t_int: f64 = self.internal.iter().map(|&id| bus.get(id)).sum();
@@ -225,17 +232,19 @@ impl PlantModule for RotorRigid {
         vec!["gearbox".into(), "load".into()]
     }
     fn n_states(&self) -> usize {
-        2
+        3
     }
     fn state_names(&self) -> Vec<(String, String)> {
         vec![
             ("theta".into(), "rad".into()),
             ("omega".into(), "rad/s".into()),
+            ("disturbance_left".into(), "s".into()),
         ]
     }
     fn init(&self, x: &mut [f64]) {
         x[0] = self.p.theta0;
         x[1] = if self.locked { 0.0 } else { self.p.omega0 };
+        x[2] = 0.0;
     }
     fn outputs(&mut self, _t: f64, x: &[f64], off: usize, bus: &mut SignalBus) {
         let (th, w) = (x[off], x[off + 1]);
@@ -254,8 +263,10 @@ impl PlantModule for RotorRigid {
         bus.set(ids.torque_gravity, d.load.gravity);
         bus.set(ids.torque_ext, d.load.loss + d.load.ext);
         bus.set(ids.p_gear, if self.locked { 0.0 } else { -d.t_gl * w });
+        bus.set(ids.disturbance, self.dist);
     }
     fn derivatives(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, dx: &mut [f64]) {
+        dx[2] = if self.dist != 0.0 { -1.0 } else { 0.0 };
         if self.locked {
             dx[0] = 0.0;
             dx[1] = 0.0;
@@ -292,6 +303,24 @@ impl PlantModule for RotorRigid {
     fn set_param(&mut self, name: &str, v: f64, x_own: &mut [f64]) -> Result<f64, String> {
         if name.starts_with("gearbox.") {
             return self.set_gear(name, v, x_own);
+        }
+        match name {
+            "load.disturbance.duration" => {
+                if !(v.is_finite() && v > 0.0) {
+                    return Err(format!("duration must be > 0, got {v}"));
+                }
+                return Ok(std::mem::replace(&mut x_own[2], v));
+            }
+            "load.disturbance.torque" => {
+                if !v.is_finite() {
+                    return Err(format!("torque must be finite, got {v}"));
+                }
+                if x_own[2] <= 0.0 {
+                    return Err("set load.disturbance.duration first".into());
+                }
+                return Ok(std::mem::replace(&mut self.dist, v));
+            }
+            _ => {}
         }
         if name.starts_with("load.") {
             let conserve = self.conserve_momentum;
@@ -353,11 +382,29 @@ impl PlantModule for RotorRigid {
     fn take_external_energy(&mut self) -> f64 {
         std::mem::take(&mut self.jump)
     }
+    fn n_events(&self) -> usize {
+        1
+    }
+    fn event_functions(&self, _t: f64, x: &[f64], off: usize, _bus: &SignalBus, g: &mut [f64]) {
+        // The pulse ends when its remaining time crosses zero.
+        g[0] = if self.dist != 0.0 { x[off + 2] } else { 1.0 };
+    }
+    fn on_event(
+        &mut self,
+        _idx: usize,
+        _rising: bool,
+        _t: f64,
+        x_own: &mut [f64],
+        _bus: &mut SignalBus,
+    ) {
+        self.dist = 0.0;
+        x_own[2] = 0.0;
+    }
     fn save(&self) -> serde_json::Value {
         serde_json::json!({
             "j": self.p.j, "b": self.p.b, "locked": self.locked,
             "eta": self.gb.eta, "j_in": self.gb.j_in, "j_out": self.gb.j_out,
-            "load": self.load, "jump": self.jump,
+            "load": self.load, "jump": self.jump, "dist": self.dist,
         })
     }
     fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
@@ -368,6 +415,7 @@ impl PlantModule for RotorRigid {
         };
         let (j, b) = (f("j")?, f("b")?);
         let (eta, j_in, j_out, jump) = (f("eta")?, f("j_in")?, f("j_out")?, f("jump")?);
+        let dist = f("dist")?;
         let locked = v
             .get("locked")
             .and_then(serde_json::Value::as_bool)
@@ -376,7 +424,7 @@ impl PlantModule for RotorRigid {
             .map_err(|e| format!("`load`: {e}"))?;
         (self.p.j, self.p.b, self.locked) = (j, b, locked);
         (self.gb.eta, self.gb.j_in, self.gb.j_out) = (eta, j_in, j_out);
-        (self.load, self.jump) = (load, jump);
+        (self.load, self.jump, self.dist) = (load, jump, dist);
         Ok(())
     }
 }

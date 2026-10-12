@@ -24,12 +24,20 @@ pub enum EngineCommand {
         value: f64,
         source: ChangeSource,
     },
-    /// Write an input signal on the bus (setpoints, disturbance), e.g. `ctrl.omega_ref`.
+    /// Write an input signal on the bus (setpoints), e.g. `ctrl.omega_ref`.
     SetSignal {
         path: String,
         value: f64,
         source: ChangeSource,
     },
+    /// A torque pulse on the load shaft for `duration` seconds (EQ-MECH-08).
+    Disturbance {
+        torque: f64,
+        duration: f64,
+        source: ChangeSource,
+    },
+    /// An impulse H [N·m·s] (mouse flick): the pulse H/Δt with Δt = max(1 ms, 5·dt_max).
+    Impulse { h: f64, source: ChangeSource },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

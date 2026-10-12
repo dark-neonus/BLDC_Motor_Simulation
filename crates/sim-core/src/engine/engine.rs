@@ -384,6 +384,34 @@ impl Engine {
         let t = self.time;
         let reject = |reason: String| EngineEvent::CommandRejected { t, reason };
         match cmd {
+            EngineCommand::Impulse { h, source } => {
+                let duration = crate::physics::mech::load_basic::impulse_duration(self.dt_max);
+                self.apply(EngineCommand::Disturbance {
+                    torque: h / duration,
+                    duration,
+                    source,
+                })
+            }
+            EngineCommand::Disturbance {
+                torque,
+                duration,
+                source,
+            } => {
+                // Duration first: the torque write checks that a pulse is running.
+                let ev = self.apply(EngineCommand::SetParam {
+                    path: "load.disturbance.duration".into(),
+                    value: duration,
+                    source,
+                });
+                if matches!(ev, EngineEvent::CommandRejected { .. }) {
+                    return ev;
+                }
+                self.apply(EngineCommand::SetParam {
+                    path: "load.disturbance.torque".into(),
+                    value: torque,
+                    source,
+                })
+            }
             EngineCommand::SetSignal {
                 path,
                 value,

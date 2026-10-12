@@ -320,3 +320,8 @@
 - `mech::load_arm::Arm` (EQ-MECH-06): M_eff, J_load, T_g = −g·M_eff·sin θ_L, U_g reported as stored energy (gravity has no power term; its work is −dU/dt). `Load::Arm`; live `load.arm_length/arm_mass/mass/distance` through the EQ-MECH-09 rule (ΔU included in the booked jump).
 - Scene: optional `load.mount_angle` (initial θ_L; the spec's mounting offset) → rotor θ0 = N·angle. Schemas regenerated. Build maps the arm fully (replaces the T01 interim inertia-only mapping).
 - `tests/v_mech.rs`: V-MECH-001 period 0.77961 s (spec value reproduced to 1e-5, simulated rtol 5e-4), V-MECH-002 150° swing for 15 s: residual < 1e-6 and stored energy constant, V-MECH-009 keep_speed / conserve_momentum through N = 9 (rtol 1e-9) with ΔE booked.
+
+## 2026-10-12 — P06.T05 Basic loads + disturbance pulse
+- `mech::load_basic` (EQ-MECH-07): constant (external work), brake −T₀·tanh(ω_L/1e-3) and viscous −c·ω_L (losses); `Load::{Constant, Brake, Viscous}` with live `load.torque` / `load.coefficient`; build maps them.
+- Disturbance (EQ-MECH-08): the drivetrain gets a 3rd state, the pulse's remaining time (dτ/dt = −1 while running), and a state event ends the pulse exactly. Params `load.disturbance.duration` then `load.disturbance.torque`; signal `load.disturbance`; work booked external. `EngineCommand::Disturbance{torque, duration}` and `Impulse{h}` (Δt = max(1 ms, 5·dt_max)). Scenario `disturbance:` actions now drive it (was a warning).
+- Tests: V-MECH-008 impulse through N = 9: Δω_L = H/J_tot,L rtol 1e-6, residual < 1e-9; brake/viscous/constant analytic speeds with energy closing.

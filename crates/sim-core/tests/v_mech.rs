@@ -129,3 +129,70 @@ fn v_mech_009_live_mass_change() {
         assert!(sig(&e, "energy.external").abs() > 1e-6, "ΔE is booked");
     }
 }
+
+/// V-MECH-008: an impulse H on a free system changes the load speed by H/J_tot,L
+/// (J_tot,L = N²·J_eq), rtol 1e-6; the pulse's work is booked as external energy.
+#[test]
+fn v_mech_008_impulse() {
+    let gb = Gearbox {
+        n: 9.0,
+        eta: 1.0,
+        j_in: 1e-6,
+        j_out: 1e-4,
+    };
+    let load = Load::Flywheel { j: 0.02 };
+    let mut e = drivetrain(0.0, gb, load, false, 5e-6);
+    e.queue(EngineCommand::Impulse {
+        h: 0.004,
+        source: ChangeSource::Internal,
+    });
+    e.step_until(SimTime::from_secs_f64(0.0005)).unwrap();
+    assert!(sig(&e, "load.disturbance") > 0.0, "pulse running");
+    e.step_until(SimTime::from_secs_f64(0.003)).unwrap();
+    assert_eq!(sig(&e, "load.disturbance"), 0.0, "pulse over after 1 ms");
+    let j_tot_l = 81.0 * gb.j_eq(J_M, 0.02);
+    let w = sig(&e, "load.omega");
+    assert!((w / (0.004 / j_tot_l) - 1.0).abs() < 1e-6, "{w}");
+    assert!(sig(&e, "energy.residual").abs() < 1e-9);
+}
+
+/// EQ-MECH-07: brake and viscous loads dissipate, a constant torque does external
+/// work; the balance closes for each.
+#[test]
+fn basic_loads_book_their_energy() {
+    for (load, w0) in [
+        (Load::Brake { t0: 0.05 }, 20.0),
+        (Load::Viscous { c: 0.002 }, 20.0),
+        (Load::Constant { t0: 0.01 }, 0.0),
+    ] {
+        let mut bus = SignalBus::new();
+        let p = RotorParams {
+            j: J_M,
+            j_load: 0.0,
+            b: 0.0,
+            pole_pairs: 7.0,
+            theta0: 0.0,
+            omega0: w0,
+        };
+        let rotor = RotorRigid::new(p, &mut bus, vec![], vec![])
+            .unwrap()
+            .with_load(load.clone(), false);
+        let mut plant = Plant::new();
+        plant.add(Box::new(rotor));
+        let mut e = Engine::new(plant, bus, vec![], 1e-4);
+        e.step_until(SimTime::from_secs_f64(0.05)).unwrap();
+        let w = sig(&e, "motor.omega");
+        match load {
+            // Brake: a constant deceleration T₀/J while turning.
+            Load::Brake { .. } => assert!((w - (20.0 - 0.05 / J_M * 0.05)).abs() < 1e-6, "{w}"),
+            Load::Viscous { .. } => {
+                assert!(
+                    (w / (20.0 * (-0.002 / J_M * 0.05f64).exp()) - 1.0).abs() < 1e-8,
+                    "{w}"
+                )
+            }
+            _ => assert!((w - 0.01 / J_M * 0.05).abs() < 1e-9, "{w}"),
+        }
+        assert!(sig(&e, "energy.residual").abs() < 1e-6, "{load:?}");
+    }
+}
