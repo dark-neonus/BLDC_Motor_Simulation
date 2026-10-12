@@ -24,7 +24,7 @@
     - correct R_ds,on drop
   - **Done when:** Passing.
 
-- [ ] **P07.T02** — PWM generator with edge events, dead time, shadow registers
+- [x] **P07.T02** — PWM generator with edge events, dead time, shadow registers
   - **Depends:** P07.T01
   - **Do:**
     - Center-aligned carrier at f_pwm.

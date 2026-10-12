@@ -390,3 +390,8 @@
 ## 2026-10-12 — P07.T04 Modulators
 - `physics::inverter::modulation`: `spwm` (EQ-INV-04), `svpwm` min–max injection (EQ-INV-05), `clamp_vector` / `svpwm_ab` with the EQ-INV-06 overmodulation clamp and a saturation flag, `six_step` legs per EQ-INV-07 (sector table, optional advance). Done before T02/T03 (pure functions, no dependency in practice).
 - Tests: SVPWM = classic sector-based reference at 36 angles (< 1e-12) and the inverter.md worked example (0.8519/0.3614/0.1481); linear limits (SVPWM duty span reaches 1 at V_bus/√3, clamp beyond; SPWM duty 1 at V_bus/2); six-step table at mid-sector angles, advance, and High/Low = max/min back-EMF at 360 angles.
+
+## 2026-10-12 — P07.T02 PWM generator
+- `physics::inverter::pwm::Pwm` (block `inverter.pwm`, variable events, priority INVERTER): center-aligned carrier; duties `inverter.duty_x` latched at each period start t_k (shadow registers; t_k = middle of the all-Low zero vector = `pwm.center`, counted in `inverter.pwm_count` for the P08 ADC); each turn-on goes through Off for the dead time; pulse dropping within t_d of 0 or 1 (and the dead time also applies when a period starts full-High from Low). Edge times are integer ns.
+- Tests (engine with the block alone, sampled with `step_until(t + 1 ns)` = state after the events at t): d = 0.6 → Off at 10 µs, High at 10.5 µs, Off at 40 µs, Low at 40.5 µs; d = 0.2 → [20, 30] µs; d = 0 → no pulse; no direct H↔L switch anywhere; a duty changed mid-period applies from the next period; d = 0.995 stays High with the entry dead time.
+- Live f_pwm / dead_time edits are not routed yet (block id `inverter.pwm` vs the CONVENTIONS paths `inverter.f_pwm` / `inverter.dead_time`); build-time values for now.
