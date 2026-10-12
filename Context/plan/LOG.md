@@ -345,3 +345,9 @@
 - Motor: `with_r_temperature` (R(T), EQ-THERM-02, α_Cu 0.00393) used in dψ/dt, open-phase law, p_cu and the copper power term; `LambdaTemperature.t_start` so the initial flux uses λ(T_start) (otherwise a 25 °C start gave ~0.07 A at t = 0, caught by the server rejection test).
 - Build: thermal when the tier enables it and the motor has `thermal`; ambient from `initial.ambient` (default 25 °C), start from `initial.temperature`, t_ref default 20 °C, α_Br default −0.0012, κ bare SI. Thermal precedes the motor in the plant (temperatures feed R/λ in the same stage).
 - Tests (`tests/v_therm.rs`): V-THERM-001 network vs the exact solution e^{At} (scaling-and-squaring) at 5…3000 s, rtol 1e-6; V-THERM-003 R(100 °C)/R(20 °C) = 1.3144 via the steady locked-rotor current, rtol 1e-9; both warnings fire once.
+
+## 2026-10-12 — P06.T07 Continuous/peak current helpers + thermal rating rule
+- `sim_model::thermal_limits`: `ThermalModel::from_motor` (r_phase at t_ref + thermal block), `continuous_current(m, T_a)` = EQ-THERM-05 closed form (copper only), `peak_time(m, T_a, Î)` = EQ-THERM-06 by RK4 on the network with R(T) and a 1 µs bisection of the crossing step (`None` at or below Î_cont).
+- Rule `motor.ratings_thermal` (Warn, `constraints/thermal.rs`): rated continuous current > 1.01·Î_cont at 25 °C. No preset trips it.
+- Tests: closed form + its defining property (steady T_w = T_max exactly); peak time decreasing in current, above the quick bound, and within 5 % of the exact adiabatic R(T) solution at 20·Î_cont (the quick bound with R(T_max) is ~15 % short at high current because R rises during heating: test expectation corrected, not the code); rule fires / stays quiet; sim-core `tests/thermal_limits.rs` V-THERM-002: the engine network held at Î_cont settles at T_max ± 1 K (6020 preset network).
+- `just check` green (155 Rust tests).

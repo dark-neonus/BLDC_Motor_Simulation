@@ -69,7 +69,7 @@
   - **Verify:** Test: a step heat input → node time constants match the analytic solution of the linear network (eigenvalues); R(T) feedback raises the copper loss as specified. (The continuous-current check is in T07.)
   - **Done when:** Passing.
 
-- [ ] **P06.T07** — Continuous/peak torque derivation helpers
+- [x] **P06.T07** — Continuous/peak torque derivation helpers
   - **Depends:** P06.T06
   - **Do:** Functions `continuous_current(params, T_ambient)` and `peak_time(params, I)` (the time to reach T_max from ambient at current I), used by the constraint warnings (P04.T05 rule) and the UI.
     - Also add the constraint rule (P04.T05 framework) "ratings vs thermal continuous limit" (Warn) using these functions.

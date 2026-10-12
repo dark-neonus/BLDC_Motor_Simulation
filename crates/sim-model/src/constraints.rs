@@ -90,6 +90,8 @@ pub(crate) fn si(p: &Param, kind: Kind, path: &str, out: &mut Vec<Issue>) -> Opt
     }
 }
 
+mod thermal;
+
 fn positive(p: &Param, kind: Kind, path: &str, out: &mut Vec<Issue>) -> Option<f64> {
     let v = si(p, kind, path, out)?;
     if v <= 0.0 {
@@ -416,6 +418,7 @@ pub fn validate(m: &MotorParams) -> Vec<Issue> {
             ));
         }
     }
+    thermal::rules(m, &mut out);
     out
 }
 
@@ -692,6 +695,22 @@ mechanical: { j_rotor: 2.5e-4 }
                 "motor.magnetic.saturation.l_inf",
             ),
         ];
+        // Thermal rating (P06.T07): needs a thermal block first, then a rating above it.
+        let hot = apply_edit(&motor(), "motor.thermal", th("100 degC", "0.5 K/W")).model;
+        let r = apply_edit(&hot, "motor.ratings.current_continuous", json!("100 A"));
+        assert!(
+            r.issues
+                .iter()
+                .any(|i| i.rule == "motor.ratings_thermal" && i.severity == Severity::Warn),
+            "{:?}",
+            r.issues
+        );
+        assert!(
+            apply_edit(&hot, "motor.ratings.current_continuous", json!("0.5 A"))
+                .issues
+                .iter()
+                .all(|i| i.rule != "motor.ratings_thermal")
+        );
         // A consistent curve (the engine test's) is accepted.
         let ok = apply_edit(
             &motor(),

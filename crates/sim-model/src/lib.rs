@@ -13,6 +13,7 @@ pub mod param;
 pub mod params;
 pub mod scenario;
 pub mod scene;
+pub mod thermal_limits;
 pub mod units;
 pub mod winding;
 pub mod wizard;
