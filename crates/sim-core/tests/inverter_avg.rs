@@ -3,6 +3,7 @@
 
 use sim_core::engine::engine::Engine;
 use sim_core::engine::plant::{Plant, PlantModule};
+use sim_core::engine::rng::RngService;
 use sim_core::engine::signals::{SignalBus, SignalId, SignalKind};
 use sim_core::engine::time::SimTime;
 use sim_core::physics::inverter::leg::{Devices, LegState, SwitchingInverter, duty_ids};
@@ -12,6 +13,7 @@ use sim_core::physics::motor::backemf::Shape;
 use sim_core::physics::motor::electrical::{
     ElectricalInputs, ElectricalParams, LegInputs, MotorElectrical,
 };
+use sim_core::physics::sensors::adc::{Adc, AdcConfig, Channel};
 
 const D: Devices = Devices {
     r_on: 0.02,
@@ -47,6 +49,12 @@ fn rig(averaged: bool) -> Engine {
 }
 
 fn rig_f(averaged: bool, f_loss: f64) -> Engine {
+    rig_adc(averaged, f_loss, false)
+}
+
+/// With `adc`, a 12-bit two-shunt ADC (±20 A) samples at `pwm.center` (period T_pwm,
+/// phase 0).
+fn rig_adc(averaged: bool, f_loss: f64, adc: bool) -> Engine {
     let mut bus = SignalBus::new();
     let vb = bus.register("bus.v", "V", "", SignalKind::Output).unwrap();
     let mut inv = SwitchingInverter::new(D, vb, &mut bus)
@@ -99,13 +107,33 @@ fn rig_f(averaged: bool, f_loss: f64) -> Engine {
     for (id, d) in duty_ids(&mut bus).unwrap().iter().zip(DUTY) {
         bus.set(*id, d);
     }
-    let blocks: Vec<Box<dyn sim_core::engine::block::DiscreteBlock>> = if averaged {
+    let mut blocks: Vec<Box<dyn sim_core::engine::block::DiscreteBlock>> = if averaged {
         // Averaged: every leg is driven by its duty.
         inv.set_legs(&mut bus, [LegState::High; 3]);
         vec![]
     } else {
         vec![Box::new(Pwm::new(PWM, &mut bus).unwrap())]
     };
+    if adc {
+        let ch = Channel {
+            full_scale: 20.0,
+            ..Default::default()
+        };
+        let cfg = AdcConfig {
+            bits: 12,
+            phase: [ch; 3],
+            shunts: 2,
+            bus: None,
+            noise: 0.0,
+            bus_noise: 0.0,
+            latency_ns: 0,
+            bypass: false,
+        };
+        let period = SimTime::from_nanos(PWM.period_ns);
+        blocks.push(Box::new(
+            Adc::new(&cfg, period, &RngService::new(1), &mut bus).unwrap(),
+        ));
+    }
     let mut plant = Plant::new();
     plant.add(Box::new(Bus(vb)));
     plant.add(Box::new(rotor));
@@ -193,4 +221,40 @@ fn v_inv_007_008_losses_close_the_balance_and_scale_with_f_pwm() {
     };
     let (a, b) = (i_sw(20e3), i_sw(40e3));
     assert!(a > 0.0 && (b / a - 2.0).abs() < 1e-12, "{a} {b}");
+}
+
+/// V-SENS-005: in switching mode the ADC samples at `pwm.center` (the middle of the
+/// zero vector), where the ripple is at its midpoint: the reading matches the period
+/// average within 1 % of the operating current.
+#[test]
+fn v_sens_005_center_sampling_reads_the_period_average() {
+    let mut e = rig_adc(false, 20e3, true);
+    let t0 = 0.04;
+    e.step_until(SimTime::from_nanos((t0 * 1e9) as i64 + 1))
+        .unwrap();
+    let read = ["sensors.adc.i_a", "sensors.adc.i_b", "sensors.adc.i_c"].map(|n| sig(&e, n));
+    // Average over the period centred on the sample, [t0 − T/2, t0 + T/2): the zero
+    // vector the ADC samples is centred on t0 (fine grid, 250 ns).
+    let mut e = rig_adc(false, 20e3, true);
+    let half = PWM.period_ns / 2;
+    let start = (t0 * 1e9) as i64 - half;
+    e.step_until(SimTime::from_nanos(start)).unwrap();
+    let n = 200;
+    let mut mean = [0.0; 3];
+    for k in 1..=n {
+        e.step_until(SimTime::from_nanos(start + k * 250)).unwrap();
+        for (x, name) in ["motor.i_a", "motor.i_b", "motor.i_c"].iter().enumerate() {
+            mean[x] += sig(&e, name) / n as f64;
+        }
+    }
+    let rated = mean[0].abs();
+    assert!(rated > 3.0, "{rated}");
+    for x in 0..3 {
+        assert!(
+            (read[x] - mean[x]).abs() <= 0.01 * rated,
+            "phase {x}: ADC {} vs mean {}",
+            read[x],
+            mean[x]
+        );
+    }
 }

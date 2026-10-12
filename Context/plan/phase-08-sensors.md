@@ -43,7 +43,7 @@
   - **Verify:** Test: 1000 CPR → 4000 counts/rev, sign by direction, index once per rev.
   - **Done when:** Passing.
 
-- [ ] **P08.T05** — Current & voltage ADC
+- [x] **P08.T05** — Current & voltage ADC
   - **Depends:** P08.T01
   - **Do:** Phase current shunts (2 or 3 configurable) and bus voltage. Bits, range, gain/offset errors, noise and saturation. Sampled on the `pwm.center` event (switching mode) or at the controller rate (averaged mode).
   - **Files:** `crates/sim-core/src/physics/sensors/adc.rs`
