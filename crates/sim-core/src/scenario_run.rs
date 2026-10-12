@@ -573,6 +573,18 @@ mod tests {
         );
     }
 
+    /// P06.T10: the production build wires iron loss (EQ-MOT-09) from the motor's k_hy /
+    /// k_ed at the Standard tier: the loss is booked and the balance closes.
+    #[test]
+    fn production_build_with_iron_loss() {
+        let o = go(
+            "schema_version: 1\nname: t\nscene:\n  schema_version: 1\n  name: s\n  motor: { preset: \"builtin:motors/4108-outrunner\", overrides: { magnetic.k_hy: 2e-4, magnetic.k_ed: 1e-6 } }\n  inverter: { preset: \"builtin:inverters/small-24v-10a\" }\n  supply: { preset: \"builtin:supplies/psu-24v-5a\" }\n  controller: { preset: \"builtin:controllers/foc-default\" }\nsample: 10 ms\nrecord: [energy.loss.iron, motor.p_fe, energy.residual]\ntimeline:\n  - target: { kind: velocity, value: 30 rad/s, ramp: 0.1 s }\n  - wait: 0.4 s\n",
+        );
+        let last = o.rows.last().unwrap();
+        assert!(last[1] > 0.0 && last[2] > 0.0, "iron loss booked: {last:?}");
+        assert!(last[3].abs() < 1e-3, "residual {}", last[3]);
+    }
+
     #[test]
     fn cogging_follows_the_fidelity_tier() {
         let dir = std::env::temp_dir().join(format!("bldc-cog-{}", std::process::id()));

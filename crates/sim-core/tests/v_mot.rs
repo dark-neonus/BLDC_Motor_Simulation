@@ -604,3 +604,160 @@ fn v_mot_011_open_phase_path_time_constant() {
     }
     assert!(sig(&e, "energy.residual").abs() < 1e-6);
 }
+
+/// A motor module alone (no engine) for imposed-current analyses.
+fn motor_only(shape: Shape) -> MotorElectrical {
+    let mut bus = SignalBus::new();
+    let v = ["inverter.v_a", "inverter.v_b", "inverter.v_c"]
+        .map(|n| bus.register(n, "V", "", SignalKind::Output).unwrap());
+    let th = bus
+        .register("motor.theta_e", "rad", "", SignalKind::State)
+        .unwrap();
+    let w = bus
+        .register("motor.omega_e", "rad/s", "", SignalKind::State)
+        .unwrap();
+    let ep = ElectricalParams {
+        r: R,
+        ld: L,
+        lq: L,
+        lambda: LAMBDA,
+        pole_pairs: P,
+        shape,
+        i_d0: 0.0,
+        i_q0: 0.0,
+        theta_e0: 0.0,
+        saturation: None,
+    };
+    MotorElectrical::new(
+        ep,
+        ElectricalInputs {
+            v,
+            theta_e: th,
+            omega_e: w,
+        },
+        &mut bus,
+    )
+    .unwrap()
+}
+
+/// P06.T10: a triplen back-EMF harmonic makes no torque with an isolated neutral
+/// (balanced currents have no zero sequence), while a 5th harmonic ripples at 6θ.
+#[test]
+fn harmonic_emf_triplen_makes_no_torque() {
+    let i = 3.0;
+    let kt = 1.5 * P * LAMBDA;
+    let ripple = |shape: Shape| {
+        let m = motor_only(shape);
+        let (mut lo, mut hi) = (f64::MAX, f64::MIN);
+        for k in 0..3600 {
+            let th = 2.0 * PI * k as f64 / 3600.0;
+            // Pure q current: i_αβ = I·(−sin θ, cos θ).
+            let s = m.from_currents(-i * th.sin(), i * th.cos(), th, LAMBDA);
+            let te = m.torque(&s, th, LAMBDA);
+            (lo, hi) = (lo.min(te), hi.max(te));
+        }
+        (lo, hi)
+    };
+    let (lo, hi) = ripple(Shape::Harmonics(vec![(3, 0.2, 0.0), (9, 0.05, 0.4)]));
+    assert!(
+        close(lo, kt * i, 0.0, 1e-9) && close(hi, kt * i, 0.0, 1e-9),
+        "{lo} {hi}"
+    );
+    let (lo, hi) = ripple(Shape::Harmonics(vec![(5, 0.05, 0.0)]));
+    assert!(
+        hi - lo > 0.05 * kt * i,
+        "the 5th harmonic ripples: {lo} {hi}"
+    );
+}
+
+/// P06.T10: energy closes for a harmonic-shape motor spinning up under voltage drive.
+#[test]
+fn harmonic_emf_energy_closes() {
+    let mut e = build(Case {
+        shape: Shape::Harmonics(vec![(3, 0.2, 0.0), (5, 0.05, 0.3), (7, 0.02, 1.0)]),
+        v: dq(0.0, 6.0),
+        dt: 5e-6,
+        ..Default::default()
+    });
+    run(&mut e, 0.2);
+    assert!(sig(&e, "motor.omega") > 10.0);
+    assert!(
+        sig(&e, "energy.residual").abs() < 1e-6,
+        "{}",
+        sig(&e, "energy.residual")
+    );
+}
+
+/// P06.T10: live L_d and λ edits keep the flux, jump the currents and book ΔW_mag, so the
+/// balance still closes.
+#[test]
+fn live_inductance_and_flux_edits_book_the_field_energy() {
+    let mut e = build(Case {
+        v: dq(1.0, 3.0),
+        dt: 5e-6,
+        ..Default::default()
+    });
+    run(&mut e, 0.05);
+    for (path, v, t) in [
+        ("motor.electrical.l_d", 4e-3, 0.1),
+        ("motor.electrical.lambda_m", 0.025, 0.15),
+    ] {
+        e.queue(EngineCommand::SetParam {
+            path: path.into(),
+            value: v,
+            source: ChangeSource::Internal,
+        });
+        run(&mut e, t);
+        assert!(
+            sig(&e, "energy.residual").abs() < 1e-6,
+            "{path}: {}",
+            sig(&e, "energy.residual")
+        );
+        assert!(
+            sig(&e, "energy.external").abs() > 0.0,
+            "{path}: ΔW_mag booked"
+        );
+    }
+}
+
+/// P06.T10: saturation and open-phase mode together: i_c stays zero and energy closes.
+#[test]
+fn saturation_in_open_phase_mode() {
+    let sat = SatParams {
+        i_k: 20.0,
+        l_inf: 0.75e-3,
+        c: 0.05,
+    };
+    let drive: VFn = Box::new(|t, _, _| {
+        std::array::from_fn(|k| {
+            12.0 + 10.0 * (2.0 * PI * 30.0 * t - k as f64 * 2.0 * PI / 3.0).cos()
+        })
+    });
+    let mut e = build(Case {
+        sat: Some(sat),
+        b: 1e-4,
+        v: drive,
+        dt: 2e-6,
+        ..Default::default()
+    });
+    run(&mut e, 0.05);
+    e.queue(EngineCommand::SetParam {
+        path: "motor.open_phase".into(),
+        value: 2.0,
+        source: ChangeSource::Internal,
+    });
+    run(&mut e, 0.1);
+    assert_eq!(sig(&e, "motor.open_phase"), 2.0);
+    assert_eq!(sig(&e, "motor.i_c"), 0.0);
+    assert!(sig(&e, "motor.i_a").abs() > 0.01);
+    assert!(
+        sig(&e, "energy.residual").abs() < 1e-6,
+        "{}",
+        sig(&e, "energy.residual")
+    );
+    assert!(
+        e.drain_events()
+            .iter()
+            .all(|ev| !matches!(ev, sim_core::engine::commands::EngineEvent::Warning { .. }))
+    );
+}

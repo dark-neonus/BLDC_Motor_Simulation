@@ -83,7 +83,7 @@
   - **Verify:** `cargo nextest run -p sim-core v_mech v_therm`; the scenario passes its asserts via the CLI.
   - **Done when:** Green.
 
-- [ ] **P06.T10** — P05 review carry-overs
+- [x] **P06.T10** — P05 review carry-overs
   - **Depends:** P05
   - **Do:**
     1. Saturation and open-phase Newton solves report non-convergence (non-PD Jacobian, non-positive slope, iteration cap) as `SimError::Numerical` or an engine warning instead of returning unconverged currents silently (PLAN §4 rule 5). Use a step-size stop as in `solve_open`, so a 1e-15 residual floor does not cost ~2000 evaluations.
