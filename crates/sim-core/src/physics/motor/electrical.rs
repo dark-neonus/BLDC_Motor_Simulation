@@ -491,7 +491,8 @@ impl MotorElectrical {
             }
         }
         let (f, _) = at(i);
-        if !((f - psi_yz).abs() <= 1e-9 * (1.0 + psi_yz.abs())) {
+        let err = (f - psi_yz).abs();
+        if err.is_nan() || err > 1e-9 * (1.0 + psi_yz.abs()) {
             self.unconverged.set(true);
         }
         at(i).1
