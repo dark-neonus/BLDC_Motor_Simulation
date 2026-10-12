@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=../../schemas/supply.schema.json
-# 12S Li-ion 18650 pack (3.5 Ah NMC cells, 1P). OCV table: see _sources.md.
+# 12S Li-ion 18650 pack (3.5 Ah NMC cells, 1P). OCV table: the NMC 18650 table sourced in
+# _sources.md (this is its own chemistry; the LiPo presets borrow it as a proxy).
 kind: battery
 chemistry: li_ion
 series: 12

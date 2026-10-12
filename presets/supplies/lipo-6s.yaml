@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=../../schemas/supply.schema.json
-# 6S LiPo pack (5000 mAh class). OCV table: see _sources.md.
+# 6S LiPo pack (5000 mAh class). OCV table: the NMC 18650 table as a proxy
+# (estimated; see _sources.md).
 kind: battery
 chemistry: lipo
 series: 6

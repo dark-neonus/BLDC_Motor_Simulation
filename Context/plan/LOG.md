@@ -433,3 +433,11 @@
   - skeleton/ideal 2.00 ms (5.0× real time);
   - averaged inverter + PSU at dt 4.7 µs 3.34 ms (3.0×);
   - switching at the T_pwm/200 rule (0.25 µs) 52.1 ms (0.19×), above the 0.05× threshold, so no P19 task.
+
+## 2026-10-12 — P07.T13 P06 review carry-overs
+- Gear loss: the meshing loss sees T_L plus the load side's share of the lumped friction (EQ-MECH-05 clarifications).
+- Snapshot format v2 (`SNAPSHOT_VERSION`): P06/P07 modules added fields, so a v1 snapshot is rejected with a clear "snapshot format v1 … module data changed" instead of "missing …". No migration; snapshots are session artifacts.
+- `get_param`: `gearbox.stiffness`/`damping` (with backlash) and `load.disturbance.duration` (the last commanded pulse length; the remaining time is the state `disturbance_left`).
+- Interim FOC: torque → velocity restarts the speed integrator from the present i_q (`Foc::bumpless_to_velocity`); the P term still acts on the speed error at the switch (cancelling it as well made the loop push the wrong way while recovering). Comment: the torque command uses K_t(λ_ref) and ignores η and λ(T).
+- Tests: V-THERM-002 through the motor's own R(T) (locked motor at V = 1.5·R(T_max)·Î_cont, network capacitances ×1e-4; T_w within 1 K, i_a = Î_cont to 1e-3); λ(T) at 80 °C lowers the torque per amp by 7.2 % (rtol 1e-9).
+- Li-ion OCV: no published numeric full-cell NMC table found (the papers have curves only in figures; two sites blocked). By the user's choice: the provenance is now explicit (the NMC table is the Li-ion preset's; LiPo borrows it as an estimated proxy), and the search for a measured table is carried to P11.T07.

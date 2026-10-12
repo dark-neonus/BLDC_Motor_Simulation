@@ -3,7 +3,11 @@
 ## Open-circuit voltage curves (per cell, at rest)
 
 Two shared tables are used. Published charts differ by a few tens of mV; the presets
-use values inside the published ranges.
+use values inside the published ranges. The NMC table belongs to the Li-ion (18650 NMC)
+preset; the LiPo presets reuse it as a proxy. No published *numeric* full-cell NMC table
+was found (P07.T13): the measured sources give curves only in figures, so the table follows
+chart values and the measured shape. P11.T07 carries the follow-up (replace it with a
+measured table when one with a citable source is found).
 
 | SoC | NMC / LiPo (V) | LiFePO4 (V) |
 |---|---|---|

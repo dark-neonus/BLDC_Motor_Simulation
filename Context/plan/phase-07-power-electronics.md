@@ -110,7 +110,7 @@
   - **Verify:** `just test && just validate && just e2e` green.
   - **Done when:** Green, and the UI still spins the motor.
 
-- [ ] **P07.T13** — P06 review carry-overs
+- [x] **P07.T13** — P06 review carry-overs
   - **Depends:** P06
   - **Do:**
     1. Gear loss τ_in counts the load's share of the lumped friction as part of T_L (mechanical.md EQ-MECH-05 clarifications); today `t_l` excludes it.

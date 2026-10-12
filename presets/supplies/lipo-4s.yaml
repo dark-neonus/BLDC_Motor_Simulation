@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=../../schemas/supply.schema.json
-# 4S LiPo pack (hobby 2200 mAh class). OCV table: see _sources.md.
+# 4S LiPo pack (hobby 2200 mAh class). OCV table: the NMC 18650 table as a proxy
+# (estimated; see _sources.md).
 kind: battery
 chemistry: lipo
 series: 4

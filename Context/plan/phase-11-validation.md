@@ -93,7 +93,7 @@
 
 - [ ] **P11.T07** — Preset consistency checks
   - **Depends:** P11.T04
-  - **Do:** For each generic motor preset: derived no-load speed at rated V, stall torque, Kt·I_peak vs peak torque, and continuous torque from thermal, compared with the ranges recorded in `presets/motors/_sources.md` (machine-readable front matter added there). Flag outliers.
+  - **Do:** For each generic motor preset: derived no-load speed at rated V, stall torque, Kt·I_peak vs peak torque, and continuous torque from thermal, compared with the ranges recorded in `presets/motors/_sources.md` (machine-readable front matter added there). Flag outliers. Carry-over (P07.T13): look for a measured, citable numeric OCV–SoC table for a full 18650 NMC cell and replace the chart-based table in `presets/supplies/_sources.md` if one is found.
   - **Files:** `validation/tests/test_presets.py`
   - **Verify:** `just validate -k presets`.
   - **Done when:** All presets are within their documented ranges.
