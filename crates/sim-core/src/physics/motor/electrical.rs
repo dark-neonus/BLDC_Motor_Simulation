@@ -233,6 +233,8 @@ pub struct MotorElectrical {
     temp: Option<LambdaTemperature>,
     r_temp: Option<RTemperature>,
     legs: Option<LegInputs>,
+    /// Terminal power is an internal flow (an inverter books the DC input and its loss).
+    terminals_internal: bool,
     /// The open phase is a physical disconnect (`motor.open_phase`): it never reconnects
     /// by itself. Otherwise it follows its inverter leg and the diode bounds.
     fault_open: bool,
@@ -327,6 +329,7 @@ impl MotorElectrical {
             temp: None,
             r_temp: None,
             legs: None,
+            terminals_internal: false,
             fault_open: false,
             warned_two_off: false,
             jump: 0.0,
@@ -361,6 +364,13 @@ impl MotorElectrical {
     /// EQ-MOT-12).
     pub fn with_legs(mut self, l: LegInputs) -> Self {
         self.legs = Some(l);
+        self
+    }
+
+    /// The terminals are fed by an inverter that reports the DC-side input and its own
+    /// loss: the terminal power is then internal and not booked here (EQ-ENER-01).
+    pub fn with_internal_terminals(mut self) -> Self {
+        self.terminals_internal = true;
         self
     }
 
@@ -757,17 +767,24 @@ impl PlantModule for MotorElectrical {
         Ok(old)
     }
     fn power_terms(&self) -> Vec<(String, PowerKind)> {
-        vec![
-            ("electrical_in".into(), PowerKind::Input),
-            ("copper".into(), PowerKind::Loss),
-        ]
+        let copper = ("copper".into(), PowerKind::Loss);
+        if self.terminals_internal {
+            vec![copper]
+        } else {
+            vec![("electrical_in".into(), PowerKind::Input), copper]
+        }
     }
     fn powers(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, p: &mut [f64]) {
         let (s, _, _) = self.state(x, off, bus);
-        let (va, vb) = self.v_alpha_beta(bus);
         // EQ-MOT-13 (amplitude-invariant: factor 3/2).
-        p[0] = 1.5 * (va * s.i_alpha + vb * s.i_beta);
-        p[1] = 1.5 * self.r(bus) * (s.i_alpha * s.i_alpha + s.i_beta * s.i_beta);
+        let p_cu = 1.5 * self.r(bus) * (s.i_alpha * s.i_alpha + s.i_beta * s.i_beta);
+        if self.terminals_internal {
+            p[0] = p_cu;
+        } else {
+            let (va, vb) = self.v_alpha_beta(bus);
+            p[0] = 1.5 * (va * s.i_alpha + vb * s.i_beta);
+            p[1] = p_cu;
+        }
     }
     fn stored_energy(&self, x: &[f64], off: usize, bus: &SignalBus) -> f64 {
         let (s, _, lambda) = self.state(x, off, bus);

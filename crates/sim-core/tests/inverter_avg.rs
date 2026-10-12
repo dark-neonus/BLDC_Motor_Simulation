@@ -43,9 +43,15 @@ impl PlantModule for Bus {
 }
 
 fn rig(averaged: bool) -> Engine {
+    rig_f(averaged, 20e3)
+}
+
+fn rig_f(averaged: bool, f_loss: f64) -> Engine {
     let mut bus = SignalBus::new();
     let vb = bus.register("bus.v", "V", "", SignalKind::Output).unwrap();
-    let mut inv = SwitchingInverter::new(D, vb, &mut bus).unwrap();
+    let mut inv = SwitchingInverter::new(D, vb, &mut bus)
+        .unwrap()
+        .with_switching_loss(60e-9, f_loss);
     if averaged {
         inv = inv
             .averaged(&mut bus, PWM.dead_ns as f64 / PWM.period_ns as f64, 0.01)
@@ -86,7 +92,8 @@ fn rig(averaged: bool) -> Engine {
             legs,
             v_bus: vb,
             v_f: D.v_f,
-        });
+        })
+        .with_internal_terminals();
     let rotor = rotor.with_internal(bus.id("motor.torque_em").unwrap());
     let inv = inv.with_motor(&bus).unwrap();
     for (id, d) in duty_ids(&mut bus).unwrap().iter().zip(DUTY) {
@@ -145,4 +152,25 @@ fn v_inv_avg_matches_switching_period_averages() {
         "{} vs {ideal}",
         sig(&av, "motor.i_a")
     );
+}
+
+/// P07.T05: DC input = phase output + inverter loss (conduction, diodes, switching) in
+/// both modes, so the balance closes; the switching-loss current scales with f_pwm.
+#[test]
+fn inverter_losses_close_the_balance_and_scale_with_f_pwm() {
+    for averaged in [false, true] {
+        let mut e = rig(averaged);
+        e.step_until(SimTime::from_secs_f64(0.02)).unwrap();
+        let r = sig(&e, "energy.residual");
+        assert!(r.abs() < 1e-6, "averaged = {averaged}: residual {r}");
+        assert!(sig(&e, "energy.loss.inverter") > 0.0);
+        assert!(sig(&e, "inverter.p_loss") > 0.0);
+    }
+    let i_sw = |f: f64| {
+        let mut e = rig_f(true, f);
+        e.step_until(SimTime::from_secs_f64(0.02)).unwrap();
+        sig(&e, "inverter.i_sw")
+    };
+    let (a, b) = (i_sw(20e3), i_sw(40e3));
+    assert!(a > 0.0 && (b / a - 2.0).abs() < 1e-12, "{a} {b}");
 }

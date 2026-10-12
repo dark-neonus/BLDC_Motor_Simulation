@@ -400,3 +400,8 @@
 - `SwitchingInverter::averaged(dead_frac, i_eps)`: the same module in averaged mode (EQ-INV-03): legs that are not Off give d·V_bus − R_on·i − σ(i)·(t_d/T)(V_bus + 2V_f − 2R_on|i|), σ = tanh(i/i_ε); Off legs keep the latched-diode / floating rule of the switching mode, so floating behaves the same in both. i_dc averaged per EQ-INV-08 ((d − σ t_d/T)·i). `duty_ids` registers or reuses `inverter.duty_x` (shared with the PWM block).
 - Not yet: the averaged six-step H/O leg (EQ-INV-07 blend with w = (1+σ)/2) — it needs a per-leg six-step mode signal and comes with the six-step controller (P09).
 - Test V-INV-avg (`tests/inverter_avg.rs`): locked rotor, d = (0.7, 0.4, 0.4), 24 V, 20 kHz, t_d = 0.5 µs: the switching model's period-averaged phase currents (200 samples over one period after 16 τ) equal the averaged model's within 1 % of the 4.6 A operating current; the dead-time error is visible (current < 0.97 × the no-dead-time value).
+
+## 2026-10-12 — P07.T05 Inverter losses + DC-link current
+- Inverter (in `leg.rs`, not a separate losses.rs: the loss is one line on top of the terminal voltages): `with_switching_loss(t_r + t_f, f_pwm)` → `inverter.i_sw` = f_pwm·Σ ½|i_x|(t_r + t_f) over legs that are not Off (EQ-INV-09, both modes); `inverter.p_loss` = V_bus(i_dc + i_sw) − Σ v_x i_x (conduction + diodes + switching, exact by EQ-INV-01/08). Power terms: Input `dc_link` = V_bus(i_dc + i_sw) (until a bus module takes it: `without_dc_input`) and Loss `inverter`.
+- Motor `with_internal_terminals()`: the terminal power is an internal flow, so the motor books only copper (no double input).
+- Tests: residual < 1e-6 with switching and averaged inverters (locked rotor, 20 ms), `energy.loss.inverter` > 0; i_sw doubles exactly with f_pwm.

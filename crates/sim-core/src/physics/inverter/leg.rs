@@ -83,6 +83,12 @@ pub struct SwitchingInverter {
     prev: [LegState; 3],
     /// Averaged mode (EQ-INV-03): driven legs give their period-average voltage.
     averaged: Option<Averaged>,
+    /// Switching loss (EQ-INV-09): (t_r + t_f, f_pwm).
+    sw: Option<(f64, f64)>,
+    i_sw: SignalId,
+    p_loss: SignalId,
+    /// Book the DC-link input V_bus·(i_dc + i_sw) here (no bus module yet).
+    dc_input: bool,
 }
 
 /// Averaged-mode data (EQ-INV-03, `fidelity.inverter_mode = averaged`).
@@ -130,6 +136,19 @@ pub fn averaged_voltage(
 }
 
 impl SwitchingInverter {
+    /// Switching loss (EQ-INV-09) as an extra bus current i_sw = f_pwm·Σ ½|i_x|(t_r + t_f)
+    /// over the legs that switch.
+    pub fn with_switching_loss(mut self, t_rise_fall: f64, f_pwm: f64) -> Self {
+        self.sw = Some((t_rise_fall, f_pwm));
+        self
+    }
+
+    /// The DC bus is a module of its own that books the source input: keep only the loss.
+    pub fn without_dc_input(mut self) -> Self {
+        self.dc_input = false;
+        self
+    }
+
     /// Switch to the averaged model (EQ-INV-03): legs that are not Off follow their duty
     /// `inverter.duty_x` (complementary PWM); Off legs keep the diode/floating rule.
     pub fn averaged(
@@ -169,6 +188,13 @@ impl SwitchingInverter {
         };
         let v = [volt("a")?, volt("b")?, volt("c")?];
         let i_dc = bus.register("inverter.i_dc", "A", "DC-link current", SignalKind::Output)?;
+        let i_sw = bus.register(
+            "inverter.i_sw",
+            "A",
+            "switching-loss bus current",
+            SignalKind::Output,
+        )?;
+        let p_loss = bus.register("inverter.p_loss", "W", "inverter loss", SignalKind::Output)?;
         Ok(Self {
             d,
             legs,
@@ -182,6 +208,10 @@ impl SwitchingInverter {
             latch: [0.0; 3],
             prev: [LegState::Low; 3],
             averaged: None,
+            sw: None,
+            i_sw,
+            p_loss,
+            dc_input: true,
         })
     }
 
@@ -261,8 +291,40 @@ impl PlantModule for SwitchingInverter {
             }
         }
         bus.set(self.i_dc, i_dc);
+        // Switching loss: every leg that is not Off switches once per period (EQ-INV-09).
+        let i_sw = self.sw.map_or(0.0, |(t_sw, f)| {
+            (0..3)
+                .filter(|&k| LegState::from_signal(bus.get(self.legs[k])) != LegState::Off)
+                .map(|k| 0.5 * bus.get(self.i[k]).abs() * t_sw * f)
+                .sum()
+        });
+        bus.set(self.i_sw, i_sw);
+        let p_out: f64 = (0..3)
+            .map(|k| bus.get(self.v[k]) * bus.get(self.i[k]))
+            .sum();
+        bus.set(self.p_loss, v_bus * (i_dc + i_sw) - p_out);
     }
     fn derivatives(&self, _t: f64, _x: &[f64], _off: usize, _bus: &SignalBus, _dx: &mut [f64]) {}
+    fn power_terms(&self) -> Vec<(String, crate::energy::PowerKind)> {
+        use crate::energy::PowerKind;
+        let loss = ("inverter".into(), PowerKind::Loss);
+        if self.dc_input {
+            vec![("dc_link".into(), PowerKind::Input), loss]
+        } else {
+            vec![loss]
+        }
+    }
+    fn powers(&self, _t: f64, _x: &[f64], _off: usize, bus: &SignalBus, p: &mut [f64]) {
+        // From this pass's outputs: P_dc = V_bus·(i_dc + i_sw), P_loss = P_dc − Σ v_x·i_x
+        // (conduction, diodes and switching, EQ-INV-09).
+        let loss = bus.get(self.p_loss);
+        if self.dc_input {
+            p[0] = bus.get(self.v_bus) * (bus.get(self.i_dc) + bus.get(self.i_sw));
+            p[1] = loss;
+        } else {
+            p[0] = loss;
+        }
+    }
     fn after_discrete(&mut self, _t: f64, _x: &mut [f64], bus: &SignalBus) {
         for k in 0..3 {
             let s = LegState::from_signal(bus.get(self.legs[k]));

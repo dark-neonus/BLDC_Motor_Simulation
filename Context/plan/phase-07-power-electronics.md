@@ -55,7 +55,7 @@
     - six-step table correct
   - **Done when:** Passing.
 
-- [ ] **P07.T05** — Inverter losses & DC-link current
+- [x] **P07.T05** — Inverter losses & DC-link current
   - **Depends:** P07.T03, P07.T04
   - **Do:** Conduction, switching and diode losses (switching mode: per edge; averaged: per formula). DC-link current per EQ-INV. Report losses to the energy terms. Signals `inverter.p_loss_*` and `inverter.i_dc`.
   - **Files:** `crates/sim-core/src/physics/inverter/losses.rs`
