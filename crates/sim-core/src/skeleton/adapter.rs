@@ -19,9 +19,10 @@ use crate::physics::mech::rotor::{RotorParams, RotorRigid};
 use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::{Cogging, CoggingParams};
 use crate::physics::motor::electrical::{
-    ElectricalInputs, ElectricalParams, MotorElectrical, SatParams,
+    ElectricalInputs, ElectricalParams, LambdaTemperature, MotorElectrical, RTemperature, SatParams,
 };
 use crate::physics::motor::iron_loss::{IronLoss, IronLossParams};
+use crate::physics::thermal::{Thermal, ThermalInputs, ThermalParams};
 
 /// Signals the FOC block reads and writes.
 #[derive(Debug, Clone, Copy)]
@@ -113,6 +114,8 @@ pub struct SkeletonOptions {
     pub friction: (Friction, Friction),
     /// Two-inertia backlash (EQ-MECH-04); `None` = rigid.
     pub backlash: Option<Backlash>,
+    /// Thermal network with R(T) and λ(T) coupling (EQ-THERM-01…03).
+    pub thermal: Option<ThermalOptions>,
     /// Gear ratio N (load-side setpoints × N = motor side).
     pub ratio: f64,
     /// Cogging (EQ-MOT-08), when the fidelity tier enables it.
@@ -137,6 +140,7 @@ impl Default for SkeletonOptions {
             theta_l0: 0.0,
             friction: (Friction::default(), Friction::default()),
             backlash: None,
+            thermal: None,
             ratio: 1.0,
             cogging: None,
             iron: None,
@@ -144,6 +148,16 @@ impl Default for SkeletonOptions {
             shape: Shape::Sinusoidal,
         }
     }
+}
+
+/// Thermal network and its couplings into the motor.
+#[derive(Debug, Clone, Copy)]
+pub struct ThermalOptions {
+    pub params: ThermalParams,
+    /// Reference temperature of R and λ [K].
+    pub t_ref: f64,
+    /// Magnet remanence coefficient α_Br [1/K].
+    pub alpha_br: f64,
 }
 
 /// Build the skeleton engine (6020-class motor + 20 kHz FOC).
@@ -233,7 +247,24 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         theta_e0: 0.0,
         saturation: opts.saturation,
     };
-    let motor = MotorElectrical::new(ep, inp, &mut bus).expect("unique skeleton signal");
+    let thermal = opts.thermal.map(|o| {
+        let th = Thermal::new(o.params, &mut bus).expect("unique skeleton signal");
+        (th, o)
+    });
+    let mut motor = MotorElectrical::new(ep, inp, &mut bus).expect("unique skeleton signal");
+    if let Some((_, o)) = &thermal {
+        motor = motor
+            .with_r_temperature(RTemperature {
+                t_winding: id(&bus, "thermal.t_winding"),
+                t_ref: o.t_ref,
+            })
+            .with_lambda_temperature(LambdaTemperature {
+                t_magnet: id(&bus, "thermal.t_magnet"),
+                alpha_br: o.alpha_br,
+                t_ref: o.t_ref,
+                t_start: o.params.t_init,
+            });
+    }
     let mut rotor = rotor.with_internal(id(&bus, "motor.torque_em"));
     let cogging = match opts.cogging {
         Some(c) => {
@@ -266,6 +297,16 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
     let mut plant = Plant::new();
     plant.add(Box::new(rotor));
     plant.add(Box::new(source));
+    if let Some((th, _)) = thermal {
+        // Before the motor: its outputs (temperatures) feed R(T) and λ(T).
+        let inputs = ThermalInputs {
+            p_cu: bus.id("motor.p_cu").ok(),
+            p_fe: bus.id("motor.p_fe").ok(),
+            p_fric: bus.id("motor.p_fric").ok(),
+            omega: bus.id("motor.omega").ok(),
+        };
+        plant.add(Box::new(th.with_inputs(inputs)));
+    }
     plant.add(Box::new(motor));
     if let Some(c) = cogging {
         plant.add(Box::new(c));

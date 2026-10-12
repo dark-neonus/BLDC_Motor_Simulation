@@ -154,6 +154,16 @@ pub struct LambdaTemperature {
     pub t_magnet: SignalId,
     pub alpha_br: f64,
     pub t_ref: f64,
+    /// Magnet temperature at the start: the initial flux uses λ(T_start), so the motor
+    /// starts with the requested currents.
+    pub t_start: f64,
+}
+
+/// Winding temperature input for R(T) = R_ref·(1 + α_Cu·(T_w − T_ref)) (EQ-THERM-02).
+#[derive(Debug, Clone, Copy)]
+pub struct RTemperature {
+    pub t_winding: SignalId,
+    pub t_ref: f64,
 }
 
 /// Bus signals the module reads.
@@ -197,6 +207,7 @@ pub struct MotorElectrical {
     inp: ElectricalInputs,
     out: Out,
     temp: Option<LambdaTemperature>,
+    r_temp: Option<RTemperature>,
     jump: f64,
     last_theta_e: f64,
     last_lambda: f64,
@@ -279,6 +290,7 @@ impl MotorElectrical {
             inp,
             out,
             temp: None,
+            r_temp: None,
             jump: 0.0,
             last_lambda: lambda,
             open: None,
@@ -291,7 +303,33 @@ impl MotorElectrical {
     /// Enable λ(T) from a magnet-temperature signal (wired by P06).
     pub fn with_lambda_temperature(mut self, t: LambdaTemperature) -> Self {
         self.temp = Some(t);
+        self.last_lambda = self.lambda_start();
         self
+    }
+
+    /// λ at the start temperature (λ_ref without a temperature input).
+    fn lambda_start(&self) -> f64 {
+        match self.temp {
+            Some(t) => self.p.lambda * (1.0 + t.alpha_br * (t.t_start - t.t_ref)),
+            None => self.p.lambda,
+        }
+    }
+
+    /// Enable R(T) from the winding-temperature signal (EQ-THERM-02).
+    pub fn with_r_temperature(mut self, t: RTemperature) -> Self {
+        self.r_temp = Some(t);
+        self
+    }
+
+    /// Phase resistance at the present winding temperature.
+    fn r(&self, bus: &SignalBus) -> f64 {
+        match self.r_temp {
+            Some(t) => {
+                self.p.r
+                    * (1.0 + crate::physics::thermal::ALPHA_CU * (bus.get(t.t_winding) - t.t_ref))
+            }
+            None => self.p.r,
+        }
     }
 
     fn lambda(&self, bus: &SignalBus) -> f64 {
@@ -520,8 +558,9 @@ impl PlantModule for MotorElectrical {
         let p = &self.p;
         let th = p.theta_e0;
         let (s, c) = th.sin_cos();
-        let (pd, pq) = self.magnetics(p.lambda).psi(p.i_d0, p.i_q0);
-        let (ha, hb) = self.harmonic_flux(th, p.lambda);
+        let lambda = self.lambda_start();
+        let (pd, pq) = self.magnetics(lambda).psi(p.i_d0, p.i_q0);
+        let (ha, hb) = self.harmonic_flux(th, lambda);
         x[0] = c * pd - s * pq + ha;
         x[1] = s * pd + c * pq + hb;
     }
@@ -579,7 +618,7 @@ impl PlantModule for MotorElectrical {
         bus.set(o.torque, self.torque(&s, th, lambda));
         bus.set(
             o.p_cu,
-            1.5 * self.p.r * (s.i_alpha * s.i_alpha + s.i_beta * s.i_beta),
+            1.5 * self.r(bus) * (s.i_alpha * s.i_alpha + s.i_beta * s.i_beta),
         );
     }
     fn derivatives(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, dx: &mut [f64]) {
@@ -588,14 +627,15 @@ impl PlantModule for MotorElectrical {
             // EQ-MOT-11: dψ_yz/dt = v_yT − v_zT − 2R·i.
             let (y, z) = ((k + 1) % 3, (k + 2) % 3);
             let i = Self::phase_current(&s, y);
-            dx[0] = bus.get(self.inp.v[y]) - bus.get(self.inp.v[z]) - 2.0 * self.p.r * i;
+            dx[0] = bus.get(self.inp.v[y]) - bus.get(self.inp.v[z]) - 2.0 * self.r(bus) * i;
             dx[1] = 0.0;
             return;
         }
         let (va, vb) = self.v_alpha_beta(bus);
         // EQ-MOT-01.
-        dx[0] = va - self.p.r * s.i_alpha;
-        dx[1] = vb - self.p.r * s.i_beta;
+        let r = self.r(bus);
+        dx[0] = va - r * s.i_alpha;
+        dx[1] = vb - r * s.i_beta;
     }
     fn params(&self) -> Vec<(String, String)> {
         [
@@ -659,7 +699,7 @@ impl PlantModule for MotorElectrical {
         let (va, vb) = self.v_alpha_beta(bus);
         // EQ-MOT-13 (amplitude-invariant: factor 3/2).
         p[0] = 1.5 * (va * s.i_alpha + vb * s.i_beta);
-        p[1] = 1.5 * self.p.r * (s.i_alpha * s.i_alpha + s.i_beta * s.i_beta);
+        p[1] = 1.5 * self.r(bus) * (s.i_alpha * s.i_alpha + s.i_beta * s.i_beta);
     }
     fn stored_energy(&self, x: &[f64], off: usize, bus: &SignalBus) -> f64 {
         let (s, _, lambda) = self.state(x, off, bus);

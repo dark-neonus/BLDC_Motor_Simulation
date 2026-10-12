@@ -75,6 +75,12 @@ pub trait PlantModule: Send {
     ) {
     }
 
+    /// Diagnostics raised since the last call (e.g. from `on_event`); the engine turns
+    /// them into `EngineEvent::Warning`s.
+    fn take_warnings(&mut self) -> Vec<String> {
+        Vec::new()
+    }
+
     /// Internal (non-state) data for snapshots, e.g. RNG streams, integrators, modes.
     fn save(&self) -> serde_json::Value {
         serde_json::Value::Null
@@ -162,6 +168,19 @@ impl Plant {
             .iter_mut()
             .map(|m| m.take_external_energy())
             .sum()
+    }
+
+    /// Warnings raised by modules since the last call: (module name, message).
+    pub fn take_warnings(&mut self) -> Vec<(String, String)> {
+        self.modules
+            .iter_mut()
+            .flat_map(|m| {
+                let name = m.name().to_string();
+                m.take_warnings()
+                    .into_iter()
+                    .map(move |w| (name.clone(), w))
+            })
+            .collect()
     }
 
     pub fn modules(&self) -> &[Box<dyn PlantModule>] {

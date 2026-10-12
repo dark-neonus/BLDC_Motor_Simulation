@@ -4,3 +4,4 @@
 pub mod inverter;
 pub mod mech;
 pub mod motor;
+pub mod thermal;

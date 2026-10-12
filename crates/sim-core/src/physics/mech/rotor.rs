@@ -53,6 +53,7 @@ struct Ids {
     disturbance: SignalId,
     delta: SignalId,
     torque_contact: SignalId,
+    p_fric: SignalId,
 }
 
 /// One friction element's evaluation.
@@ -180,6 +181,7 @@ impl RotorRigid {
             disturbance: out("load.disturbance", "N*m", "disturbance torque pulse")?,
             delta: out("gearbox.delta", "rad", "backlash deflection θm/N − θ_L")?,
             torque_contact: out("gearbox.torque_contact", "N*m", "gear contact torque")?,
+            p_fric: out("motor.p_fric", "W", "bearing + load friction loss (heat)")?,
         };
         Ok(Self {
             p,
@@ -556,6 +558,8 @@ impl PlantModule for RotorRigid {
         bus.set(ids.disturbance, self.dist);
         bus.set(ids.delta, d.delta);
         bus.set(ids.torque_contact, d.tau_c);
+        let w_m = if self.locked { 0.0 } else { w };
+        bus.set(ids.p_fric, -d.motor.t_f * w_m - d.load_side.t_f * d.w_l);
     }
     fn derivatives(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, dx: &mut [f64]) {
         let s = &x[off..off + self.n_states()];

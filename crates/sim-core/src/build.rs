@@ -8,7 +8,7 @@ use sim_model::constraints::{self, Severity};
 use sim_model::param::Param;
 use sim_model::params::{
     ControllerParams, EmfShape, GearboxParams, LoadParams, MotorParams, OnChange, SupplyParams,
-    TierParam,
+    TierParam, Topology,
 };
 use sim_model::scene::ResolvedScene;
 use sim_model::units::Kind;
@@ -25,7 +25,8 @@ use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::CoggingParams;
 use crate::physics::motor::electrical::SatParams;
 use crate::physics::motor::iron_loss::IronLossParams;
-use crate::skeleton::adapter::{SkeletonOptions, build_engine_with};
+use crate::physics::thermal::ThermalParams;
+use crate::skeleton::adapter::{SkeletonOptions, ThermalOptions, build_engine_with};
 use crate::skeleton::foc::FocConfig;
 use crate::skeleton::params::PmsmParams;
 
@@ -316,6 +317,67 @@ fn gearbox(scene: &ResolvedScene) -> Result<Gearbox, BuildError> {
     })
 }
 
+/// Default ambient temperature when the scene gives none [K] (25 °C).
+pub const DEFAULT_AMBIENT: f64 = 298.15;
+/// Default reference temperature of R and λ [K] (20 °C).
+pub const DEFAULT_T_REF: f64 = 293.15;
+/// Default magnet remanence coefficient α_Br [1/K] (EQ-THERM-03).
+pub const DEFAULT_ALPHA_BR: f64 = -0.0012;
+
+/// Thermal network (EQ-THERM-01) with R(T)/λ(T) coupling, if the tier enables it and the
+/// motor has thermal data.
+fn thermal(scene: &ResolvedScene) -> Result<Option<ThermalOptions>, BuildError> {
+    let m = &scene.motor;
+    let Some(t) = &m.thermal else {
+        return Ok(None);
+    };
+    if !FidelityConfig::preset(tier(scene)).enable_thermal {
+        return Ok(None);
+    }
+    let tr = |p: &Param, n: &str| si(p, Kind::ThermalResistance, &format!("motor.thermal.{n}"));
+    let hc = |p: &Param, n: &str| si(p, Kind::HeatCapacity, &format!("motor.thermal.{n}"));
+    let t_amb = match &scene.initial.ambient {
+        Some(p) => si(p, Kind::Temperature, "initial.ambient")?,
+        None => DEFAULT_AMBIENT,
+    };
+    let t_init = match &scene.initial.temperature {
+        Some(p) => si(p, Kind::Temperature, "initial.temperature")?,
+        None => t_amb,
+    };
+    // κ [s/rad] has no unit kind: a bare SI number.
+    let kappa = match &t.kappa {
+        Some(p) => p
+            .value
+            .si(Kind::Dimensionless)
+            .map_err(|e| BuildError::Param("motor.thermal.kappa".into(), e.to_string()))?,
+        None => 0.0,
+    };
+    let params = ThermalParams {
+        c_w: hc(&t.c_w, "c_w")?,
+        c_s: hc(&t.c_s, "c_s")?,
+        c_h: hc(&t.c_h, "c_h")?,
+        r_ws: tr(&t.r_ws, "r_ws")?,
+        r_sh: tr(&t.r_sh, "r_sh")?,
+        r_ha: tr(&t.r_ha, "r_ha")?,
+        t_amb,
+        t_init,
+        t_max: si(&t.t_max, Kind::Temperature, "motor.thermal.t_max")?,
+        kappa,
+        outrunner: m.identity.topology == Topology::Outrunner,
+    };
+    Ok(Some(ThermalOptions {
+        params,
+        t_ref: match &t.t_ref {
+            Some(p) => si(p, Kind::Temperature, "motor.thermal.t_ref")?,
+            None => DEFAULT_T_REF,
+        },
+        alpha_br: match &m.magnetic.alpha_br {
+            Some(p) => si(p, Kind::TemperatureCoefficient, "motor.magnetic.alpha_br")?,
+            None => DEFAULT_ALPHA_BR,
+        },
+    }))
+}
+
 /// Two-inertia backlash (EQ-MECH-04) when the gearbox has backlash > 0, and the step
 /// limit its contact needs (EQ-NUM: dt ≤ 1/(20·√(k_c/J_red))). Missing stiffness
 /// defaults to 1 N·m/arcmin and missing damping to ζ = 0.1 (D-016).
@@ -526,6 +588,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             theta_l0: mount_angle(scene)?,
             friction: friction(scene)?,
             backlash,
+            thermal: thermal(scene)?,
             ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
             cogging: cogging(scene)?,
             iron: iron(scene)?,

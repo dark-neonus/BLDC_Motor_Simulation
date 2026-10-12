@@ -287,6 +287,13 @@ impl Engine {
                                 .handle_event(i, rising, t, &mut self.x, &mut self.bus);
                         }
                     }
+                    for (source, msg) in self.plant.take_warnings() {
+                        self.events.push(EngineEvent::Warning {
+                            t: SimTime::from_secs_f64(t),
+                            source,
+                            msg,
+                        });
+                    }
                     // Zeno guard.
                     if t - self.zeno.0 > 1e-6 {
                         self.zeno = (t, 0);

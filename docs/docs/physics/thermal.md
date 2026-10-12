@@ -59,7 +59,9 @@ $$
 
 $P_{cu}$ is the copper loss of EQ-MOT-13 (evaluated with the temperature-dependent $R$), $P_{fe}$ is EQ-MOT-09, and $P_{fric}$ is the friction loss (EQ-MECH-05) of the motor bearings and the load.
 
-The energy stored in the network ($\sum C_i T_i$) and the heat flow to ambient are reported to the energy balance (EQ-ENER).
+The network's heat is tracked separately from the electromechanical energy balance: the losses that heat it already leave that balance as loss terms (EQ-ENER-01, "heat to ambient"), so booking the stored heat $\sum C_i T_i$ there as well would count it twice. The network closes on its own: heat in = $\sum C_i \dot T_i$ + heat to ambient.
+
+**Overheat warnings.** A warning is raised when $T_w$ rises through $T_{w,max} - 10$ K and again through $T_{w,max}$ (state events).
 
 **Clarifications.** The stator heat from iron loss is $-T_{fe}\,\omega_m$, the same value booked as loss (EQ-MOT-09). $P_{fric}$ includes the viscous part of bearing and load friction.
 

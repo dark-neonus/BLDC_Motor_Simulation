@@ -58,7 +58,7 @@
   - **Verify:** Test: an impulse J_imp on a free rotor → Δω = J_imp/J_total.
   - **Done when:** Passing.
 
-- [ ] **P06.T06** — Thermal network + R(T), λ(T) coupling
+- [x] **P06.T06** — Thermal network + R(T), λ(T) coupling
   - **Depends:** P05
   - **Do:**
     - 3-node thermal plant module (winding, stator, housing → ambient). Heat inputs from copper/iron/friction losses.
