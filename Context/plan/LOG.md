@@ -474,3 +474,7 @@
 - `build::magnetic_encoder(&EncoderParams)` → config + period (default 10 kHz when the preset gives no rate).
 - Presets aligned with the spec's chip table: AS5047P INL 0.34° (estimated) → 0.8° (datasheet), noise 0.068°; AS5600 INL 1° now datasheet, noise 0.015°; MT6701 noise 0.05° (estimated). `_sources.md` updated.
 - Tests: V-SENS-001 (14-bit ramp steps exactly 2π/16384, every code boundary once), eccentricity −a sin θ with a = 0.4° at 0.5 mm, INL peak = 0.8°, air gap (σ ×8 at 2·z_max within 5 % over 1e4 samples, INL ×1.5 at z_min/2), block unwrap/error over three turns, presets build with the table values.
+
+## 2026-10-12 — P08.T04 Incremental optical encoder
+- `physics::sensors::encoder_incremental` (EQ-SENS-05): `IncrementalEncoder` (id `sensors.encoder`, reads `motor.theta` through the pipeline) counts c = ⌊4N/2π·(θ − θ_z)⌋ from the power-up angle θ_z; relative until the first crossing of θ_index (any turn, either direction), then anchored there: θ = θ_index + (c − c_index)·Δ. Outputs `sensors.encoder.{count, index, indexed, angle_raw, angle, error}` (signals.md updated). `drop_counts(m)` is the P10.T02 missed-count hook. Bypass: the true angle.
+- Tests: 1000 CPR → 12000 counts over three turns, index exactly once per turn at the first sample past θ_index, absolute within one count after it; backward the count falls by 4000 per turn with one index pulse; relative → anchored at the index; missed counts; bypass. Samples sit half a count off the edges (a sample exactly on an edge is a floor() tie).

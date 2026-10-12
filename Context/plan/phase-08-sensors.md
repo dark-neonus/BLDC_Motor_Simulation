@@ -36,7 +36,7 @@
     - the air-gap outside the recommended range increases noise as specified
   - **Done when:** Passing.
 
-- [ ] **P08.T04** — Incremental optical encoder
+- [x] **P08.T04** — Incremental optical encoder
   - **Depends:** P08.T01
   - **Do:** CPR, ×4 quadrature counting, index pulse, count → angle (relative until index). Optional missed-count fault hook for P10.
   - **Files:** `crates/sim-core/src/physics/sensors/encoder_incremental.rs`

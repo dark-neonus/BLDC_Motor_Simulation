@@ -35,6 +35,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `supply.i`, `supply.mode`, `supply.soc`, `supply.v_terminal`, `supply.battery.v_rc` | A, –, –, V, V | source state | supply | EQ-SUP-02…04 |
 | `sensors.hall.a`, `.b`, `.c`, `sensors.hall.code`, `sensors.hall.sector` | – | Hall outputs, code 4a + 2b + c, sector 1–6 in rotation order (0 for codes 0/7) | halls | EQ-SENS-02 |
 | `sensors.encoder.angle_raw`, `sensors.encoder.angle`, `sensors.encoder.error` | rad | register angle [0, 2π), unwrapped measured angle, true − measured (wrapped) | encoder | EQ-SENS-03/05 |
+| `sensors.encoder.count`, `sensors.encoder.index`, `sensors.encoder.indexed` | – | incremental encoder: ×4 count, 1 at the sample that saw the index, 1 once absolute | encoder | EQ-SENS-05 |
 | `sensors.adc.i_a`, `.i_b`, `.i_c`, `sensors.adc.v_bus` | A, V | measured currents / bus | ADC | EQ-SENS-06 |
 | `est.theta`, `est.omega`, `est.valid` | rad, rad/s, – | estimator outputs | estimators | EQ-CTRL-08/09 |
 | `ctrl.omega_ref`, `ctrl.theta_ref`, `ctrl.torque_ref` | rad/s, rad, N·m | active setpoints | setpoint | EQ-CTRL-04/07 |
