@@ -158,6 +158,8 @@ pub struct FocCurrentLoop {
     bw_hz: f64,
     speed: SpeedSource,
     next: Command,
+    /// Test mode: v_d = 0, v_q fixed (no current control).
+    open_loop_vq: Option<f64>,
 }
 
 impl FocCurrentLoop {
@@ -197,7 +199,14 @@ impl FocCurrentLoop {
             bw_hz: cfg.omega_c / (2.0 * std::f64::consts::PI),
             speed: inp.speed,
             next: Command::default(),
+            open_loop_vq: None,
         })
+    }
+
+    /// Open-loop test mode: apply v_d = 0, v_q = `vq` (`None`: closed loop).
+    pub fn with_open_loop_vq(mut self, vq: Option<f64>) -> Self {
+        self.open_loop_vq = vq;
+        self
     }
 }
 
@@ -216,22 +225,6 @@ impl DiscreteBlock for FocCurrentLoop {
     }
     fn step(&mut self, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
         let bus = &mut *ctx.bus;
-        // Apply the command computed at the previous tick (EQ-CTRL-03 timing).
-        let c = self.next;
-        for (id, v) in [
-            (self.sig.v_d, c.vd),
-            (self.sig.v_q, c.vq),
-            (self.sig.v_alpha, c.va),
-            (self.sig.v_beta, c.vb),
-            (self.sig.saturated, f64::from(u8::from(c.saturated))),
-        ] {
-            bus.set(id, v);
-        }
-        if let Some(ids) = self.duties {
-            for (id, d) in ids.iter().zip(c.duty) {
-                bus.set(*id, d);
-            }
-        }
         // Measure.
         let t = self.cfg.period.as_secs_f64();
         let th = self.inp.angle.gain * bus.get(self.inp.angle.id) + self.inp.angle_offset;
@@ -256,18 +249,30 @@ impl DiscreteBlock for FocCurrentLoop {
         let ff_d = -w * p.lq * iq;
         let ff_q = w * (p.ld * id + p.lambda);
         let (rd, rq) = (bus.get(self.sig.id_ref), bus.get(self.sig.iq_ref));
-        let vd = self.pi[0].step(rd, id, ff_d, (-v_max, v_max), t);
-        let vq_max = (v_max * v_max - vd * vd).max(0.0).sqrt();
-        let vq = self.pi[1].step(rq, iq, ff_q, (-vq_max, vq_max), t);
-        // Inverse Park at the advanced angle; SVPWM for an inverter.
-        let (sn, cs) = (th + 1.5 * t * w).sin_cos();
+        let (vd, vq) = match self.open_loop_vq {
+            Some(v) => (0.0, v),
+            None => {
+                let vd = self.pi[0].step(rd, id, ff_d, (-v_max, v_max), t);
+                let vq_max = (v_max * v_max - vd * vd).max(0.0).sqrt();
+                (vd, self.pi[1].step(rq, iq, ff_q, (-vq_max, vq_max), t))
+            }
+        };
+        // Inverse Park at the advanced angle; SVPWM for an inverter. Closed loop: the
+        // command applies one period later and is held, 1.5·T on average. The open-loop
+        // test mode is a voltage source, not a computation: it applies now, held 0.5·T.
+        let lead = if self.open_loop_vq.is_some() {
+            0.5
+        } else {
+            1.5
+        };
+        let (sn, cs) = (th + lead * t * w).sin_cos();
         let (va, vb) = (cs * vd - sn * vq, sn * vd + cs * vq);
         let duty = if self.duties.is_some() {
             svpwm_ab(va, vb, v_bus.max(1e-9)).0
         } else {
             [0.0; 3]
         };
-        self.next = Command {
+        let new = Command {
             vd,
             vq,
             va,
@@ -275,6 +280,27 @@ impl DiscreteBlock for FocCurrentLoop {
             duty,
             saturated: self.pi[0].saturated || self.pi[1].saturated,
         };
+        // Apply the command computed at the previous tick (EQ-CTRL-03 timing), or the
+        // open-loop voltage at once.
+        let c = if self.open_loop_vq.is_some() {
+            new
+        } else {
+            std::mem::replace(&mut self.next, new)
+        };
+        for (id, v) in [
+            (self.sig.v_d, c.vd),
+            (self.sig.v_q, c.vq),
+            (self.sig.v_alpha, c.va),
+            (self.sig.v_beta, c.vb),
+            (self.sig.saturated, f64::from(u8::from(c.saturated))),
+        ] {
+            bus.set(id, v);
+        }
+        if let Some(ids) = self.duties {
+            for (id, d) in ids.iter().zip(c.duty) {
+                bus.set(*id, d);
+            }
+        }
         Ok(())
     }
     fn reset(&mut self) {

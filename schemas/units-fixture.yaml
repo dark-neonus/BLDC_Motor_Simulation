@@ -59,4 +59,7 @@ cases:
   - { input: "1e-4 N*m*s/rad", kind: rotational_damping, si: 0.0001 }
   - { input: "2 N*m/arcmin", kind: torsional_stiffness, si: 6875.493541569878 }
   - { input: "3400 N*m/rad", kind: torsional_stiffness, si: 3400 }
+  - { input: "50 rad/s^2", kind: angular_acceleration, si: 50.0 }
+  - { input: "600 rpm/s", kind: angular_acceleration, si: 62.83185307179586 }
+  - { input: "90 deg/s²", kind: angular_acceleration, si: 1.5707963267948966 }
   - { input: "12", kind: dimensionless, si: 12.0 }

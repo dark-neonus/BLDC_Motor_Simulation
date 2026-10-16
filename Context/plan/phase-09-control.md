@@ -49,7 +49,7 @@
     - voltage saturation is handled without windup
   - **Done when:** Passing.
 
-- [ ] **P09.T04** — Velocity & position loops (cascade)
+- [x] **P09.T04** — Velocity & position loops (cascade)
   - **Depends:** P09.T03
   - **Do:** Velocity PI → iq_ref (with the current limit); position P/PI → velocity ref (with the velocity limit). Each loop has its own rate, enable flag and ramp. Gear ratio aware (the position setpoint is on the load side when a gearbox is present).
     - **Replaces the interim skeleton FOC** (P05.T11/P07.T12, moved here from P09.T03): `build_engine` wires the P09 current loop + cascade for `family: foc`, the default scene switches to it, and the skeleton FOC block is deleted (`grep INTERIM` → none left after P09).

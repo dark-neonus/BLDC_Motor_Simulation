@@ -388,6 +388,12 @@ fn limits(v: &mut V, l: &Limits) {
         "controller.limits.speed",
         Pos,
     );
+    v.o(
+        &l.ramp,
+        Kind::AngularAcceleration,
+        "controller.limits.ramp",
+        Pos,
+    );
     if let Some(f) = l.voltage_fraction
         && !(f > 0.0 && f <= 1.0)
     {

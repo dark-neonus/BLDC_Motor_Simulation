@@ -69,7 +69,7 @@ pub fn simulate(sc: &SkeletonScenario) -> Result<Vec<[f64; 6]>, String> {
             sc.record_every, sc.dt
         ));
     }
-    let ctrl_dt = super::foc::FocConfig::skeleton().dt;
+    let ctrl_dt = 1.0 / crate::control::foc::FocSpec::skeleton().current_rate_hz;
     let ratio = ctrl_dt / sc.dt;
     if ratio < 1.0 - 1e-9 || (ratio - ratio.round()).abs() > 1e-9 {
         return Err(format!(
@@ -79,7 +79,10 @@ pub fn simulate(sc: &SkeletonScenario) -> Result<Vec<[f64; 6]>, String> {
     }
     let mut e = build_engine(SkeletonOptions {
         locked: sc.lock_rotor,
-        open_loop_vq: sc.vq_open_loop,
+        controller: crate::control::foc::FocSpec {
+            open_loop_vq: sc.vq_open_loop,
+            ..crate::control::foc::FocSpec::skeleton()
+        },
         dt_max: sc.dt,
         ..Default::default()
     });

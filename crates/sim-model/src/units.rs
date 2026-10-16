@@ -14,6 +14,8 @@ pub enum Kind {
     Dimensionless,
     Angle,
     AngularVelocity,
+    /// rad/s² (speed ramps, open-loop acceleration).
+    AngularAcceleration,
     Length,
     Mass,
     Time,
@@ -54,6 +56,14 @@ const TABLE: &[(&str, Kind, f64, f64)] = &[
     (
         "deg/s",
         Kind::AngularVelocity,
+        std::f64::consts::PI / 180.0,
+        0.0,
+    ),
+    ("rad/s^2", Kind::AngularAcceleration, 1.0, 0.0),
+    ("rpm/s", Kind::AngularAcceleration, RPM, 0.0),
+    (
+        "deg/s^2",
+        Kind::AngularAcceleration,
         std::f64::consts::PI / 180.0,
         0.0,
     ),

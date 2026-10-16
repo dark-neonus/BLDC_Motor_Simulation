@@ -7,12 +7,15 @@
 use sim_model::constraints::{self, Severity};
 use sim_model::param::Param;
 use sim_model::params::{
-    ControllerParams, EmfShape, EncoderParams, GearboxParams, LoadParams, MotorParams, OnChange,
-    SensorCommon, SupplyParams, TierParam, Topology,
+    ControllerParams, EmfShape, EncoderParams, GearboxParams, LoadParams, LoopParams, MotorParams,
+    OnChange, SensorCommon, SupplyParams, TierParam, Topology,
 };
 use sim_model::scene::ResolvedScene;
 use sim_model::units::Kind;
 
+use crate::control::foc::current_loop::M_MAX;
+use crate::control::foc::{FocSpec, LoopSpec};
+use crate::control::pid::AntiWindup;
 use crate::engine::commands::{ChangeSource, EngineCommand};
 use crate::engine::engine::Engine;
 use crate::engine::fidelity::InverterMode;
@@ -41,7 +44,6 @@ use crate::physics::thermal::ThermalParams;
 use crate::skeleton::adapter::{
     Drive, InverterOptions, SkeletonOptions, ThermalOptions, try_build_engine_with,
 };
-use crate::skeleton::foc::FocConfig;
 use crate::skeleton::params::PmsmParams;
 
 #[derive(Debug, thiserror::Error)]
@@ -677,25 +679,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
         return Err(BuildError::Invalid(rejects.join("\n")));
     }
     let scene = &scene;
-    let ControllerParams::Foc {
-        current, limits, ..
-    } = &scene.controller
-    else {
-        return Err(BuildError::Unsupported(
-            "only the `foc` controller family can be simulated before P09 (six-step, open-loop, MIT, custom come then)".into(),
-        ));
-    };
-    let rate = si(&current.rate, Kind::Frequency, "controller.current.rate")?;
-    let bw = match &current.bandwidth {
-        Some(b) => si(b, Kind::Frequency, "controller.current.bandwidth")?,
-        None => 1000.0,
-    };
-    let cfg = FocConfig {
-        v_bus: supply_voltage(&scene.supply)?,
-        i_max: si(&limits.current, Kind::Current, "controller.limits.current")?,
-        omega_c: 2.0 * std::f64::consts::PI * bw,
-        dt: 1.0 / rate,
-    };
+    let (controller, rate) = foc_spec(&scene.controller)?;
     let extra_j = reflected_inertia(scene.gearbox.as_ref(), scene.load.as_ref())?;
     let mp = pmsm_from(&scene.motor, 0.0)?;
     let (load, conserve_momentum) = load(scene)?;
@@ -704,17 +688,17 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
     let (drive, dt_drive) = drive(scene)?;
     let dt_max = match scene.fidelity.as_ref().and_then(|f| f.dt_max.as_ref()) {
         Some(p) => si(p, Kind::Time, "fidelity.dt_max")?,
-        None => cfg.dt / 10.0,
+        None => 0.1 / rate,
     }
     .min(dt_contact)
     .min(dt_drive);
     let drive_kind = drive.clone();
     let engine = try_build_engine_with(
         mp,
-        cfg,
         SkeletonOptions {
             locked: false,
-            open_loop_vq: None,
+            controller,
+            v_supply: supply_voltage(&scene.supply)?,
             dt_max,
             gearbox: gearbox(scene)?,
             load,
@@ -733,7 +717,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             sensors: sensors(scene, rate, &drive_kind)?,
         },
     )
-    .map_err(|e| BuildError::Param("sensors".into(), e.to_string()))?;
+    .map_err(BuildError::Invalid)?;
     Ok(BuiltScene {
         engine,
         model: SceneModel {
@@ -741,8 +725,88 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             extra_j,
         },
         ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
-        ctrl_dt: cfg.dt,
+        ctrl_dt: 1.0 / rate,
     })
+}
+
+fn loop_spec(l: &LoopParams, at: &str) -> Result<LoopSpec, BuildError> {
+    Ok(LoopSpec {
+        enabled: l.enabled,
+        rate_hz: si(&l.rate, Kind::Frequency, &format!("{at}.rate"))?,
+        omega: match &l.bandwidth {
+            Some(b) => Some(
+                2.0 * std::f64::consts::PI * si(b, Kind::Frequency, &format!("{at}.bandwidth"))?,
+            ),
+            None => None,
+        },
+        kp: l.kp,
+        ki: l.ki,
+    })
+}
+
+/// The FOC family from the scene's controller (EQ-CTRL-03/04) and its current-loop
+/// rate [Hz]. Other families arrive with their tasks (P09.T05–T07, T10).
+fn foc_spec(c: &ControllerParams) -> Result<(FocSpec, f64), BuildError> {
+    let ControllerParams::Foc {
+        current,
+        velocity,
+        position,
+        sensorless,
+        prefilter,
+        limits,
+    } = c
+    else {
+        let err = crate::control::framework::build_family(
+            c,
+            &crate::control::framework::PlantInfo {
+                ratio: 1.0,
+                kt: 1.0,
+                j_motor: 1.0,
+            },
+            &mut crate::engine::signals::SignalBus::new(),
+        )
+        .err()
+        .unwrap_or_default();
+        return Err(BuildError::Unsupported(err));
+    };
+    if *sensorless {
+        return Err(BuildError::Unsupported(
+            "sensorless FOC arrives in P09.T08".into(),
+        ));
+    }
+    let cur = loop_spec(current, "controller.current")?;
+    let opt_speed = |p: &Option<Param>, k: Kind, at: &str| match p {
+        Some(p) => si(p, k, at),
+        None => Ok(f64::INFINITY),
+    };
+    let spec = FocSpec {
+        current_rate_hz: cur.rate_hz,
+        omega_c: cur.omega,
+        m_max: limits.voltage_fraction.unwrap_or(M_MAX),
+        aw: AntiWindup::Clamping,
+        i_max: si(&limits.current, Kind::Current, "controller.limits.current")?,
+        speed_limit: opt_speed(
+            &limits.speed,
+            Kind::AngularVelocity,
+            "controller.limits.speed",
+        )?,
+        ramp: opt_speed(
+            &limits.ramp,
+            Kind::AngularAcceleration,
+            "controller.limits.ramp",
+        )?,
+        velocity: velocity
+            .as_ref()
+            .map(|l| loop_spec(l, "controller.velocity"))
+            .transpose()?,
+        position: position
+            .as_ref()
+            .map(|l| loop_spec(l, "controller.position"))
+            .transpose()?,
+        prefilter: *prefilter,
+        open_loop_vq: None,
+    };
+    Ok((spec, cur.rate_hz))
 }
 
 /// A rate [Hz] as an exact-ns period.
@@ -775,6 +839,12 @@ fn sensors(scene: &ResolvedScene, ctrl_hz: f64, drive: &Drive) -> Result<SensorS
     let Some(s) = &scene.sensors else {
         return Ok(spec);
     };
+    // The Ideal tier makes every sensor ideal (EQ-NUM-07).
+    let ideal = !FidelityConfig::preset(tier(scene)).enable_sensor_nonideal;
+    let bypassed = |c: &SensorCommon| SensorCommon {
+        bypass: c.bypass || ideal,
+        ..c.clone()
+    };
     let ctrl = period_of(ctrl_hz, "controller.current.rate")?;
     let zero = SimTime::from_nanos(0);
     // (period, phase) for a sensor with `default` when no rate is given.
@@ -799,8 +869,9 @@ fn sensors(scene: &ResolvedScene, ctrl_hz: f64, drive: &Drive) -> Result<SensorS
             offsets,
             hysteresis: h.hysteresis.unwrap_or(0.0),
         };
-        let pipe = plain_pipe(&h.common, Kind::Angle, "sensors.hall")?;
-        let (period, phase) = sampling(&h.common, (ctrl, zero), "sensors.hall")?;
+        let c = bypassed(&h.common);
+        let pipe = plain_pipe(&c, Kind::Angle, "sensors.hall")?;
+        let (period, phase) = sampling(&c, (ctrl, zero), "sensors.hall")?;
         spec.hall = Some(Sampled {
             cfg: (cfg, pipe),
             period,
@@ -809,9 +880,11 @@ fn sensors(scene: &ResolvedScene, ctrl_hz: f64, drive: &Drive) -> Result<SensorS
     }
     match &s.encoder {
         Some(p @ EncoderParams::Magnetic { common, .. }) => {
-            let (cfg, default) = magnetic_encoder(p)?
+            let (mut cfg, default) = magnetic_encoder(p)?
                 .ok_or_else(|| BuildError::Unsupported("magnetic encoder".into()))?;
-            let (period, phase) = sampling(common, (default, zero), "sensors.encoder")?;
+            let c = bypassed(common);
+            cfg.bypass = c.bypass;
+            let (period, phase) = sampling(&c, (default, zero), "sensors.encoder")?;
             spec.encoder = Some(Sampled {
                 cfg: EncoderSpec::Magnetic(cfg),
                 period,
@@ -827,8 +900,9 @@ fn sensors(scene: &ResolvedScene, ctrl_hz: f64, drive: &Drive) -> Result<SensorS
                 cpr: *cpr,
                 index_angle: opt(index_angle, Kind::Angle, "sensors.encoder.index_angle")?,
             };
-            let pipe = plain_pipe(common, Kind::Angle, "sensors.encoder")?;
-            let (period, phase) = sampling(common, (ctrl, zero), "sensors.encoder")?;
+            let c = bypassed(common);
+            let pipe = plain_pipe(&c, Kind::Angle, "sensors.encoder")?;
+            let (period, phase) = sampling(&c, (ctrl, zero), "sensors.encoder")?;
             spec.encoder = Some(Sampled {
                 cfg: EncoderSpec::Incremental(cfg, pipe),
                 period,
@@ -869,7 +943,8 @@ fn sensors(scene: &ResolvedScene, ctrl_hz: f64, drive: &Drive) -> Result<SensorS
             }
             None => (None, 0.0),
         };
-        let pipe = plain_pipe(&a.common, Kind::Current, "sensors.adc")?;
+        let c = bypassed(&a.common);
+        let pipe = plain_pipe(&c, Kind::Current, "sensors.adc")?;
         let cfg = AdcConfig {
             bits: a.bits,
             phase,
@@ -887,7 +962,7 @@ fn sensors(scene: &ResolvedScene, ctrl_hz: f64, drive: &Drive) -> Result<SensorS
             }
             _ => (ctrl, zero),
         };
-        let (period, phase) = sampling(&a.common, default, "sensors.adc")?;
+        let (period, phase) = sampling(&c, default, "sensors.adc")?;
         spec.adc = Some(Sampled { cfg, period, phase });
     }
     Ok(spec)

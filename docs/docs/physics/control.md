@@ -61,13 +61,17 @@ K_{p,v} = \frac{\omega_v J}{K_t},\qquad K_{i,v} = \frac{K_{p,v}\,\omega_v}{4},\q
 $$
 
 - The closed loop has a double pole at $\omega_v/2$.
-- The PI zero gives **13.5 % step overshoot**; the optional setpoint prefilter $\dfrac{1}{1 + 4s/\omega_v}$ removes it (verified numerically).
+- The PI zero gives **13.5 % step overshoot** with an ideal current loop; the optional setpoint prefilter $\dfrac{1}{1 + 4s/\omega_v}$ removes it (verified numerically). The current loop's lag (≈ $1/\omega_c$ plus the $1.5\,T$ delay) adds overshoot: about 14.3 % at $\omega_v = \omega_c/20$ and 15–16 % at $\omega_v = \omega_c/10$ (continuous model with a first-order current loop and the delay: 15.2 %; the sampled velocity loop's hold adds ≈ 0.6 points).
 
 **Position P (or PI) → $\omega^*$** on the load-side angle: $K_{p,p} = \omega_p$, $\omega_p \le \omega_v/5$.
 
 - The output is converted to motor speed (×$N$) and clamped to the speed limit.
 - Loop semantics: a disabled outer loop passes its setpoint straight through, and each loop has its own rate and ramp limiter.
 - A P-only position loop under constant load torque holds a steady error of $\tau_L/(N^2\,K_t\,K_{p,v}\,K_{p,p})$ when the velocity loop is P-only, and zero error with a PI velocity loop.
+
+**Defaults and units.** Without a `bandwidth`, $\omega_v = \omega_c/10$ and $\omega_p = \omega_v/10$; explicit `kp`/`ki` override the design (velocity in A per rad/s and A per rad, position in load rad/s per rad and per rad·s). The position loop is P unless a `ki` is given. `controller.limits.speed` (load side) clamps $\omega^*$ to $\pm N\,\omega_{lim}$ on the motor side; `controller.limits.current` clamps $i_q^*$; `controller.limits.ramp` (load side, rad/s²) limits how fast the velocity reference may change. A disabled velocity loop passes the torque setpoint as $i_q^* = \tau^*/(N K_t)$. Feedback: the position loop reads the load angle (the encoder angle / $N$ when an encoder is fitted), the velocity loop the motor speed (the true speed until the estimators are built from a scene, P09.T15).
+
+**Modes from scenarios.** A velocity target disables the position loop; a torque target disables the velocity loop; a position target enables both. $\theta^*$ starts at the initial load angle, so a scene with a position loop holds its initial pose.
 
 ## Other controllers
 

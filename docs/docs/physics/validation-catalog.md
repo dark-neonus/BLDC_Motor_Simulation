@@ -100,7 +100,7 @@ Every case has an ID, which is used verbatim in the test name (`test_v_mot_001_�
 | ID | Side | Tier | Scenario | Expected | Tolerance |
 |---|---|---|---|---|---|
 | V-CTRL-001 | both | Standard | FOC current-loop step | step time constant $\tau_{63} \approx 1/\omega_c$ | rtol 15 % |
-| V-CTRL-002 | both | Standard | velocity step, PI design EQ-CTRL-04 | overshoot 13.5 % (no prefilter), ≈ 0 with prefilter | atol 2 % |
+| V-CTRL-002 | both | Standard | velocity step, PI design EQ-CTRL-04 with $\omega_v = \omega_c/20$ | overshoot 13.5 % (no prefilter; the current loop's lag adds ≈ 0.8 points), ≈ 0 with prefilter | atol 2 % |
 | V-CTRL-003 | both | Standard | MIT hold under load $\tau_L$ | static deflection $\tau_L/K_p$ | rtol 2 % |
 | V-CTRL-004 | rust | Standard | PLL, $\zeta$ = 1 | −3 dB bandwidth $2.48\,\omega_n$ | rtol 5 % |
 | V-CTRL-005 | rust | Standard | flux observer, $\omega_e \ge$ 10 % rated, 3 % $R$ error | angle error < 5° after settling | – |

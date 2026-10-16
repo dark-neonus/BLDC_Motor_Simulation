@@ -581,11 +581,11 @@ fn yes() -> bool {
 pub struct Limits {
     /// Phase current limit.
     pub current: Param,
-    /// Speed limit.
+    /// Speed limit (load side).
     pub speed: Option<Param>,
     /// Usable fraction of the available voltage (0 … 1].
     pub voltage_fraction: Option<f64>,
-    /// Setpoint ramp rate.
+    /// Speed-setpoint ramp (load side, acceleration).
     pub ramp: Option<Param>,
 }
 

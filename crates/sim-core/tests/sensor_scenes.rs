@@ -171,13 +171,15 @@ fn sampling_follows_the_mode_and_update_rate() {
 fn adc_phase_errors_and_bus_channel() {
     let sensors = "{ adc: { bits: 24, full_scale: 20 A, shunts: 3, offsets: [0.5 A, 0 A, 0 A], gain_errors: [0, 0.1, 0], bus: { full_scale: 60 V } } }";
     let mut e = build(sensors, "averaged").unwrap().engine;
+    // The FOC now acts on these readings (the offset drives real currents), so compare
+    // with the true values at a sample instant (1 ms is on the 20 kHz grid), then let
+    // the sample fire.
     e.step_until(SimTime::from_secs_f64(1e-3)).unwrap();
+    let (ia, ib, vb) = (sig(&e, "motor.i_a"), sig(&e, "motor.i_b"), sig(&e, "bus.v"));
+    e.step_until(SimTime::from_nanos(1_000_001)).unwrap();
     let lsb = 40.0 / 2f64.powi(24);
-    // At rest the currents are ~0: a reads its offset, b and c ~0.
-    let (ia, ib) = (sig(&e, "motor.i_a"), sig(&e, "motor.i_b"));
     assert!((sig(&e, "sensors.adc.i_a") - (ia + 0.5)).abs() <= lsb + 1e-9);
     assert!((sig(&e, "sensors.adc.i_b") - 1.1 * ib).abs() <= lsb + 1e-9);
-    let vb = sig(&e, "bus.v");
     assert!((sig(&e, "sensors.adc.v_bus") - vb).abs() <= 120.0 / 2f64.powi(24) + 1e-9);
     assert!(vb > 20.0);
     let err = build(sensors, "ideal")

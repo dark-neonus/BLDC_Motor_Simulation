@@ -1,7 +1,8 @@
 //! Ideal voltage source (`inverter.mode = ideal`, P05.T11): the terminal voltages are
 //! the commanded stationary-frame voltages (inverse Clarke, EQ-CONV-02) centred on
 //! V_bus/2. No bus dynamics and no losses; the motor's `electrical_in` term is the
-//! energy delivered. INTERIM until the real inverter (P07).
+//! energy delivered. Kept for `fidelity.inverter_mode: ideal` alongside the real inverter
+//! (P07).
 
 use crate::engine::plant::PlantModule;
 use crate::engine::signals::{SignalBus, SignalError, SignalId, SignalKind};

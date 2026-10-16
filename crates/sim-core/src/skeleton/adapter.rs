@@ -1,18 +1,18 @@
-//! Skeleton FOC on the production plant (P03.T12, rebuilt in P05.T11): abc motor
-//! (`physics::motor`) + rigid rotor + ideal voltage source, driven by the skeleton FOC.
-//! INTERIM: the FOC block is replaced in P09.T03, the ideal source in P07. The dq plant
+//! Engine assembler on the production plant (P03.T12, rebuilt in P05.T11, controller
+//! from P09.T04): abc motor (`physics::motor`) + drivetrain + ideal source or inverter
+//! and DC bus + sensors, driven by the FOC family (`control::foc`). The dq plant
 //! survives only as a test fixture (`fixtures::dq_pmsm`).
 
-use super::foc::{Foc, FocConfig, FocGains};
 use super::params::PmsmParams;
-use crate::engine::block::{DiscreteBlock, SimError, StepCtx, priority};
+use crate::control::foc::current_loop::{BusVoltage, FocSignals};
+use crate::control::foc::{self, FocIo, FocSpec, MotorModel};
+use crate::control::framework::{PlantInfo, Scaled};
+use crate::engine::block::DiscreteBlock;
 use crate::engine::engine::Engine;
 use crate::engine::plant::Plant;
-use crate::engine::signals::{SignalBus, SignalError, SignalId, SignalKind};
-use crate::engine::time::{SimTime, period_from_hz};
+use crate::engine::signals::SignalBus;
 use crate::physics::inverter::ideal::IdealVoltageSource;
 use crate::physics::inverter::leg::{Devices, LegState, SwitchingInverter};
-use crate::physics::inverter::modulation::svpwm_ab;
 use crate::physics::inverter::pwm::{Pwm, PwmConfig};
 use crate::physics::mech::backlash::Backlash;
 use crate::physics::mech::friction::Friction;
@@ -29,129 +29,6 @@ use crate::physics::motor::iron_loss::{IronLoss, IronLossParams};
 use crate::physics::sensors::SensorSpec;
 use crate::physics::supply::bus::{Chopper, DcBus, Source};
 use crate::physics::thermal::{Thermal, ThermalInputs, ThermalParams};
-
-/// Signals the FOC block reads and writes.
-#[derive(Debug, Clone, Copy)]
-struct FocSignals {
-    v_d: SignalId,
-    v_q: SignalId,
-    v_alpha: SignalId,
-    v_beta: SignalId,
-    i_d: SignalId,
-    i_q: SignalId,
-    omega: SignalId,
-    theta_e: SignalId,
-}
-
-// INTERIM: replaced in P09.T03.
-struct FocBlock {
-    foc: Foc,
-    period: SimTime,
-    open_loop_vq: Option<f64>,
-    s: FocSignals,
-    omega_ref: SignalId,
-    iq_ref: SignalId,
-    /// Gear ratio N: `ctrl.omega_ref` is load-side, the speed loop runs on the motor side.
-    ratio: f64,
-    /// SVPWM duty outputs and the bus voltage they are scaled by (inverter drive).
-    duties: Option<([SignalId; 3], SignalId)>,
-    /// `ctrl.torque_ref` (load side) and the design K_t that turns it into i_q.
-    torque_ref: SignalId,
-    kt: f64,
-    /// `ctrl.mode`: velocity (0) or torque (1). INTERIM until P09.
-    torque_mode: bool,
-}
-
-impl DiscreteBlock for FocBlock {
-    fn save(&self) -> serde_json::Value {
-        serde_json::json!({
-            "foc": self.foc.save_state(),
-            "open_loop_vq": self.open_loop_vq,
-            "torque_mode": self.torque_mode,
-        })
-    }
-    fn restore(&mut self, v: &serde_json::Value) -> Result<(), String> {
-        let st: [f64; 5] = serde_json::from_value(v["foc"].clone()).map_err(|e| e.to_string())?;
-        self.foc.restore_state(st);
-        self.open_loop_vq =
-            serde_json::from_value(v["open_loop_vq"].clone()).map_err(|e| e.to_string())?;
-        self.torque_mode = v["torque_mode"].as_bool().ok_or("missing `torque_mode`")?;
-        // `iq_cmd` is rewritten every tick; clearing it keeps a stale torque command
-        // from looking like a mode switch on the first tick after the restore.
-        if !self.torque_mode {
-            self.foc.iq_cmd = None;
-        }
-        Ok(())
-    }
-    fn id(&self) -> &str {
-        "ctrl"
-    }
-    fn period(&self) -> Option<SimTime> {
-        Some(self.period)
-    }
-    fn get_param(&self, name: &str) -> Option<f64> {
-        (name == "mode").then_some(f64::from(u8::from(self.torque_mode)))
-    }
-    fn set_param(&mut self, name: &str, value: f64) -> Result<f64, String> {
-        if name != "mode" {
-            return Err(format!("unknown parameter `{name}`"));
-        }
-        if !matches!(value, 0.0 | 1.0) {
-            return Err(format!(
-                "mode must be 0 (velocity) or 1 (torque), got {value}"
-            ));
-        }
-        let old = f64::from(u8::from(self.torque_mode));
-        self.torque_mode = value == 1.0;
-        Ok(old)
-    }
-    fn priority(&self) -> u8 {
-        priority::CONTROLLER
-    }
-    fn step(&mut self, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
-        let (vd, vq) = match self.open_loop_vq {
-            Some(v) => (0.0, v),
-            None => {
-                self.foc.omega_ref = self.ratio * ctx.bus.get(self.omega_ref);
-                if self.foc.iq_cmd.is_some() && !self.torque_mode {
-                    // Torque → velocity: restart the speed integrator from i_q.
-                    self.foc.bumpless_to_velocity();
-                }
-                // The torque command uses the design K_t = 1.5·p·λ_ref and the ideal
-                // ratio: it ignores λ(T) and the gearbox efficiency η (INTERIM, P09).
-                self.foc.iq_cmd = self
-                    .torque_mode
-                    .then(|| ctx.bus.get(self.torque_ref) / (self.ratio * self.kt));
-                self.foc.update(
-                    ctx.bus.get(self.s.i_d),
-                    ctx.bus.get(self.s.i_q),
-                    ctx.bus.get(self.s.omega),
-                )
-            }
-        };
-        ctx.bus.set(self.s.v_d, vd);
-        ctx.bus.set(self.s.v_q, vq);
-        // Inverse Park at the measured angle; held until the next tick (ZOH).
-        let (sn, cs) = ctx.bus.get(self.s.theta_e).sin_cos();
-        let (va, vb) = (cs * vd - sn * vq, sn * vd + cs * vq);
-        ctx.bus.set(self.s.v_alpha, va);
-        ctx.bus.set(self.s.v_beta, vb);
-        if let Some((ids, v_bus)) = self.duties {
-            // SVPWM with the overmodulation clamp (EQ-INV-05/06) on the measured bus. The
-            // saturation flag is unused: the interim PIs do not stop integrating on it
-            // (anti-windup on the modulator limit is P09's controller).
-            let (d, _) = svpwm_ab(va, vb, ctx.bus.get(v_bus).max(1e-9));
-            for (id, d) in ids.iter().zip(d) {
-                ctx.bus.set(*id, d);
-            }
-        }
-        ctx.bus.set(self.iq_ref, self.foc.iq_ref);
-        Ok(())
-    }
-    fn reset(&mut self) {
-        self.foc.reset();
-    }
-}
 
 /// What drives the motor terminals.
 #[derive(Debug, Clone, Default)]
@@ -184,7 +61,10 @@ pub struct InverterOptions {
 #[derive(Debug, Clone)]
 pub struct SkeletonOptions {
     pub locked: bool,
-    pub open_loop_vq: Option<f64>,
+    /// The FOC family (EQ-CTRL-03/04).
+    pub controller: FocSpec,
+    /// Ideal source voltage [V] (`Drive::Ideal`).
+    pub v_supply: f64,
     /// Integration step limit [s].
     pub dt_max: f64,
     /// Gearbox on the output shaft (EQ-MECH-02/03); bypass by default.
@@ -222,7 +102,8 @@ impl Default for SkeletonOptions {
     fn default() -> Self {
         Self {
             locked: false,
-            open_loop_vq: None,
+            controller: FocSpec::skeleton(),
+            v_supply: 24.0,
             dt_max: 5e-6,
             gearbox: Gearbox::BYPASS,
             load: Load::None,
@@ -255,70 +136,22 @@ pub struct ThermalOptions {
 
 /// Build the skeleton engine (6020-class motor + 20 kHz FOC).
 pub fn build_engine(opts: SkeletonOptions) -> Engine {
-    build_engine_with(PmsmParams::skeleton_6020(), FocConfig::skeleton(), opts)
+    build_engine_with(PmsmParams::skeleton_6020(), opts)
 }
 
 /// Skeleton engine with given motor parameters (`mp.j` = rotor only) and controller.
-pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) -> Engine {
-    // INVARIANT: without sensors every signal is registered by the skeleton itself.
-    try_build_engine_with(mp, cfg, opts).expect("skeleton signals")
+pub fn build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Engine {
+    // INVARIANT: without sensors every signal is registered by the skeleton itself, and
+    // the default controller spec is valid.
+    try_build_engine_with(mp, opts).expect("skeleton engine")
 }
 
 /// As `build_engine_with`; fails when a sensor's input signal does not exist (e.g. an
-/// ADC bus-voltage channel without a DC bus).
-pub fn try_build_engine_with(
-    mp: PmsmParams,
-    cfg: FocConfig,
-    opts: SkeletonOptions,
-) -> Result<Engine, SignalError> {
+/// ADC bus-voltage channel without a DC bus) or the controller spec is invalid.
+pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<Engine, String> {
     let mut bus = SignalBus::new();
-    // INVARIANT: the skeleton registers a fixed, unique set of paths into a fresh bus,
-    // so `register` cannot fail here.
-    let mut reg = |p: &str, u: &str, d: &str, k: SignalKind| {
-        bus.register(p, u, d, k).expect("unique skeleton signal")
-    };
-    let v_d = reg(
-        "ctrl.foc.v_d",
-        "V",
-        "d-axis voltage command",
-        SignalKind::Output,
-    );
-    let v_q = reg(
-        "ctrl.foc.v_q",
-        "V",
-        "q-axis voltage command",
-        SignalKind::Output,
-    );
-    let v_alpha = reg(
-        "ctrl.foc.v_alpha",
-        "V",
-        "α voltage command",
-        SignalKind::Output,
-    );
-    let v_beta = reg(
-        "ctrl.foc.v_beta",
-        "V",
-        "β voltage command",
-        SignalKind::Output,
-    );
-    let omega_ref = reg(
-        "ctrl.omega_ref",
-        "rad/s",
-        "speed setpoint (load side)",
-        SignalKind::Input,
-    );
-    let torque_ref = reg(
-        "ctrl.torque_ref",
-        "N*m",
-        "torque setpoint (load side; torque mode)",
-        SignalKind::Input,
-    );
-    let iq_ref = reg(
-        "ctrl.foc.iq_ref",
-        "A",
-        "q-axis current reference",
-        SignalKind::Output,
-    );
+    // The controller's signals first: the ideal source reads ctrl.foc.v_alpha/v_beta.
+    let sig = FocSignals::register(&mut bus).map_err(|e| e.to_string())?;
     // Front end: the ideal source, or bus + inverter (+ PWM block).
     // Built once per engine and consumed below; its size does not matter.
     #[allow(clippy::large_enum_variant)]
@@ -330,7 +163,7 @@ pub fn try_build_engine_with(
     // fresh bus, so their constructors cannot fail.
     let front = match &opts.drive {
         Drive::Ideal => Front::Ideal(
-            IdealVoltageSource::new(&mut bus, v_alpha, v_beta, cfg.v_bus)
+            IdealVoltageSource::new(&mut bus, sig.v_alpha, sig.v_beta, opts.v_supply)
                 .expect("unique skeleton signal"),
         ),
         Drive::Inverter(o) => {
@@ -437,16 +270,6 @@ pub fn try_build_engine_with(
         }
         None => None,
     };
-    let s = FocSignals {
-        v_d,
-        v_q,
-        v_alpha,
-        v_beta,
-        i_d: id(&bus, "motor.i_d"),
-        i_q: id(&bus, "motor.i_q"),
-        omega: id(&bus, "motor.omega"),
-        theta_e: id(&bus, "motor.theta_e"),
-    };
     let mut plant = Plant::new();
     let mut extra_blocks: Vec<Box<dyn DiscreteBlock>> = vec![];
     let mut duties = None;
@@ -499,29 +322,71 @@ pub fn try_build_engine_with(
     if let Some(inv) = inverter {
         plant.add(Box::new(inv));
     }
-    let period = period_from_hz(1.0 / cfg.dt)
-        .map(|p| p.period)
-        .unwrap_or(SimTime(50_000));
-    // Gains are designed for the whole shaft inertia.
-    let design = PmsmParams {
-        j: opts.gearbox.j_eq(mp.j, opts.load.inertia()),
-        ..mp
+    // PWM (modulator priority), then the sensors, then the controller family.
+    let mut blocks: Vec<Box<dyn DiscreteBlock>> = extra_blocks;
+    blocks.extend(opts.sensors.blocks(&mut bus).map_err(|e| e.to_string())?);
+    let sc = |b: &SignalBus, p: &str, g: f64| Scaled::of(b, p, g).map_err(|e| e.to_string());
+    let n = opts.ratio;
+    // Feedback: sensor readings where a sensor is fitted, else the true values (ideal
+    // feedback). The speeds are the true ones until the estimators are built (P09.T15).
+    let currents = if opts.sensors.adc.is_some() {
+        ["sensors.adc.i_a", "sensors.adc.i_b", "sensors.adc.i_c"]
+    } else {
+        ["motor.i_a", "motor.i_b", "motor.i_c"]
+    }
+    .map(|p| id(&bus, p));
+    let (angle_e, theta_l) = if opts.sensors.encoder.is_some() {
+        (
+            sc(&bus, "sensors.encoder.angle", mp.p)?,
+            sc(&bus, "sensors.encoder.angle", 1.0 / n)?,
+        )
+    } else {
+        let load = match bus.id("load.theta") {
+            Ok(_) => sc(&bus, "load.theta", 1.0)?,
+            Err(_) => sc(&bus, "motor.theta", 1.0 / n)?,
+        };
+        (sc(&bus, "motor.theta_e", 1.0)?, load)
     };
-    let mut blocks: Vec<Box<dyn DiscreteBlock>> = vec![Box::new(FocBlock {
-        foc: Foc::new(cfg, FocGains::design(&design, &cfg)),
-        period,
-        open_loop_vq: opts.open_loop_vq,
-        s,
-        omega_ref,
-        iq_ref,
-        ratio: opts.ratio,
-        duties,
-        torque_ref,
+    let v_bus = match duties {
+        None => BusVoltage::Fixed(opts.v_supply),
+        Some((_, v)) => match bus.id("sensors.adc.v_bus") {
+            Ok(m) => BusVoltage::Signal(m),
+            Err(_) => BusVoltage::Signal(v),
+        },
+    };
+    let io = FocIo {
+        currents,
+        angle_e,
+        omega_e: sc(&bus, "motor.omega_e", 1.0)?,
+        omega_m: sc(&bus, "motor.omega", 1.0)?,
+        theta_l,
+        v_bus,
+        duties: duties.map(|(d, _)| d),
+    };
+    let info = PlantInfo {
+        ratio: n,
         kt: 1.5 * mp.p * mp.lambda,
-        torque_mode: false,
-    })];
-    blocks.extend(extra_blocks);
-    blocks.extend(opts.sensors.blocks(&mut bus)?);
+        // Gains are designed for the whole shaft inertia.
+        j_motor: opts.gearbox.j_eq(mp.j, opts.load.inertia()),
+    };
+    let model = MotorModel {
+        r: mp.r,
+        ld: mp.ld,
+        lq: mp.lq,
+        lambda: mp.lambda,
+        pole_pairs: mp.p,
+    };
+    blocks.extend(foc::build(
+        &opts.controller,
+        &model,
+        &info,
+        &io,
+        sig,
+        &mut bus,
+    )?);
+    // A scene with a position loop holds its initial pose (EQ-CTRL-04).
+    let th = id(&bus, "ctrl.theta_ref");
+    bus.set(th, opts.theta_l0);
     Ok(Engine::new(plant, bus, blocks, opts.dt_max))
 }
 
@@ -529,6 +394,7 @@ pub fn try_build_engine_with(
 mod tests {
     use super::*;
     use crate::engine::commands::{ChangeSource, EngineCommand};
+    use crate::engine::time::SimTime;
 
     #[test]
     fn engine_skeleton_reaches_speed_with_closed_energy_balance() {
@@ -549,7 +415,10 @@ mod tests {
     fn locked_rotor_energy_balance_closes() {
         let mut e = build_engine(SkeletonOptions {
             locked: true,
-            open_loop_vq: Some(1.0),
+            controller: crate::control::foc::FocSpec {
+                open_loop_vq: Some(1.0),
+                ..crate::control::foc::FocSpec::skeleton()
+            },
             dt_max: 2.5e-7,
             ..Default::default()
         });

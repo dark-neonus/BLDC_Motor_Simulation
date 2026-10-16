@@ -1464,7 +1464,7 @@
           "$ref": "#/$defs/Param"
         },
         "ramp": {
-          "description": "Setpoint ramp rate.",
+          "description": "Speed-setpoint ramp (load side, acceleration).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
@@ -1475,7 +1475,7 @@
           ]
         },
         "speed": {
-          "description": "Speed limit.",
+          "description": "Speed limit (load side).",
           "anyOf": [
             {
               "$ref": "#/$defs/Param"
