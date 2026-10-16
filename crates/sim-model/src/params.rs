@@ -617,6 +617,25 @@ fn yes() -> bool {
     true
 }
 
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct StartupParams {
+    /// Alignment d current I_align.
+    pub align_current: Option<Param>,
+    /// Alignment time t_align.
+    pub align_time: Option<Param>,
+    /// I/f q current I_if.
+    pub current: Option<Param>,
+    /// I/f speed ramp, load side.
+    pub accel: Option<Param>,
+    /// Hand-off speed ω_handoff (electrical).
+    pub handoff_speed: Option<Param>,
+    /// Time `est.valid` must hold before the hand-off (and be lost before the fallback).
+    pub valid_time: Option<Param>,
+    /// Angle blend time t_blend.
+    pub blend_time: Option<Param>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Limits {
@@ -665,6 +684,8 @@ pub enum ControllerParams {
         /// Use the flux observer instead of a sensor.
         #[serde(default)]
         sensorless: bool,
+        /// Sensorless startup (EQ-CTRL-10; defaults from the current limit and the plant).
+        startup: Option<StartupParams>,
         /// Setpoint prefilter.
         #[serde(default)]
         prefilter: bool,

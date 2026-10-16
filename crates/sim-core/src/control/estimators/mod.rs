@@ -79,6 +79,13 @@ pub struct ObserverModel {
     pub v_bus: f64,
 }
 
+impl ObserverModel {
+    /// ω_min, or its default 0.05·V_bus/(√3·λ_m) (EQ-CTRL-09).
+    pub fn default_omega_min(&self, given: Option<f64>) -> f64 {
+        given.unwrap_or(0.05 * self.v_bus / (3f64.sqrt() * self.lambda))
+    }
+}
+
 /// The flux observer at the current-loop `period`, on the given phase-current signals
 /// and the applied voltage command `ctrl.foc.v_alpha/v_beta` (EQ-CTRL-09). Refuses
 /// γλ²T ≥ 2 (forward Euler on the radial dynamics).
@@ -104,9 +111,7 @@ pub fn observer_block(
         ls: m.ls,
         lambda: m.lambda,
         gamma,
-        omega_min: spec
-            .omega_min
-            .unwrap_or(0.05 * m.v_bus / (3f64.sqrt() * m.lambda)),
+        omega_min: m.default_omega_min(spec.omega_min),
     };
     let pll = Pll::design(
         t,

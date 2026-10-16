@@ -16,6 +16,7 @@ use sim_model::units::Kind;
 use crate::control::ControllerSpec;
 use crate::control::estimators::{EstimatorSpec, ObserverSpec, VelocitySpec};
 use crate::control::foc::current_loop::M_MAX;
+use crate::control::foc::sensorless::StartupOptions;
 use crate::control::foc::{FocSpec, LoopSpec};
 use crate::control::mit::MitSpec;
 use crate::control::open_loop::OpenLoopSpec;
@@ -702,6 +703,11 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
         (s.r_on, s.v_f) = (o.devices.r_on, o.devices.v_f);
     }
     let drive_kind = drive.clone();
+    // Sensorless FOC runs on the flux observer (EQ-CTRL-09/10).
+    let mut estimators = estimators(scene)?;
+    if matches!(&controller, ControllerSpec::Foc(f) if f.sensorless.is_some()) {
+        estimators.observer.get_or_insert_default();
+    }
     let engine = try_build_engine_with(
         mp,
         SkeletonOptions {
@@ -724,7 +730,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             saturation: saturation(scene)?,
             shape: shape(scene)?,
             sensors: sensors(scene, rate, &drive_kind)?,
-            estimators: estimators(scene)?,
+            estimators,
         },
     )
     .map_err(BuildError::Invalid)?;
@@ -828,6 +834,7 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
             prefilter: false,
             open_loop_vq: None,
             cascade: false,
+            sensorless: None,
         };
         let spec = MitSpec {
             foc,
@@ -843,6 +850,7 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
         velocity,
         position,
         sensorless,
+        startup,
         prefilter,
         limits,
     } = c
@@ -860,11 +868,25 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
         .unwrap_or_default();
         return Err(BuildError::Unsupported(err));
     };
-    if *sensorless {
-        return Err(BuildError::Unsupported(
-            "sensorless FOC arrives in P09.T08".into(),
-        ));
-    }
+    let sensorless = if *sensorless {
+        let st = startup.clone().unwrap_or_default();
+        let q = |p: &Option<Param>, k: Kind, at: &str| {
+            p.as_ref()
+                .map(|p| si(p, k, &format!("controller.startup.{at}")))
+                .transpose()
+        };
+        Some(StartupOptions {
+            align_current: q(&st.align_current, Kind::Current, "align_current")?,
+            align_time: q(&st.align_time, Kind::Time, "align_time")?,
+            current: q(&st.current, Kind::Current, "current")?,
+            accel: q(&st.accel, Kind::AngularAcceleration, "accel")?,
+            handoff_speed: q(&st.handoff_speed, Kind::AngularVelocity, "handoff_speed")?,
+            valid_time: q(&st.valid_time, Kind::Time, "valid_time")?,
+            blend_time: q(&st.blend_time, Kind::Time, "blend_time")?,
+        })
+    } else {
+        None
+    };
     let cur = loop_spec(current, "controller.current")?;
     let opt_speed = |p: &Option<Param>, k: Kind, at: &str| match p {
         Some(p) => si(p, k, at),
@@ -897,6 +919,7 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
         prefilter: *prefilter,
         open_loop_vq: None,
         cascade: true,
+        sensorless,
     };
     Ok((ControllerSpec::Foc(spec), cur.rate_hz))
 }

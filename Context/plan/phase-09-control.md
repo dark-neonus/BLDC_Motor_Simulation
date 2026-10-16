@@ -94,7 +94,7 @@
   - **Verify:** Scene test: an encoder scene publishes `est.omega` tracking the speed; a sensorless scene's observer converges; an unstable γ is refused at build.
   - **Done when:** Green.
 
-- [ ] **P09.T08** — Sensorless FOC (startup + handoff)
+- [x] **P09.T08** — Sensorless FOC (startup + handoff)
   - **Depends:** P09.T04, P08.T07, P09.T15
   - **Do:** Startup sequence: align → open-loop ramp → handoff to the observer angle when `est.valid` holds for N ms, then back to open loop if it is lost. Uses `est.theta`/`est.omega` instead of the encoder.
   - **Files:** `crates/sim-core/src/control/foc/sensorless.rs`

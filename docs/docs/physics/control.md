@@ -158,6 +158,16 @@ $$
 3. **Hand-off** when $|\omega^*| > \omega_{handoff}$ and `est.valid` has held for $t_{valid}$. The angle is blended over $t_{blend}$.
 4. **Fallback** to step 2 if the estimate is lost.
 
+**Details** (one supervisor block owns the sequence, the velocity PI and the angle the current loop uses; `ctrl.sensorless.state` 0 align, 1 I/f, 2 blend, 3 closed loop):
+
+- Align: $i_d^* = I_{align}$, $i_q^* = 0$ at $\theta = 0$; the rotor turns to the d axis.
+- I/f: $i_d^* = 0$, $i_q^* = I_{if}\,\mathrm{sign}(\omega^*)$, and $\theta^*$ integrates $\omega^*_e$, which ramps at $a$ towards $N p\,$`ctrl.omega_ref`. A loaded rotor lags θ* by the angle at which $K_t I_{if}\cos\delta$ carries the load.
+- Blend: $\theta = \theta^* + w\,\mathrm{wrap}(\hat\theta_e - \theta^*)$ with $w$ rising linearly 0 → 1 over $t_{blend}$; $i_q^*$ stays $I_{if}$.
+- Closed loop: $\theta = \hat\theta_e$, the velocity PI (EQ-CTRL-04) on $\hat\omega_e/p$, started from $i_q^* = I_{if}$ (bumpless).
+- Fallback: `est.valid` false for $t_{valid}$ in closed loop → I/f with $\theta^* = \hat\theta_e$ and $\omega^*_e = \hat\omega_e$.
+- Defaults: $I_{align} = I_{if} = 0.5\,I_{lim}$, $t_{align}$ = 0.3 s, $a = 0.25\,K_t I_{if}/(N J)$ (load side), $\omega_{handoff} = 3\,\omega_{min}$, $t_{valid}$ = 20 ms, $t_{blend}$ = 50 ms.
+- **Bound** (verified): $i_q^*$ is continuous across the hand-off, and the measured current magnitude stays below `controller.limits.current` through the whole start.
+
 ### EQ-CTRL-11 — Encoder offset calibration {/* #eq-ctrl-11 */}
 
 1. Inject $i_d = I_{cal}$ at $\theta_e = 0$. The rotor's d-axis aligns with phase a.

@@ -3,6 +3,7 @@
 
 pub mod current_loop;
 pub mod position_loop;
+pub mod sensorless;
 pub mod velocity_loop;
 
 use crate::engine::block::DiscreteBlock;
@@ -51,6 +52,9 @@ pub struct FocSpec {
     /// Build the velocity/position cascade (false: the current loop alone, its
     /// `ctrl.foc.iq_ref` written by another law, e.g. MIT).
     pub cascade: bool,
+    /// Sensorless (EQ-CTRL-10): the startup supervisor replaces the cascade and the
+    /// current loop runs on the observer's angle.
+    pub sensorless: Option<sensorless::StartupOptions>,
 }
 
 impl FocSpec {
@@ -76,6 +80,7 @@ impl FocSpec {
             prefilter: false,
             open_loop_vq: None,
             cascade: true,
+            sensorless: None,
         }
     }
 }
@@ -105,6 +110,8 @@ pub struct FocIo {
     pub theta_l: Scaled,
     pub v_bus: BusVoltage,
     pub duties: Option<[SignalId; 3]>,
+    /// The observer's ω_min [rad/s electrical] when one runs (sensorless hand-off).
+    pub omega_min: Option<f64>,
 }
 
 fn period(hz: f64, what: &str) -> Result<SimTime, String> {
@@ -181,6 +188,11 @@ pub fn build(
             gain: n,
         },
     };
+    if let Some(opts) = &spec.sensorless {
+        return sensorless_family(
+            spec, opts, motor, plant, io, sig, t_c, omega_c, omega_v, bus,
+        );
+    }
     // Velocity loop (built disabled without one: the torque setpoint drives i_q).
     if !spec.cascade {
         return current_only(spec, motor, io, sig, t_c, omega_c, blocks);
@@ -268,4 +280,71 @@ fn current_block(
         v_bus: io.v_bus,
     };
     Ok(FocCurrentLoop::new(cfg, inputs, sig, io.duties)?.with_open_loop_vq(spec.open_loop_vq))
+}
+
+/// Sensorless: the startup supervisor (EQ-CTRL-10) then the current loop on its angle.
+#[allow(clippy::too_many_arguments)]
+fn sensorless_family(
+    spec: &FocSpec,
+    opts: &sensorless::StartupOptions,
+    motor: &MotorModel,
+    plant: &PlantInfo,
+    io: &FocIo,
+    sig: FocSignals,
+    t_c: SimTime,
+    omega_c: f64,
+    omega_v: f64,
+    bus: &mut SignalBus,
+) -> Result<Vec<Box<dyn DiscreteBlock>>, String> {
+    let e = |err: SignalError| err.to_string();
+    let omega_min = io
+        .omega_min
+        .ok_or("sensorless FOC needs the flux observer (EQ-CTRL-09)")?;
+    let sp = Setpoints::get_or_register(bus).map_err(e)?;
+    let [theta, omega, state] = sensorless::register(bus).map_err(e)?;
+    let est = |p: &str| bus.id(p).map_err(e);
+    let sio = sensorless::SensorlessIo {
+        omega_ref: sp.omega,
+        est_theta: est("est.theta")?,
+        est_omega: est("est.omega")?,
+        est_valid: est("est.valid")?,
+        id_ref: sig.id_ref,
+        iq_ref: sig.iq_ref,
+        theta,
+        omega,
+        state,
+    };
+    let n_p = plant.ratio * motor.pole_pairs;
+    let startup = opts.resolve(
+        spec.i_max,
+        plant.kt,
+        plant.j_motor,
+        n_p,
+        plant.ratio,
+        omega_min,
+    );
+    let v = spec.velocity.unwrap_or(LoopSpec {
+        enabled: true,
+        rate_hz: spec.current_rate_hz,
+        omega: None,
+        kp: None,
+        ki: None,
+    });
+    let (kp_d, ki_d) = velocity_loop::design(omega_v, plant.j_motor, plant.kt);
+    let pi = sensorless::velocity_pi(v.kp.unwrap_or(kp_d), v.ki.unwrap_or(ki_d), spec.i_max);
+    let sup =
+        sensorless::SensorlessBlock::new(t_c, startup, sio, pi, spec.i_max, n_p, motor.pole_pairs);
+    let mut io = *io;
+    io.angle_e = Scaled {
+        id: theta,
+        gain: 1.0,
+    };
+    io.omega_e = Scaled {
+        id: omega,
+        gain: 1.0,
+    };
+    Ok(vec![
+        Box::new(sup),
+        Box::new(current_block(spec, motor, &io, sig, t_c, omega_c)?),
+    ])
 }

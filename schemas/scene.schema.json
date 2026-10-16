@@ -566,6 +566,17 @@
               "type": "boolean",
               "default": false
             },
+            "startup": {
+              "description": "Sensorless startup (EQ-CTRL-10; defaults from the current limit and the plant).",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StartupParams"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "velocity": {
               "description": "Velocity loop (EQ-CTRL-04).",
               "anyOf": [
@@ -2270,6 +2281,89 @@
           "const": "derived"
         }
       ]
+    },
+    "StartupParams": {
+      "type": "object",
+      "properties": {
+        "accel": {
+          "description": "I/f speed ramp, load side.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "align_current": {
+          "description": "Alignment d current I_align.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "align_time": {
+          "description": "Alignment time t_align.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blend_time": {
+          "description": "Angle blend time t_blend.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "current": {
+          "description": "I/f q current I_if.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "handoff_speed": {
+          "description": "Hand-off speed ω_handoff (electrical).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "valid_time": {
+          "description": "Time `est.valid` must hold before the hand-off (and be lost before the fallback).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
     },
     "SupplyParams": {
       "oneOf": [

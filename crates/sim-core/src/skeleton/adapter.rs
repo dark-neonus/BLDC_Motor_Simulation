@@ -381,6 +381,7 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
         ControllerSpec::Mit(m) => Some(m.foc.current_rate_hz),
         _ => None,
     };
+    let mut omega_min = None;
     let (omega_m, omega_e) = if let Some(o) = opts.estimators.observer {
         let hz =
             current_rate.ok_or("the flux observer needs a FOC current loop (family foc or mit)")?;
@@ -393,6 +394,7 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
             lambda: mp.lambda,
             v_bus: opts.v_supply,
         };
+        omega_min = Some(model.default_omega_min(o.omega_min));
         blocks.push(estimators::observer_block(
             o,
             model,
@@ -444,6 +446,7 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
         theta_l,
         v_bus,
         duties: duties.map(|(d, _)| d),
+        omega_min,
     };
     let info = PlantInfo {
         ratio: n,
