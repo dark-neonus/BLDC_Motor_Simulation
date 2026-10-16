@@ -37,6 +37,8 @@ pub struct CurrentLoopConfig {
     pub omega_c: f64,
     pub m_max: f64,
     pub aw: AntiWindup,
+    /// Explicit (K_p, K_i) for both axes (auto-tune), overriding ω_c·L, ω_c·R.
+    pub gains: Option<(f64, f64)>,
 }
 
 impl CurrentLoopConfig {
@@ -45,6 +47,9 @@ impl CurrentLoopConfig {
         2.0 * std::f64::consts::PI / period.as_secs_f64() / 20.0
     }
     fn gains(&self) -> [(f64, f64); 2] {
+        if let Some(g) = self.gains {
+            return [g, g];
+        }
         [
             (self.omega_c * self.ld, self.omega_c * self.r),
             (self.omega_c * self.lq, self.omega_c * self.r),
@@ -97,6 +102,10 @@ pub struct FocSignals {
     /// While `angle_forced` = 1 the loop uses `angle_cmd` instead (calibration).
     pub angle_cmd: SignalId,
     pub angle_forced: SignalId,
+    /// While `v_forced` = 1 the loop applies (`vd_cmd`, `vq_cmd`) at once (auto-tune).
+    pub vd_cmd: SignalId,
+    pub vq_cmd: SignalId,
+    pub v_forced: SignalId,
 }
 
 impl FocSignals {
@@ -154,6 +163,24 @@ impl FocSignals {
                 "ctrl.foc.angle_forced",
                 "-",
                 "1: the current loop uses ctrl.foc.angle_cmd (calibration)",
+                Input,
+            )?,
+            vd_cmd: reg(
+                "ctrl.foc.vd_cmd",
+                "V",
+                "forced d voltage (auto-tune)",
+                Input,
+            )?,
+            vq_cmd: reg(
+                "ctrl.foc.vq_cmd",
+                "V",
+                "forced q voltage (auto-tune)",
+                Input,
+            )?,
+            v_forced: reg(
+                "ctrl.foc.v_forced",
+                "-",
+                "1: the current loop applies ctrl.foc.vd_cmd/vq_cmd at once (auto-tune)",
                 Input,
             )?,
         })
@@ -278,8 +305,17 @@ impl DiscreteBlock for FocCurrentLoop {
         let ff_d = -w * p.lq * iq;
         let ff_q = w * (p.ld * id + p.lambda);
         let (rd, rq) = (bus.get(self.sig.id_ref), bus.get(self.sig.iq_ref));
-        let (vd, vq) = match self.open_loop_vq {
-            Some(v) => (0.0, v),
+        // Test modes apply a voltage directly: the build-time open-loop v_q, or the forced
+        // (v_d, v_q) of auto-tune.
+        let forced = match self.open_loop_vq {
+            Some(v) => Some((0.0, v)),
+            None if bus.get(self.sig.v_forced) > 0.5 => {
+                Some((bus.get(self.sig.vd_cmd), bus.get(self.sig.vq_cmd)))
+            }
+            None => None,
+        };
+        let (vd, vq) = match forced {
+            Some(v) => v,
             None => {
                 let vd = self.pi[0].step(rd, id, ff_d, (-v_max, v_max), t);
                 let vq_max = (v_max * v_max - vd * vd).max(0.0).sqrt();
@@ -289,11 +325,7 @@ impl DiscreteBlock for FocCurrentLoop {
         // Inverse Park at the advanced angle; SVPWM for an inverter. Closed loop: the
         // command applies one period later and is held, 1.5·T on average. The open-loop
         // test mode is a voltage source, not a computation: it applies now, held 0.5·T.
-        let lead = if self.open_loop_vq.is_some() {
-            0.5
-        } else {
-            1.5
-        };
+        let lead = if forced.is_some() { 0.5 } else { 1.5 };
         let (sn, cs) = (th + lead * t * w).sin_cos();
         let (va, vb) = (cs * vd - sn * vq, sn * vd + cs * vq);
         let duty = if self.duties.is_some() {
@@ -311,7 +343,7 @@ impl DiscreteBlock for FocCurrentLoop {
         };
         // Apply the command computed at the previous tick (EQ-CTRL-03 timing), or the
         // open-loop voltage at once.
-        let c = if self.open_loop_vq.is_some() {
+        let c = if forced.is_some() {
             new
         } else {
             std::mem::replace(&mut self.next, new)

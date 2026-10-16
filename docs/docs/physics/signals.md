@@ -46,6 +46,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `ctrl.foc.id_ref`, `ctrl.foc.iq_ref`, `ctrl.foc.i_d`, `ctrl.foc.i_q`, `ctrl.foc.v_d`, `ctrl.foc.v_q`, `ctrl.foc.v_alpha`, `ctrl.foc.v_beta`, `ctrl.foc.saturated` | A, V, – | FOC internals (i_d, i_q = measured, in the controller's frame; the voltages are the command being applied, computed one tick earlier and held for a period) | FOC | EQ-CTRL-03 |
 | `ctrl.duty_ref` | – | six-step command setpoint u ∈ [−1, 1] (sign: direction), used while the speed loop is off | setpoint | EQ-CTRL-05 |
 | `ctrl.six_step.duty` | – | six-step command u (speed-loop output or `ctrl.duty_ref`), before the current-limit cap | controller | EQ-CTRL-05 |
+| `ctrl.foc.vd_cmd`, `ctrl.foc.vq_cmd`, `ctrl.foc.v_forced` | V, V, – | forced (v_d, v_q) applied at once while `v_forced` = 1 (auto-tune) | auto-tune | EQ-CTRL-12 |
 | `ctrl.foc.angle_offset`, `ctrl.foc.angle_cmd`, `ctrl.foc.angle_forced` | rad, rad, – | current loop's electrical offset θ̂e0 (calibration result; initial `controller.encoder_offset`) and the forced angle used during calibration | calibration | EQ-CTRL-11 |
 | `ctrl.sensorless.theta`, `ctrl.sensorless.omega`, `ctrl.sensorless.state` | rad, rad/s, – | sensorless FOC: the electrical angle and speed the current loop uses, startup state 0 align / 1 I/f / 2 blend / 3 closed loop | sensorless supervisor | EQ-CTRL-10 |
 | `ctrl.six_step.sector`, `ctrl.open_loop.theta_ref` | –, rad | controller internals | controllers | EQ-CTRL-05/06 |

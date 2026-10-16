@@ -202,6 +202,8 @@ Runs on a copy of the scene (D-006).
 
 The gains are applied only after the user confirms. Validation: the measured values are within 5 % of the true parameters, and the achieved bandwidth is within ±20 % of the target.
 
+**What is measured** (the simulator's routine, `control::autotune`): R is the resistance the current loop sees, the winding's $R(T)$ at its present temperature plus the switch $R_{on}$ (so the "true" R for the check is $R(T) + R_{on}$; the result reports the winding temperature). λ is the slope $dv_q/d\omega_e$ at constant current during the J test, not $v_q/\omega_e$ at $i \approx 0$: the dead-time voltage the current loop compensates is a constant offset in $v_q$ (≈ 0.65 V on a 5010 at 48 V, three times its back-EMF at the coasting speed), and only the slope removes it. J uses +I then −I windows (friction cancels, the speed comes back down), each stopped at half the voltage limit. The test currents are 25 %/50 % (R, L) and 30 % (J, λ) of `controller.limits.current`: on a low-R, low-L motor, a limit far below its rating leaves the dead-time voltage dominant and the current ragged (measured: 5010 at 4 A gave λ +15 %; at its 25 A rating +0.4 %). The achieved bandwidth is checked small-signal: a q step between two currents of the same sign (25 % → 50 %), timed from the change of $i_q^*$ (τ63 ≈ $1/\omega_c$). A step from zero is slower (8010: 3.6×) because the phase currents leave zero and the dead-time voltage appears during the rise: a large-signal effect, not the loop's bandwidth.
+
 ## References
 
 `[Krishnan2010]` (FOC, six-step), `[Mohan2014]` (current-loop design), `[Lee2010]`, `[Ortega2011]` (observer), `[ODrive]`, `[VESC]`, `[SimpleFOC]` (practical tuning and calibration). See [References](./references.md).

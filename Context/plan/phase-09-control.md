@@ -129,7 +129,7 @@
   - **Done when:** Passing.
   - **If stuck:** If the mlua sandbox/interrupt API differs at the locked version, check its docs.rs page and `tests/luau.rs` in the mlua repo.
 
-- [ ] **P09.T11** — Auto-tune
+- [x] **P09.T11** — Auto-tune
   - **Depends:** P09.T04, P09.T07
   - **Do:** Run in a **separate engine instance** (D-006) copied from the current scene:
     1. Measure R (DC voltage injection), L (voltage step response or HF injection), and J + friction (torque step / speed ramp), per EQ-CTRL.

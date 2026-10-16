@@ -70,6 +70,7 @@ fn rig(locked: bool, j: f64, aw: AntiWindup) -> Engine {
         omega_c: CurrentLoopConfig::default_omega_c(period),
         m_max: M_MAX,
         aw,
+        gains: None,
     };
     let currents = ["motor.i_a", "motor.i_b", "motor.i_c"].map(|n| bus.id(n).unwrap());
     let inputs = CurrentLoopInputs {

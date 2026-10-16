@@ -835,6 +835,7 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
             cascade: false,
             sensorless: None,
             encoder_offset: 0.0,
+            current_gains: None,
         };
         let spec = CustomSpec {
             script: script.clone(),
@@ -870,6 +871,7 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
             cascade: false,
             sensorless: None,
             encoder_offset: 0.0,
+            current_gains: None,
         };
         let spec = MitSpec {
             foc,
@@ -957,6 +959,7 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
         cascade: true,
         sensorless,
         encoder_offset: opt(encoder_offset, Kind::Angle, "controller.encoder_offset")?,
+        current_gains: current.kp.zip(current.ki),
     };
     Ok((ControllerSpec::Foc(spec), cur.rate_hz))
 }

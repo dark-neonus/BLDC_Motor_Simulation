@@ -57,6 +57,8 @@ pub struct FocSpec {
     pub sensorless: Option<sensorless::StartupOptions>,
     /// Initial `ctrl.foc.angle_offset` θ̂e0 [rad electrical] (EQ-CTRL-11).
     pub encoder_offset: f64,
+    /// Explicit current-loop (K_p, K_i) (`controller.current.kp/ki`, auto-tune).
+    pub current_gains: Option<(f64, f64)>,
 }
 
 impl FocSpec {
@@ -84,6 +86,7 @@ impl FocSpec {
             cascade: true,
             sensorless: None,
             encoder_offset: 0.0,
+            current_gains: None,
         }
     }
 }
@@ -275,6 +278,7 @@ fn current_block(
         omega_c,
         m_max: spec.m_max,
         aw: spec.aw,
+        gains: spec.current_gains,
     };
     let inputs = CurrentLoopInputs {
         currents: io.currents,
