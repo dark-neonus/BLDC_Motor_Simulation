@@ -26,7 +26,7 @@
   - **Verify:** Test: disabling the position loop makes the velocity setpoint drive the velocity loop directly.
   - **Done when:** Passing.
 
-- [ ] **P09.T02** — Discrete PI/PID with anti-windup
+- [x] **P09.T02** — Discrete PI/PID with anti-windup
   - **Depends:** P09.T01
   - **Do:** Per EQ-CTRL: discretization method, clamping and back-calculation anti-windup, a filtered derivative, and output limits. A pure struct with no bus coupling.
   - **Files:** `crates/sim-core/src/control/pid.rs`

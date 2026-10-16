@@ -3,4 +3,5 @@
 
 pub mod estimators;
 pub mod framework;
+pub mod pid;
 pub mod setpoint;
