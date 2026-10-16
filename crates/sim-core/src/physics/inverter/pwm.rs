@@ -250,6 +250,20 @@ mod tests {
         }
     }
 
+    /// Pulse dropping (EQ-INV-02/03): a duty inside t_d of 0 or 1 (here half the dead
+    /// fraction) keeps the leg Low / High all period, with no Off interval.
+    #[test]
+    fn duties_within_the_dead_time_drop_the_pulse() {
+        let h = 0.5 * CFG.dead_ns as f64 / CFG.period_ns as f64;
+        let mut e = engine([h, 1.0 - h, 0.5]);
+        at(&mut e, 0);
+        // Leg b enters High from the initial Low through one dead time (t_d = 500 ns).
+        for t in (750..2 * CFG.period_ns).step_by(250) {
+            let s = at(&mut e, t);
+            assert_eq!((s[0], s[1]), (-1.0, 1.0), "t {t}");
+        }
+    }
+
     #[test]
     fn duty_changes_mid_period_apply_next_period() {
         let mut e = engine([0.6, 0.5, 0.5]);

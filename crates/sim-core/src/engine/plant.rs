@@ -30,7 +30,8 @@ pub trait PlantModule: Send {
     fn param_roots(&self) -> Vec<String> {
         Vec::new()
     }
-    /// Live-settable parameters: `(name, unit)`; full path is `<module name>.<name>`.
+    /// Live-settable parameters: `(name, unit)`. A name under one of `param_roots` is
+    /// already the full path (D-015); any other is relative: `<module name>.<name>`.
     fn params(&self) -> Vec<(String, String)> {
         Vec::new()
     }

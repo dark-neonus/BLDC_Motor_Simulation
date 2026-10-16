@@ -86,8 +86,15 @@
     - damping ratio from Kd matches the second-order formula
   - **Done when:** Passing.
 
+- [ ] **P09.T15** — Build the estimators from a scene (P08 review M1, m7)
+  - **Depends:** P09.T03, P08.T11
+  - **Do:** `build_engine` builds the velocity estimator (method, τ_f or PLL ω_n/ζ) and the flux observer (γ, ω_min, PLL ω_n/ζ) from `sensors.*` / controller parameters; the observer reads the ADC currents and the controller's commanded v_α, v_β. Their T comes from the block period (no separate value); reject γλ²T ≥ 2 (forward-Euler stability). Schema fields + spec defaults.
+  - **Files:** `crates/sim-core/src/build.rs`, `crates/sim-core/src/control/estimators/`, `crates/sim-model/src/params.rs`, `docs/docs/physics/control.md`, `schemas/`
+  - **Verify:** Scene test: an encoder scene publishes `est.omega` tracking the speed; a sensorless scene's observer converges; an unstable γ is refused at build.
+  - **Done when:** Green.
+
 - [ ] **P09.T08** — Sensorless FOC (startup + handoff)
-  - **Depends:** P09.T04, P08.T07
+  - **Depends:** P09.T04, P08.T07, P09.T15
   - **Do:** Startup sequence: align → open-loop ramp → handoff to the observer angle when `est.valid` holds for N ms, then back to open loop if it is lost. Uses `est.theta`/`est.omega` instead of the encoder.
   - **Files:** `crates/sim-core/src/control/foc/sensorless.rs`
   - **Verify:** Test: starts from standstill and reaches the speed target; the handoff is smooth (bounded current spike, specified).
@@ -148,6 +155,6 @@
   - **Done when:** Green.
 
 - [ ] **P09.T14** — Phase gate
-  - **Depends:** P09.T01, P09.T02, P09.T03, P09.T04, P09.T05, P09.T06, P09.T07, P09.T08, P09.T09, P09.T10, P09.T11, P09.T12, P09.T13
+  - **Depends:** P09.T01, P09.T02, P09.T03, P09.T04, P09.T05, P09.T06, P09.T07, P09.T08, P09.T09, P09.T10, P09.T11, P09.T12, P09.T13, P09.T15
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-09-done`.

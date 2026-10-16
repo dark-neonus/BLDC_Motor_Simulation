@@ -162,8 +162,9 @@ impl Magnetics {
     }
 }
 
-/// Two legs Off for longer than this [s] is not a dead-time transient (warning).
-const TWO_OFF_WARN: f64 = 10e-6;
+/// Two legs Off for longer than 2·t_d (and at least this [s]) is not a dead-time
+/// transient (warning).
+const TWO_OFF_WARN_MIN: f64 = 1e-6;
 
 /// Magnet temperature input for λ(T) = λ_ref·(1 + α_Br·(T − T_ref)) (EQ-THERM-03).
 #[derive(Debug, Clone, Copy)]
@@ -191,6 +192,8 @@ pub struct LegInputs {
     pub v_bus: SignalId,
     /// Diode forward drop V_f [V].
     pub v_f: f64,
+    /// PWM dead time t_d [s] (two legs Off for longer than 2·t_d is commanded).
+    pub dead_time: f64,
 }
 
 /// Bus signals the module reads.
@@ -243,6 +246,8 @@ pub struct MotorElectrical {
     /// by itself. Otherwise it follows its inverter leg and the diode bounds.
     fault_open: bool,
     warned_two_off: bool,
+    /// Which inverter legs were Off at the last discrete event (refreshed there).
+    leg_off: [bool; 3],
     jump: f64,
     last_theta_e: f64,
     last_lambda: f64,
@@ -360,6 +365,7 @@ impl MotorElectrical {
             terminals_internal: false,
             fault_open: false,
             warned_two_off: false,
+            leg_off: [false; 3],
             jump: 0.0,
             last_lambda: lambda,
             open: None,
@@ -607,6 +613,13 @@ impl MotorElectrical {
             return Err(format!("open_phase must be -1, 0, 1 or 2, got {v}"));
         }
         let k = v as usize;
+        // One floating phase at a time: another phase on an Off leg would need the
+        // zero-current mode (P10).
+        if let Some(j) = (0..3).find(|&j| j != k && self.leg_off[j]) {
+            return Err(format!(
+                "phase {j}'s inverter leg is Off: opening phase {k} as well needs the zero-current mode (P10)"
+            ));
+        }
         if let Some(open) = self.open {
             if self.fault_open {
                 return Err("a phase is already open; reconnect it first".into());
@@ -657,7 +670,8 @@ impl MotorElectrical {
         x_own[0] = f[y] - f[z];
         x_own[1] = 0.0;
         self.open = Some(k);
-        self.diode = [0.0; 3];
+        // Only phase k's reconnect diode is stale; another Off phase may still conduct.
+        self.diode[k] = 0.0;
         // i_k ≈ 0 at the event (bisection tolerance): book the tiny W_mag difference.
         let after = self.solve_open(x_own[0], th, lam, k);
         self.jump += self.w_mag(&after, lam) - self.w_mag(&before, lam);
@@ -910,10 +924,19 @@ impl PlantModule for MotorElectrical {
     }
     fn after_discrete(&mut self, t: f64, x_own: &mut [f64], bus: &SignalBus) {
         let Some(l) = self.legs else { return };
+        let off: [bool; 3] = std::array::from_fn(|k| bus.get(l.legs[k]).abs() < 0.5);
+        self.leg_off = off;
         if self.fault_open {
+            // Another leg Off during the fault: a second floating phase is not modelled.
+            let k = self.open.or(self.first_pending());
+            if (0..3).any(|j| Some(j) != k && off[j]) && !self.warned_two_off {
+                self.warned_two_off = true;
+                self.warnings.push(
+                    "an inverter leg is Off while another phase is open (fault): one phase at a time is modelled as floating (zero-current mode arrives with faults, P10)".into(),
+                );
+            }
             return;
         }
-        let off: [bool; 3] = std::array::from_fn(|k| bus.get(l.legs[k]).abs() < 0.5);
         if let Some(k) = self.open
             && !off[k]
         {
@@ -930,7 +953,7 @@ impl PlantModule for MotorElectrical {
         // all-Off), not a PWM transient. Zero-current mode is not modelled yet (P10).
         if offs.len() > 1 {
             let since = *self.two_off_since.get_or_insert(t);
-            if t - since > TWO_OFF_WARN && !self.warned_two_off {
+            if t - since > (2.0 * l.dead_time).max(TWO_OFF_WARN_MIN) && !self.warned_two_off {
                 self.warned_two_off = true;
                 self.warnings.push(
                     "two or more inverter legs stay Off: one phase at a time is modelled as floating (zero-current mode arrives with faults, P10)".into(),
@@ -966,7 +989,7 @@ impl PlantModule for MotorElectrical {
         serde_json::json!({
             "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda,
             "open": self.open, "pending": self.pending, "two_off_since": self.two_off_since,
-            "diode": self.diode,
+            "diode": self.diode, "leg_off": self.leg_off,
             "last_theta_e": self.last_theta_e, "last_lambda": self.last_lambda, "jump": self.jump, "warned": self.warned,
             "fault_open": self.fault_open,
         })
@@ -1005,6 +1028,10 @@ impl PlantModule for MotorElectrical {
         self.diode = match v.get("diode") {
             Some(d) => serde_json::from_value(d.clone()).map_err(|e| e.to_string())?,
             None => [0.0; 3],
+        };
+        self.leg_off = match v.get("leg_off") {
+            Some(d) => serde_json::from_value(d.clone()).map_err(|e| e.to_string())?,
+            None => [false; 3],
         };
         (self.last_theta_e, self.last_lambda, self.jump) = (th, lam, jump);
         self.cache = None;

@@ -38,36 +38,30 @@ impl ObserverParams {
 pub struct FluxObserver {
     pub p: ObserverParams,
     pub t: f64,
-    /// Observer state x [Wb], αβ.
-    pub x: [f64; 2],
+    /// Observer state x [Wb], αβ; `None` until the first update.
+    pub x: Option<[f64; 2]>,
     pub pll: Pll,
 }
 
 impl FluxObserver {
     /// x starts at L_s·i (η = 0) on the first update.
     pub fn new(p: ObserverParams, t: f64, pll: Pll) -> Self {
-        Self {
-            p,
-            t,
-            x: [f64::NAN; 2],
-            pll,
-        }
+        Self { p, t, x: None, pll }
     }
 
     /// One step from the measured i_αβ and the voltage applied over the last period;
     /// returns (θ̂e, ω̂e, valid, |η|).
     pub fn update(&mut self, i: [f64; 2], v: [f64; 2]) -> (f64, f64, bool, f64) {
         let p = &self.p;
-        if self.x[0].is_nan() {
-            self.x = [p.ls * i[0], p.ls * i[1]];
-        }
-        let eta = [self.x[0] - p.ls * i[0], self.x[1] - p.ls * i[1]];
+        let mut x = self.x.unwrap_or([p.ls * i[0], p.ls * i[1]]);
+        let eta = [x[0] - p.ls * i[0], x[1] - p.ls * i[1]];
         let n2 = eta[0] * eta[0] + eta[1] * eta[1];
         let k = 0.5 * p.gamma * (p.lambda * p.lambda - n2);
         for a in 0..2 {
-            self.x[a] += self.t * (v[a] - p.r * i[a] + k * eta[a]);
+            x[a] += self.t * (v[a] - p.r * i[a] + k * eta[a]);
         }
-        let eta = [self.x[0] - p.ls * i[0], self.x[1] - p.ls * i[1]];
+        self.x = Some(x);
+        let eta = [x[0] - p.ls * i[0], x[1] - p.ls * i[1]];
         let th = eta[1].atan2(eta[0]);
         let (_, w) = self.pll.update(th);
         let mag = eta[0].hypot(eta[1]);
@@ -193,14 +187,20 @@ mod tests {
     /// v = (ψ_k − ψ_{k−1})/T + R·i_k (consistent with the Euler step). Returns the angle
     /// errors and the last validity flag.
     fn run(obs: &mut FluxObserver, w: f64, secs: f64) -> (Vec<f64>, bool) {
+        let (errs, flags) = run_full(obs, w, secs, LAMBDA);
+        (errs, flags.last().copied().unwrap_or(false))
+    }
+
+    /// As `run` with the motor's true flux `lambda`; returns every validity flag.
+    fn run_full(obs: &mut FluxObserver, w: f64, secs: f64, lambda: f64) -> (Vec<f64>, Vec<bool>) {
         let n = (secs / T) as usize;
         let at = |k: usize| {
             let th = w * T * k as f64;
             let i = [2.0 * (th + FRAC_PI_2).cos(), 2.0 * (th + FRAC_PI_2).sin()];
-            let psi = [L * i[0] + LAMBDA * th.cos(), L * i[1] + LAMBDA * th.sin()];
+            let psi = [L * i[0] + lambda * th.cos(), L * i[1] + lambda * th.sin()];
             (th, i, psi)
         };
-        let (mut errs, mut valid) = (vec![], false);
+        let (mut errs, mut flags) = (vec![], vec![]);
         let (_, _, mut psi_prev) = at(0);
         for k in 1..=n {
             let (th, i, psi) = at(k);
@@ -211,9 +211,9 @@ mod tests {
             psi_prev = psi;
             let (est, _, ok, _) = obs.update(i, v);
             errs.push(wrap_pi(th - est).abs().to_degrees());
-            valid = ok;
+            flags.push(ok);
         }
-        (errs, valid)
+        (errs, flags)
     }
 
     #[test]
@@ -242,16 +242,60 @@ mod tests {
         assert!(mean < 5.0, "{mean}°");
     }
 
+    /// The EQ-CTRL-09 low-speed table (3 % R error, setup as in the spec): mean angle
+    /// error over the second half of 40 electrical radians, and the `est.valid` fraction.
     #[test]
-    fn fails_at_very_low_speed_as_documented() {
-        // ω_e = 1.4 rad/s with a 3 % R error: the back-EMF (14 mV) is smaller than the
-        // resistance error (30 mV), so the angle is lost (EQ-CTRL-09 table: tens of
-        // degrees) and the estimate is flagged invalid.
-        let mut obs = observer(0.03);
-        let (errs, valid) = run(&mut obs, 1.4, 2.0);
-        let mean = errs[errs.len() / 2..].iter().sum::<f64>() / (errs.len() / 2) as f64;
-        assert!(mean > 20.0, "mean error {mean}°");
-        assert!(!valid);
+    fn low_speed_error_table_matches_the_spec() {
+        for (w, deg, valid) in [
+            (700.0f64, 0.2, 1.0),
+            (140.0, 23.0, 0.97),
+            (14.0, 52.0, 0.0),
+            (1.4, 147.0, 0.0),
+        ] {
+            let mut obs = observer(0.03);
+            let (errs, flags) = run_full(&mut obs, w, (40.0 / w).clamp(0.3, 4.0), LAMBDA);
+            let h = errs.len() / 2;
+            let mean = errs[h..].iter().sum::<f64>() / (errs.len() - h) as f64;
+            let frac = flags[h..].iter().filter(|x| **x).count() as f64 / (errs.len() - h) as f64;
+            // Rounded table entries: ±0.05° at 700 rad/s, ±3 % elsewhere.
+            let tol = if w > 500.0 { 0.05 } else { 0.03 * deg };
+            assert!((mean - deg).abs() < tol, "ω_e {w}: {mean}° vs {deg}°");
+            assert!((frac - valid).abs() < 0.01, "ω_e {w}: valid {frac}");
+        }
+    }
+
+    /// Far above ω_min the flag still drops through the |η| check when the motor's flux
+    /// is 30 % or more above the assumed one (gross mismatch, EQ-CTRL-09); a smaller true
+    /// flux makes it flicker (about half the samples at ×0.5 and ×0.7).
+    #[test]
+    fn valid_drops_on_a_wrong_flux_above_omega_min() {
+        for f in [1.3, 1.5, 2.0] {
+            let mut obs = observer(0.0);
+            let (_, flags) = run_full(&mut obs, 700.0, 0.3, LAMBDA * f);
+            assert!(!flags[flags.len() / 2..].iter().any(|x| *x), "λ ×{f}");
+        }
+        let mut obs = observer(0.0);
+        let (_, flags) = run_full(&mut obs, 700.0, 0.3, LAMBDA * 0.5);
+        let h = &flags[flags.len() / 2..];
+        let frac = h.iter().filter(|x| **x).count() as f64 / h.len() as f64;
+        assert!(frac < 0.6, "λ ×0.5: valid {frac}");
+    }
+
+    /// A snapshot taken before the first update (x not yet initialised) restores.
+    #[test]
+    fn snapshot_before_the_first_step_restores() {
+        let fresh = observer(0.0);
+        let v = serde_json::to_value(fresh).unwrap();
+        let back: FluxObserver = serde_json::from_value(v).unwrap();
+        assert_eq!(back, fresh);
+        let mut a = observer(0.0);
+        let mut b = back;
+        for _ in 0..3 {
+            assert_eq!(
+                a.update([1.0, 0.5], [2.0, -1.0]),
+                b.update([1.0, 0.5], [2.0, -1.0])
+            );
+        }
     }
 
     #[test]

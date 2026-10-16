@@ -1,6 +1,6 @@
 //! P07.T01: switching inverter legs (EQ-INV-01) with the motor's automatic floating.
 
-use sim_core::engine::commands::{ChangeSource, EngineCommand};
+use sim_core::engine::commands::{ChangeSource, EngineCommand, EngineEvent};
 use sim_core::engine::engine::Engine;
 use sim_core::engine::plant::{Plant, PlantModule};
 use sim_core::engine::signals::{SignalBus, SignalId, SignalKind};
@@ -38,6 +38,11 @@ impl PlantModule for Bus {
 }
 
 fn rig(locked: bool, omega0: f64, legs: [LegState; 3]) -> Engine {
+    rig_dt(locked, omega0, legs, 0.0)
+}
+
+/// As `rig`, with the PWM dead time the motor assumes for its two-Off warning.
+fn rig_dt(locked: bool, omega0: f64, legs: [LegState; 3], dead_time: f64) -> Engine {
     let mut bus = SignalBus::new();
     let vb = bus.register("bus.v", "V", "", SignalKind::Output).unwrap();
     let inv = SwitchingInverter::new(D, vb, &mut bus).unwrap();
@@ -77,6 +82,7 @@ fn rig(locked: bool, omega0: f64, legs: [LegState; 3]) -> Engine {
             legs: leg_ids,
             v_bus: vb,
             v_f: D.v_f,
+            dead_time,
         });
     let rotor = rotor.with_internal(bus.id("motor.torque_em").unwrap());
     let inv = inv.with_motor(&bus).unwrap();
@@ -180,4 +186,79 @@ fn open_phase_fault_overrides_a_leg_float() {
     e.step_until(SimTime::from_secs_f64(0.1)).unwrap();
     assert_eq!(sig(&e, "motor.open_phase"), 0.0, "the fault holds it open");
     assert_eq!(sig(&e, "motor.i_a"), 0.0);
+}
+
+fn warnings(e: &mut Engine) -> Vec<String> {
+    e.drain_events()
+        .into_iter()
+        .filter_map(|ev| match ev {
+            EngineEvent::Warning { msg, .. } => Some(msg),
+            _ => None,
+        })
+        .collect()
+}
+
+fn open_phase(e: &mut Engine, k: f64) {
+    e.queue(EngineCommand::SetParam {
+        path: "motor.open_phase".into(),
+        value: k,
+        source: ChangeSource::Internal,
+    });
+}
+
+/// One floating phase at a time (P08 review m1): a fault on phase a while phase b's leg
+/// is Off is refused; a leg going Off while a fault holds another phase open warns.
+#[test]
+fn a_second_floating_phase_is_refused_or_warned() {
+    use LegState::*;
+    let mut e = rig(true, 0.0, [High, Low, Low]);
+    e.step_until(SimTime::from_secs_f64(0.06)).unwrap();
+    set_leg(&mut e, "b", Off);
+    e.step_until(SimTime::from_secs_f64(0.08)).unwrap();
+    assert_eq!(sig(&e, "motor.open_phase"), 1.0, "b floats on its leg");
+    e.drain_events();
+    open_phase(&mut e, 0.0);
+    e.step_until(SimTime::from_secs_f64(0.081)).unwrap();
+    let rejected = e.drain_events().into_iter().any(|ev| {
+        matches!(ev, EngineEvent::CommandRejected { reason, .. } if reason.contains("zero-current"))
+    });
+    assert!(rejected, "fault on a while b's leg is Off");
+    assert_eq!(sig(&e, "motor.open_phase"), 1.0);
+
+    let mut e = rig(true, 0.0, [High, Low, Low]);
+    e.step_until(SimTime::from_secs_f64(0.06)).unwrap();
+    open_phase(&mut e, 0.0);
+    e.step_until(SimTime::from_secs_f64(0.061)).unwrap();
+    assert!(warnings(&mut e).is_empty());
+    set_leg(&mut e, "c", Off);
+    e.step_until(SimTime::from_secs_f64(0.062)).unwrap();
+    let w = warnings(&mut e);
+    assert!(
+        w.iter().any(|m| m.contains("while another phase is open")),
+        "{w:?}"
+    );
+}
+
+/// The two-legs-Off warning threshold follows the dead time, 2·t_d (P08 review m4):
+/// 15 µs with two legs Off is a transient at t_d = 10 µs, a commanded state at t_d = 0.
+#[test]
+fn two_off_warning_threshold_follows_the_dead_time() {
+    use LegState::*;
+    for (dt, warns) in [(10e-6, false), (0.0, true)] {
+        let mut e = rig_dt(false, 0.0, [High, Low, Low], dt);
+        e.step_until(SimTime::from_secs_f64(0.01)).unwrap();
+        e.drain_events();
+        set_leg(&mut e, "b", Off);
+        set_leg(&mut e, "c", Off);
+        e.step_until(SimTime::from_secs_f64(0.01 + 15e-6)).unwrap();
+        // A discrete event while both are still Off evaluates the warning.
+        set_leg(&mut e, "a", High);
+        e.step_until(SimTime::from_secs_f64(0.01 + 16e-6)).unwrap();
+        let w = warnings(&mut e);
+        assert_eq!(
+            w.iter().any(|m| m.contains("legs stay Off")),
+            warns,
+            "t_d {dt}: {w:?}"
+        );
+    }
 }

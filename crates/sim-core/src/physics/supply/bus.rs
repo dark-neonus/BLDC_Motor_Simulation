@@ -394,20 +394,18 @@ impl PlantModule for DcBus {
             .get("ch_on")
             .and_then(serde_json::Value::as_bool)
             .ok_or("missing `ch_on`")?;
-        let f = |k: &str| {
-            v.get(k)
-                .and_then(serde_json::Value::as_f64)
-                .ok_or(format!("missing `{k}`"))
-        };
-        let (c, jump, sv, si, sr) = (f("c")?, f("jump")?, f("v")?, f("i_lim")?, f("r_out")?);
-        (self.c, self.jump) = (c, jump);
+        // Live parameters arrived in P08.T10: older snapshots keep the built values.
+        let f = |k: &str, old: f64| v.get(k).and_then(serde_json::Value::as_f64).unwrap_or(old);
+        (self.c, self.jump) = (f("c", self.c), f("jump", 0.0));
         match &mut self.src {
-            Source::Ideal { v } => *v = sv,
+            Source::Ideal { v: sv } => *sv = f("v", *sv),
             Source::Psu {
                 v_set,
                 i_lim,
                 r_out,
-            } => (*v_set, *i_lim, *r_out) = (sv, si, sr),
+            } => {
+                (*v_set, *i_lim, *r_out) = (f("v", *v_set), f("i_lim", *i_lim), f("r_out", *r_out));
+            }
             Source::Battery { .. } => {}
         }
         Ok(())

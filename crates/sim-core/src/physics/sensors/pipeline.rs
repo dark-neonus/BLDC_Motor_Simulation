@@ -38,6 +38,8 @@ pub struct SensorPipeline {
     cfg: PipelineConfig,
     error: Option<ErrorFn>,
     rng: BlockRng,
+    /// The stream as built, so `reset` replays the same noise.
+    rng0: BlockRng,
     /// True-signal history (t ns, x), oldest first.
     hist: VecDeque<(i64, f64)>,
     held: f64,
@@ -48,6 +50,7 @@ impl SensorPipeline {
         Self {
             cfg,
             error: None,
+            rng0: rng.clone(),
             rng,
             hist: VecDeque::new(),
             held: 0.0,
@@ -117,6 +120,7 @@ impl SensorPipeline {
     pub fn reset(&mut self) {
         self.hist.clear();
         self.held = 0.0;
+        self.rng = self.rng0.clone();
     }
 
     pub fn save(&self) -> serde_json::Value {
@@ -290,6 +294,10 @@ mod tests {
         // Same seed and block id → the same sequence.
         let mut q = pipe(cfg);
         assert_eq!(q.sample(0, 1.0) - 1.0, ys[0]);
+        // reset() returns to the initial state, noise stream included.
+        p.reset();
+        let again: Vec<f64> = (0..5).map(|k| p.sample(k, 1.0) - 1.0).collect();
+        assert_eq!(again, ys[..5]);
     }
 
     #[test]

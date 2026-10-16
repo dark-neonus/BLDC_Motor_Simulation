@@ -503,3 +503,15 @@
 4. D-019: supply parameters keep the flat `supply.*` paths of the YAML (supply.md, signals.md fixed). `DcBus` exposes `bus.capacitance`, `supply.voltage`, `supply.current_limit`, `supply.r_out` (get/set; C change books ½ΔC·V²; R·C below the build value is refused, D-018 step cap). Test: live edits, CC after a lower limit, residual < 1e-6, refused R.
 5. The Off-leg diode is no longer latched in `outputs()`: the motor publishes the reconnect diode per phase (`motor.diode_x`, set at the event, cleared at the float and when the leg turns on); the inverter reads it, else its turn-off latch (`after_discrete`), else the sign of i / the nearer bound, all without mutation (D-017). Motor snapshots carry `diode`, per-phase `pending`; older single-pending snapshots still restore.
 - `just check-fast` green.
+
+## 2026-10-16 — P08.T12 Phase 08 review fixes
+Phase-end review (P08.T09): 2 majors, 8 minors, no blockers. M1 (no sensor/estimator built from a scene) → P08.T11 (sensors) and P09.T15 (estimators, with m7), user's choice. The rest here:
+- M2: `FluxObserver.x` is `Option<[f64; 2]>` (the NaN sentinel serialised as null and broke any snapshot before the first step). Test: serialise/restore a fresh observer, identical updates after.
+- m1: `motor.open_phase` is refused while another phase's leg is Off (one floating phase at a time; zero-current mode is P10); a leg going Off while a fault holds a phase open warns. The motor remembers the Off legs of the last discrete event (`leg_off`, in snapshots). Test.
+- m2: `enter_open` clears only the opening phase's reconnect diode.
+- m3: inverter.md states the averaged deviation inside the pulse-dropping band (switching leg stays Low/High; averaged off by 2d(V_bus + V_f − R_on|i|) for the sign that gains on-time, 2d(R_on|i| − V_f) for the other). Tests: PWM keeps the leg Low/High at half the dead fraction; averaged deviation matches the stated expressions and bounds.
+- m4: the two-legs-Off warning threshold is max(2·t_d, 1 µs), with t_d passed in `LegInputs.dead_time`. Test: 15 µs is quiet at t_d = 10 µs, warns at t_d = 0.
+- m5: `SensorPipeline::reset` restores the initial RNG (same noise as a fresh run). Test.
+- m6: control.md EQ-CTRL-09 table re-measured with its conditions stated (it gave no setup and did not reproduce): 700/140/14/1.4 rad/s → 0.2°/23°/52°/147°, valid fraction 1/0.97/0/0; `est.valid` does not detect parameter-mismatch angle error (|η| is driven to λ), only gross flux error (true flux ≥ 1.3× assumed clears it at 700 rad/s). Tests for the table (±3 %) and the |η| check replace the old low-speed test whose `!valid` held through the speed gate alone.
+- m8: `PlantModule::params` doc matches D-015 (names under a param root are full paths); bus snapshots without the P08.T10 keys restore with the built values. Test.
+- `just check-fast` green (234 tests).

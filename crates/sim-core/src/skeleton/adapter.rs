@@ -386,6 +386,7 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
                 legs,
                 v_bus: dc.v_id(),
                 v_f: o.devices.v_f,
+                dead_time: o.dead_time,
             })
             .with_internal_terminals();
     }

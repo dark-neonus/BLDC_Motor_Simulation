@@ -130,11 +130,14 @@ $$
 - Speed comes from a PLL on $\hat\theta_e$. The radial convergence rate is $\gamma\lambda_m^2$; default $\gamma = 1000/\lambda_m^2$.
 - `est.valid` is set when $|\hat\omega_e| > \omega_{min}$ and $\big||\eta| - \lambda_m\big| < 0.2\lambda_m$.
 - **Convergence:** started from $\eta = 0$ ($x = L_s i$), with the default $\gamma$ and exact parameters, the angle error falls below 5° within 100 ms at $\omega_e \ge 10\,\%$ of rated speed and stays there (P08.T07 test: about 55 ms at 200 rad/s for $\lambda_m$ = 10 mWb). The integration is forward Euler at the control rate, with the voltage applied over the last period.
-- **Expected low-speed failure:** the back-EMF shrinks with speed while errors in $R$, offsets and dead time do not. Verified with a 3 % resistance error:
+- **Expected low-speed failure:** the back-EMF shrinks with speed while errors in $R$, offsets and dead time do not. Verified (P08 test) with a 3 % resistance error, $\lambda_m$ = 10 mWb, $L_s$ = 1 mH, $R$ = 0.5 Ω, a pure $i_q$ = 2 A, $T$ = 50 µs, default $\gamma$, PLL $\omega_n = 2\pi\cdot100$ rad/s, $\zeta = 1$; run for 40 electrical radians (at least 0.3 s, at most 4 s), mean over the second half:
 
   | $\omega_e$ [rad/s] | 700 | 140 | 14 | 1.4 |
   |---|---|---|---|---|
-  | mean angle error | 0.5° | 13° | 126° | 64° |
+  | mean angle error | 0.2° | 23° | 52° | 147° |
+  | `est.valid` (fraction of samples) | 1 | 0.97 | 0 | 0 |
+
+  `est.valid` does **not** detect the angle error caused by a parameter mismatch: the observer drives $|\eta|$ to $\lambda_m$ by construction, so the magnitude check catches only gross divergence (verified at 700 rad/s: a true flux 30 % or more above the assumed $\lambda_m$ clears the flag on every sample; a true flux of half or 0.7× the assumed one makes it flicker on about half), and in practice the flag is a speed gate. Controllers must not rely on it alone below a few times $\omega_{min}$.
 
 ### EQ-CTRL-10 — Sensorless startup {/* #eq-ctrl-10 */}
 

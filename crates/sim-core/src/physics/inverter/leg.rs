@@ -463,6 +463,24 @@ mod tests {
         );
     }
 
+    /// Inside the pulse-dropping band the switching leg stays Low (v = −R_on·i, PWM test
+    /// `duties_within_the_dead_time_drop_the_pulse`); the averaged model is continuous and
+    /// deviates by 2d·(V_bus + V_f − R_on|i|) for the sign that gains on-time and by
+    /// 2d·(R_on|i| − V_f) for the other (EQ-INV-03, P08 review m3).
+    #[test]
+    fn averaged_deviation_inside_the_pulse_dropping_band() {
+        let (f, v, i) = (0.01, 24.0, 3.0);
+        let d = 0.5 * f;
+        let gain = averaged_voltage(d, -i, v, &D, f, 0.01) - D.r_on * i;
+        let lose = averaged_voltage(d, i, v, &D, f, 0.01) + D.r_on * i;
+        let want_gain = 2.0 * d * (v + D.v_f - D.r_on * i);
+        let want_lose = 2.0 * d * (D.r_on * i - D.v_f);
+        assert!((gain - want_gain).abs() < 1e-12, "{gain} vs {want_gain}");
+        assert!((lose - want_lose).abs() < 1e-12, "{lose} vs {want_lose}");
+        // The stated bounds: 2(t_d/T)(V_bus + V_f) and 2(t_d/T)·V_f.
+        assert!(gain.abs() <= 2.0 * f * (v + D.v_f) && lose.abs() <= 2.0 * f * D.v_f);
+    }
+
     /// Review P07 #4 / P08.T10: a terminal reconnected at the high bound uses the high
     /// diode even when the round-off current is a hair positive; the choice comes from
     /// the motor (`motor.diode_x`) and `outputs` mutates nothing (D-017).

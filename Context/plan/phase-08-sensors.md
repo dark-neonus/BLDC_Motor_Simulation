@@ -89,7 +89,25 @@
   - **Verify:** `cargo nextest run -p sim-core` with a test per item.
   - **Done when:** Green.
 
+- [ ] **P08.T11** — Build the sensors from a scene (P08 review M1)
+  - **Depends:** P08.T10
+  - **Do:**
+    1. `build_engine` builds `sensors.hall`, `sensors.encoder` (magnetic and incremental) and `sensors.adc` from the scene, each on its own RNG substream of the scene seed.
+    2. Rates: `update_rate` when given; otherwise the ADC samples at `pwm.center` (T_pwm, phase 0) in switching mode and at the controller rate otherwise, and the others at the controller rate (encoder: 10 kHz default).
+    3. `bypass: true` samples exactly at the controller rate, so every controller step reads x(t) (EQ-SENS-01 continuous bypass from the consumer's side); state this in the spec.
+    4. Schema: per-phase ADC offsets and gain errors, a bus-voltage channel (full scale, noise); regenerate the schemas.
+  - **Files:** `crates/sim-core/src/build.rs`, `crates/sim-core/src/skeleton/adapter.rs`, `crates/sim-model/src/{params,components}.rs`, `docs/docs/physics/sensors.md`, `schemas/`
+  - **Verify:** Test through scenes: each sensor preset builds and publishes its signals; bypass reads the true value at each controller step; ADC sample instants at `pwm.center` in switching mode.
+  - **Done when:** Green.
+
+- [x] **P08.T12** — Phase 08 review fixes
+  - **Depends:** P08.T10
+  - **Do:** M2 (observer snapshot before the first step), m1 (fault on another phase than a leg float), m2 (clear only the opening phase's diode), m3 (state the averaged pulse-dropping deviation in the spec, test it), m4 (two-Off warning threshold from the dead time), m5 (pipeline reset restores the RNG), m6 (observer low-speed table and |η| check tested), m8 (bus params full paths, old snapshots restore).
+  - **Files:** `crates/sim-core/src/control/estimators/flux_observer.rs`, `crates/sim-core/src/physics/{sensors/pipeline,motor/electrical,inverter/leg,supply/bus}.rs`, `docs/docs/physics/{control,inverter}.md`
+  - **Verify:** `cargo nextest run -p sim-core` with a test per item.
+  - **Done when:** Green.
+
 - [ ] **P08.T09** — Phase gate
-  - **Depends:** P08.T01, P08.T02, P08.T03, P08.T04, P08.T05, P08.T06, P08.T07, P08.T08, P08.T10
+  - **Depends:** P08.T01, P08.T02, P08.T03, P08.T04, P08.T05, P08.T06, P08.T07, P08.T08, P08.T10, P08.T11, P08.T12
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-08-done`.

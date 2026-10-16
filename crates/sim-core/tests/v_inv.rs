@@ -79,6 +79,7 @@ fn rig(duty: [f64; 3], dead_ns: i64) -> Engine {
             legs,
             v_bus: vb,
             v_f: D.v_f,
+            dead_time: dead_ns as f64 * 1e-9,
         });
     let rotor = rotor.with_internal(bus.id("motor.torque_em").unwrap());
     let inv = inv.with_motor(&bus).unwrap();

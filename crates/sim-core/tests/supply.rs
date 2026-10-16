@@ -290,3 +290,30 @@ fn bus_and_supply_parameters_live() {
         sig(&e, "energy.residual")
     );
 }
+
+/// A bus snapshot from before the live parameters (P08.T10) restores with the built
+/// values (P08 review m8).
+#[test]
+fn pre_p08_bus_snapshot_restores() {
+    let src = Source::Psu {
+        v_set: 24.0,
+        i_lim: 5.0,
+        r_out: 0.02,
+    };
+    let mut e = rig(src.clone(), None, |_| 2.0, 5e-6);
+    run(&mut e, 1e-3);
+    let mut snap = e.snapshot();
+    let (_, st) = snap
+        .modules
+        .iter_mut()
+        .find(|(n, _)| n == "bus")
+        .expect("bus module");
+    for k in ["c", "jump", "v", "i_lim", "r_out"] {
+        st.as_object_mut().unwrap().remove(k);
+    }
+    let mut f = rig(src, None, |_| 2.0, 5e-6);
+    f.restore(&snap).unwrap();
+    assert_eq!(f.get_param("bus.capacitance"), Some(C));
+    assert_eq!(f.get_param("supply.current_limit"), Some(5.0));
+    assert_eq!(f.get_param("supply.r_out"), Some(0.02));
+}
