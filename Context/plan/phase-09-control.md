@@ -35,13 +35,13 @@
     - windup recovery is faster with anti-windup than without (quantified)
   - **Done when:** Passing.
 
-- [ ] **P09.T03** — FOC current loop (sensored)
+- [x] **P09.T03** — FOC current loop (sensored)
   - **Depends:** P09.T02
   - **Do:**
     - Measured currents (ADC) → Clarke/Park with the encoder angle (or `est.theta`).
     - PI on d and q, decoupling feed-forward, voltage-limit circle with d-priority, inverse Park → SVPWM duties → inverter.
     - Runs on the `pwm.center` trigger or at its configured rate.
-    - **Replaces the interim skeleton FOC** (P05.T11/P07.T12): switch the default scene to it and delete the skeleton FOC block (`grep INTERIM` → none left after P09).
+    - The replacement of the interim skeleton FOC moved to P09.T04: every scene needs the speed loop, which arrives there.
   - **Files:** `crates/sim-core/src/control/foc/current_loop.rs`
   - **Verify:** Tests:
     - closed-loop current bandwidth (V-CTRL) within ±15 % of design
@@ -52,6 +52,7 @@
 - [ ] **P09.T04** — Velocity & position loops (cascade)
   - **Depends:** P09.T03
   - **Do:** Velocity PI → iq_ref (with the current limit); position P/PI → velocity ref (with the velocity limit). Each loop has its own rate, enable flag and ramp. Gear ratio aware (the position setpoint is on the load side when a gearbox is present).
+    - **Replaces the interim skeleton FOC** (P05.T11/P07.T12, moved here from P09.T03): `build_engine` wires the P09 current loop + cascade for `family: foc`, the default scene switches to it, and the skeleton FOC block is deleted (`grep INTERIM` → none left after P09).
   - **Files:** `crates/sim-core/src/control/foc/{velocity_loop,position_loop}.rs`
   - **Verify:** Tests:
     - speed step settling time per the design

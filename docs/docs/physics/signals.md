@@ -41,7 +41,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `est.theta`, `est.omega`, `est.valid` | rad, rad/s, – | estimator outputs, in the frame of the estimator's input (velocity estimator on a shaft encoder: mechanical; flux observer: electrical) | estimators | EQ-CTRL-08/09 |
 | `ctrl.omega_ref`, `ctrl.theta_ref`, `ctrl.torque_ref` | rad/s, rad, N·m | active setpoints | setpoint | EQ-CTRL-04/07 |
 | `ctrl.omega_cmd` | rad/s | velocity-loop reference, motor side: the position loop's output, or N·`ctrl.omega_ref` while the position loop is disabled (EQ-CTRL-04 bypass) | controller | EQ-CTRL-04 |
-| `ctrl.foc.id_ref`, `ctrl.foc.iq_ref`, `ctrl.foc.v_d`, `ctrl.foc.v_q`, `ctrl.foc.v_alpha`, `ctrl.foc.v_beta`, `ctrl.foc.saturated` | A, V, – | FOC internals (αβ = commands after inverse Park, held until the next tick) | FOC | EQ-CTRL-03 |
+| `ctrl.foc.id_ref`, `ctrl.foc.iq_ref`, `ctrl.foc.i_d`, `ctrl.foc.i_q`, `ctrl.foc.v_d`, `ctrl.foc.v_q`, `ctrl.foc.v_alpha`, `ctrl.foc.v_beta`, `ctrl.foc.saturated` | A, V, – | FOC internals (i_d, i_q = measured, in the controller's frame; the voltages are the command being applied, computed one tick earlier and held for a period) | FOC | EQ-CTRL-03 |
 | `ctrl.six_step.sector`, `ctrl.open_loop.theta_ref` | –, rad | controller internals | controllers | EQ-CTRL-05/06 |
 | `fault.<id>.active`, `protect.<id>.tripped` | – | fault / protection flags | faults | P10 |
 | `energy.in`, `energy.loss`, `energy.loss.<term>`, `energy.stored`, `energy.external`, `energy.residual`, `energy.ok` | J, J, J, J, J, –, – | energy accounting | engine | EQ-ENER |

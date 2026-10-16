@@ -40,6 +40,7 @@ $$
 2. PI on $d$ and $q$ (EQ-CTRL-01) plus decoupling feed-forward: $v_d^{ff} = -\hat\omega_e L_q i_q$, $v_q^{ff} = \hat\omega_e(L_d i_d + \lambda_m)$.
 3. Voltage limit with d priority: $V_{max} = m_{max}V_{bus}/\sqrt3$ ($m_{max} = 0.95$), $v_d \leftarrow \mathrm{clamp}(v_d, \pm V_{max})$, $|v_q| \le \sqrt{V_{max}^2 - v_d^2}$. The limiter reports saturation to the PIs.
 4. Inverse Park using the angle advanced by $1.5\,T\,\hat\omega_e$, which compensates the computation plus PWM delay. Then SVPWM (EQ-INV-05).
+5. **Timing.** The loop runs at `pwm.center` (period $T = T_{pwm}$, phase 0) or at its own rate. The command computed from the samples at $t_k$ is applied from $t_{k+1}$ (one period of computation delay, like an MCU writing shadow registers) and held for a period, so it acts on average $1.5\,T$ after the sample: the delay the angle advance compensates.
 
 **Gain design** by pole-zero cancellation:
 
