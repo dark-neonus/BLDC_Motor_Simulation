@@ -4,9 +4,11 @@
 //! survives only as a test fixture (`fixtures::dq_pmsm`).
 
 use super::params::PmsmParams;
+use crate::control::ControllerSpec;
 use crate::control::foc::current_loop::{BusVoltage, FocSignals};
 use crate::control::foc::{self, FocIo, FocSpec, MotorModel};
 use crate::control::framework::{PlantInfo, Scaled};
+use crate::control::six_step::{self, CommutationAngle};
 use crate::engine::block::DiscreteBlock;
 use crate::engine::engine::Engine;
 use crate::engine::plant::Plant;
@@ -62,7 +64,7 @@ pub struct InverterOptions {
 pub struct SkeletonOptions {
     pub locked: bool,
     /// The FOC family (EQ-CTRL-03/04).
-    pub controller: FocSpec,
+    pub controller: ControllerSpec,
     /// Ideal source voltage [V] (`Drive::Ideal`).
     pub v_supply: f64,
     /// Integration step limit [s].
@@ -102,7 +104,7 @@ impl Default for SkeletonOptions {
     fn default() -> Self {
         Self {
             locked: false,
-            controller: FocSpec::skeleton(),
+            controller: ControllerSpec::Foc(FocSpec::skeleton()),
             v_supply: 24.0,
             dt_max: 5e-6,
             gearbox: Gearbox::BYPASS,
@@ -149,6 +151,13 @@ pub fn build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Engine {
 /// As `build_engine_with`; fails when a sensor's input signal does not exist (e.g. an
 /// ADC bus-voltage channel without a DC bus) or the controller spec is invalid.
 pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<Engine, String> {
+    let six = matches!(opts.controller, ControllerSpec::SixStep(_));
+    if six && matches!(opts.drive, Drive::Ideal) {
+        return Err(
+            "six-step needs an inverter (fidelity.inverter_mode averaged or switching): the ideal source cannot float a phase"
+                .into(),
+        );
+    }
     let mut bus = SignalBus::new();
     // The controller's signals first: the ideal source reads ctrl.foc.v_alpha/v_beta.
     let sig = FocSignals::register(&mut bus).map_err(|e| e.to_string())?;
@@ -173,6 +182,9 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
                 .expect("unique skeleton signal")
                 .with_switching_loss(o.t_rise_fall, o.f_pwm)
                 .without_dc_input();
+            if six {
+                inv = inv.with_six_step();
+            }
             if !o.switching {
                 inv = inv
                     .averaged(&mut bus, o.dead_time * o.f_pwm, o.i_eps)
@@ -293,9 +305,13 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
                     period_ns: (1e9 / o.f_pwm).round() as i64,
                     dead_ns: (o.dead_time * 1e9).round() as i64,
                 };
-                extra_blocks.push(Box::new(Pwm::new(cfg, &mut bus).expect("pwm signals")));
-            } else {
-                // Averaged: every leg is driven by its duty.
+                let mut pwm = Pwm::new(cfg, &mut bus).expect("pwm signals");
+                if six {
+                    pwm = pwm.with_six_step(&mut bus).expect("pattern signals");
+                }
+                extra_blocks.push(Box::new(pwm));
+            } else if !six {
+                // Averaged: every leg is driven by its duty (six-step writes the legs).
                 inv.set_legs(&mut bus, [LegState::High; 3]);
             }
             duties = Some((duty, v_bus));
@@ -376,14 +392,44 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
         lambda: mp.lambda,
         pole_pairs: mp.p,
     };
-    blocks.extend(foc::build(
-        &opts.controller,
-        &model,
-        &info,
-        &io,
-        sig,
-        &mut bus,
-    )?);
+    match &opts.controller {
+        ControllerSpec::Foc(spec) => {
+            blocks.extend(foc::build(spec, &model, &info, &io, sig, &mut bus)?);
+        }
+        ControllerSpec::SixStep(spec) => {
+            let Some((duty, v_dc)) = duties else {
+                return Err("six-step needs an inverter".into());
+            };
+            // Averaged: the pattern drives the legs directly; switching: the PWM block.
+            let switching = matches!(&opts.drive, Drive::Inverter(o) if o.switching);
+            let legs = if switching {
+                [
+                    "inverter.pattern_a",
+                    "inverter.pattern_b",
+                    "inverter.pattern_c",
+                ]
+            } else {
+                ["inverter.leg_a", "inverter.leg_b", "inverter.leg_c"]
+            }
+            .map(|p| id(&bus, p));
+            let angle = match bus.id("sensors.hall.sector") {
+                Ok(h) => CommutationAngle::Hall(h),
+                Err(_) => CommutationAngle::True(id(&bus, "motor.theta_e")),
+            };
+            blocks.extend(six_step::build(
+                spec,
+                &info,
+                &model,
+                &opts.shape,
+                angle,
+                io.omega_m,
+                legs,
+                duty,
+                bus.id("sensors.adc.v_bus").unwrap_or(v_dc),
+                &mut bus,
+            )?);
+        }
+    }
     // A scene with a position loop holds its initial pose (EQ-CTRL-04).
     let th = id(&bus, "ctrl.theta_ref");
     bus.set(th, opts.theta_l0);
@@ -415,10 +461,10 @@ mod tests {
     fn locked_rotor_energy_balance_closes() {
         let mut e = build_engine(SkeletonOptions {
             locked: true,
-            controller: crate::control::foc::FocSpec {
+            controller: crate::control::ControllerSpec::Foc(crate::control::foc::FocSpec {
                 open_loop_vq: Some(1.0),
                 ..crate::control::foc::FocSpec::skeleton()
-            },
+            }),
             dt_max: 2.5e-7,
             ..Default::default()
         });

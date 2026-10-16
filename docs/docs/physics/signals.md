@@ -29,6 +29,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `thermal.t_winding`, `thermal.t_stator`, `thermal.t_housing`, `thermal.t_magnet` | K | temperatures | thermal | EQ-THERM-01 |
 | `inverter.leg_a`, `inverter.leg_b`, `inverter.leg_c` | – | leg state: +1 High, −1 Low, 0 Off | inverter | EQ-INV-01 |
 | `inverter.duty_a`, `inverter.duty_b`, `inverter.duty_c` | – | duties | modulator | EQ-INV-02 |
+| `inverter.pattern_a`, `inverter.pattern_b`, `inverter.pattern_c` | – | six-step pattern for the PWM block (switching mode): +1 High (H/O PWM with the duty), −1 Low, 0 Off | six-step controller | EQ-INV-07 |
 | `inverter.v_a`, `inverter.v_b`, `inverter.v_c` | V | terminal voltages | inverter | EQ-INV-01/03 |
 | `inverter.i_dc`, `inverter.i_sw`, `inverter.p_loss` | A, A, W | DC link, switching current, loss | inverter | EQ-INV-08/09 |
 | `inverter.pwm_count` | – | PWM periods so far (+1 at each period start, the ADC trigger) | PWM | EQ-INV-02 |
@@ -42,6 +43,8 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `ctrl.omega_ref`, `ctrl.theta_ref`, `ctrl.torque_ref` | rad/s, rad, N·m | active setpoints | setpoint | EQ-CTRL-04/07 |
 | `ctrl.omega_cmd` | rad/s | velocity-loop reference, motor side: the position loop's output, or N·`ctrl.omega_ref` while the position loop is disabled (EQ-CTRL-04 bypass) | controller | EQ-CTRL-04 |
 | `ctrl.foc.id_ref`, `ctrl.foc.iq_ref`, `ctrl.foc.i_d`, `ctrl.foc.i_q`, `ctrl.foc.v_d`, `ctrl.foc.v_q`, `ctrl.foc.v_alpha`, `ctrl.foc.v_beta`, `ctrl.foc.saturated` | A, V, – | FOC internals (i_d, i_q = measured, in the controller's frame; the voltages are the command being applied, computed one tick earlier and held for a period) | FOC | EQ-CTRL-03 |
+| `ctrl.duty_ref` | – | six-step command setpoint u ∈ [−1, 1] (sign: direction), used while the speed loop is off | setpoint | EQ-CTRL-05 |
+| `ctrl.six_step.duty` | – | six-step command u (speed-loop output or `ctrl.duty_ref`), before the current-limit cap | controller | EQ-CTRL-05 |
 | `ctrl.six_step.sector`, `ctrl.open_loop.theta_ref` | –, rad | controller internals | controllers | EQ-CTRL-05/06 |
 | `fault.<id>.active`, `protect.<id>.tripped` | – | fault / protection flags | faults | P10 |
 | `energy.in`, `energy.loss`, `energy.loss.<term>`, `energy.stored`, `energy.external`, `energy.residual`, `energy.ok` | J, J, J, J, J, –, – | energy accounting | engine | EQ-ENER |
@@ -52,7 +55,7 @@ Two engine-only live parameters are not scene fields: `motor.open_phase` (−1 r
 - Parquet/CSV outputs use the column `t` [s] for time (the bus signal `sim.t` is the same value).
 - **All setpoints are load-side** (`ctrl.theta_ref`, `ctrl.omega_ref`, `ctrl.torque_ref`); controllers convert with the gear ratio $N$. Without a gearbox they equal motor-side values.
 - `energy.loss.<term>` uses these term names: `copper`, `iron`, `friction`, `gearbox`, `load`, `inverter`, `chopper`, `battery`. There is no `energy.out` signal.
-- `inverter.leg_x` reports H/L/O for switched legs and six-step; averaged PWM legs are held at +1 (driven, not Off), and their duty is in `inverter.duty_x`.
+- `inverter.leg_x` reports H/L/O for switched legs and six-step; averaged PWM legs are held at +1 (driven, not Off), and their duty is in `inverter.duty_x`. Averaged six-step writes the pattern straight to `inverter.leg_x` (High = H/O-averaged with its duty, EQ-INV-07).
 - `ctrl.six_step.sector` is 0…5 in the order of the EQ-INV-07 table (0 = 330°…30°), and −1 for an invalid Hall code.
 
 ## Parameter roots

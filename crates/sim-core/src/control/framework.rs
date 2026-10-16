@@ -158,9 +158,17 @@ pub struct LoopBlock {
     law: Box<dyn LoopLaw>,
     ramp: RampLimiter,
     enabled: bool,
+    /// |reference| limit (e.g. the speed limit on a velocity reference); ∞ = none.
+    ref_limit: f64,
 }
 
 impl LoopBlock {
+    /// Clamp the reference to ±`lim` before the ramp.
+    pub fn with_reference_limit(mut self, lim: f64) -> Self {
+        self.ref_limit = lim;
+        self
+    }
+
     pub fn new(id: &str, cfg: LoopConfig, io: LoopWiring, law: Box<dyn LoopLaw>) -> Self {
         Self {
             id: id.into(),
@@ -169,6 +177,7 @@ impl LoopBlock {
             law,
             ramp: RampLimiter::new(cfg.ramp),
             enabled: cfg.enabled,
+            ref_limit: f64::INFINITY,
         }
     }
 }
@@ -187,7 +196,10 @@ impl DiscreteBlock for LoopBlock {
         let t = self.cfg.period.as_secs_f64();
         let (lo, hi) = self.cfg.limits;
         let (r_in, y) = (
-            self.io.reference.read(ctx.bus),
+            self.io
+                .reference
+                .read(ctx.bus)
+                .clamp(-self.ref_limit, self.ref_limit),
             self.io.feedback.read(ctx.bus),
         );
         let u = if self.enabled {

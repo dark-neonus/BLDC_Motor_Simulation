@@ -195,20 +195,24 @@ pub fn build(
     } else {
         Box::new(pi)
     };
-    blocks.push(Box::new(LoopBlock::new(
-        "controller.velocity",
-        cfg,
-        super::framework::LoopWiring {
-            reference: vel_ref,
-            feedback: io.omega_m,
-            bypass: Scaled {
-                id: sp.torque,
-                gain: 1.0 / (n * plant.kt),
+    blocks.push(Box::new(
+        LoopBlock::new(
+            "controller.velocity",
+            cfg,
+            super::framework::LoopWiring {
+                reference: vel_ref,
+                feedback: io.omega_m,
+                bypass: Scaled {
+                    id: sp.torque,
+                    gain: 1.0 / (n * plant.kt),
+                },
+                out: sig.iq_ref,
             },
-            out: sig.iq_ref,
-        },
-        law,
-    )));
+            law,
+        )
+        // The speed limit also bounds a velocity setpoint (motor side).
+        .with_reference_limit(n * spec.speed_limit),
+    ));
     // Current loop.
     let cfg = CurrentLoopConfig {
         period: t_c,

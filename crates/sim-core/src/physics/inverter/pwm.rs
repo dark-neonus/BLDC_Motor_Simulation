@@ -30,6 +30,8 @@ pub struct Pwm {
     state: [LegState; 3],
     latched: [f64; 3],
     periods: f64,
+    /// Six-step (EQ-INV-07): `inverter.pattern_x` (+1 High = H/O PWM, −1 Low, 0 Off).
+    pattern: Option<[SignalId; 3]>,
 }
 
 impl Pwm {
@@ -58,7 +60,76 @@ impl Pwm {
             state: [LegState::Low; 3],
             latched: [0.0; 3],
             periods: 0.0,
+            pattern: None,
         })
+    }
+
+    /// Six-step mode (EQ-INV-07): registers `inverter.pattern_a..c`. Per period a High
+    /// leg is H for d·T centred on the period, O otherwise (no dead time between H and
+    /// O); a Low leg is L and an Off leg O all period. A direct H↔L change goes through
+    /// O for the dead time.
+    pub fn with_six_step(mut self, bus: &mut SignalBus) -> Result<Self, SignalError> {
+        let mut reg = |x: &str| {
+            bus.register(
+                &format!("inverter.pattern_{x}"),
+                "-",
+                "six-step leg pattern: +1 High (H/O PWM), −1 Low, 0 Off",
+                SignalKind::Input,
+            )
+        };
+        self.pattern = Some([reg("a")?, reg("b")?, reg("c")?]);
+        Ok(self)
+    }
+
+    fn schedule_six_step(&mut self, t0: i64, pattern: [SignalId; 3], bus: &SignalBus) {
+        let (tp, td) = (self.cfg.period_ns, self.cfg.dead_ns);
+        self.edges.clear();
+        #[allow(clippy::needless_range_loop)] // x indexes four parallel arrays
+        for x in 0..3 {
+            let d = bus.get(self.duty[x]);
+            let d = if d.is_finite() {
+                d.clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            self.latched[x] = d;
+            let cur = self.state[x];
+            match LegState::from_signal(bus.get(pattern[x])) {
+                LegState::High => {
+                    let mut high_ns = (d * tp as f64).round() as i64;
+                    let mut t_on = t0 + (tp - high_ns) / 2;
+                    if cur == LegState::Low && t_on < t0 + td && high_ns > 0 {
+                        // From L the high switch waits for the dead time.
+                        high_ns -= t0 + td - t_on;
+                        t_on = t0 + td;
+                    }
+                    // From L, the low switch opens at t0 (O until the pulse).
+                    if cur != LegState::Off {
+                        self.edges.push((t0, x, LegState::Off));
+                    }
+                    if high_ns > 0 {
+                        self.edges.push((t_on, x, LegState::High));
+                        if high_ns < tp {
+                            self.edges.push((t_on + high_ns, x, LegState::Off));
+                        }
+                    }
+                }
+                LegState::Low => match cur {
+                    LegState::High => {
+                        self.edges.push((t0, x, LegState::Off));
+                        self.edges.push((t0 + td, x, LegState::Low));
+                    }
+                    LegState::Off => self.edges.push((t0, x, LegState::Low)),
+                    LegState::Low => {}
+                },
+                LegState::Off => {
+                    if cur != LegState::Off {
+                        self.edges.push((t0, x, LegState::Off));
+                    }
+                }
+            }
+        }
+        self.edges.sort_by_key(|e| e.0);
     }
 
     /// Latch the duties and lay out this period's edges (EQ-INV-02). Edges of the last
@@ -136,7 +207,10 @@ impl DiscreteBlock for Pwm {
         let t = ctx.t.nanos();
         if t >= self.next_period {
             let t0 = self.next_period;
-            self.schedule(t0, ctx.bus);
+            match self.pattern {
+                Some(p) => self.schedule_six_step(t0, p, ctx.bus),
+                None => self.schedule(t0, ctx.bus),
+            }
             self.next_period = t0 + self.cfg.period_ns;
             self.periods += 1.0;
             ctx.bus.set(self.count, self.periods);
@@ -262,6 +336,53 @@ mod tests {
             let s = at(&mut e, t);
             assert_eq!((s[0], s[1]), (-1.0, 1.0), "t {t}");
         }
+    }
+
+    /// EQ-INV-07 six-step: High leg H for d·T centred and O otherwise (no dead time),
+    /// Low leg L, Off leg O; a High→Low pattern change passes through O for t_d.
+    #[test]
+    fn six_step_pattern_gives_h_o_pulses() {
+        let mut bus = SignalBus::new();
+        for x in ["a", "b", "c"] {
+            bus.register(&format!("inverter.leg_{x}"), "-", "", SignalKind::Input)
+                .unwrap();
+        }
+        let pwm = Pwm::new(CFG, &mut bus)
+            .unwrap()
+            .with_six_step(&mut bus)
+            .unwrap();
+        let set = |bus: &mut SignalBus, p: &str, v: f64| {
+            let id = bus.id(p).unwrap();
+            bus.set(id, v);
+        };
+        set(&mut bus, "inverter.pattern_a", 1.0);
+        set(&mut bus, "inverter.pattern_b", -1.0);
+        set(&mut bus, "inverter.pattern_c", 0.0);
+        set(&mut bus, "inverter.duty_a", 0.4);
+        let mut e = Engine::new(Plant::new(), bus, vec![Box::new(pwm)], 1e-6);
+        // a: H for 20 µs centred: [15, 35] µs, O otherwise; b: L; c: O.
+        assert_eq!(at(&mut e, 0), [0.0, -1.0, 0.0]);
+        assert_eq!(at(&mut e, 14_999)[0], 0.0);
+        assert_eq!(at(&mut e, 15_000)[0], 1.0);
+        assert_eq!(at(&mut e, 34_999)[0], 1.0);
+        assert_eq!(at(&mut e, 35_000)[0], 0.0);
+        // Pattern Low from O: L at once (the high switch is already open).
+        let (pa, da) = (
+            e.bus.id("inverter.pattern_a").unwrap(),
+            e.bus.id("inverter.duty_a").unwrap(),
+        );
+        e.bus.set(pa, -1.0);
+        assert_eq!(at(&mut e, 50_000)[0], -1.0);
+        // Full duty: H all period, entered from L through the dead time.
+        e.bus.set(pa, 1.0);
+        e.bus.set(da, 1.0);
+        assert_eq!(at(&mut e, 100_000)[0], 0.0);
+        assert_eq!(at(&mut e, 100_500)[0], 1.0);
+        assert_eq!(at(&mut e, 149_999)[0], 1.0);
+        // High → Low at the period start: O for t_d, then L.
+        e.bus.set(pa, -1.0);
+        assert_eq!(at(&mut e, 150_000)[0], 0.0, "O for the dead time");
+        assert_eq!(at(&mut e, 150_500)[0], -1.0);
     }
 
     #[test]

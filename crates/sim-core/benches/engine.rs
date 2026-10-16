@@ -79,10 +79,12 @@ fn plant_steps(c: &mut Criterion) {
         b.iter_batched(
             || {
                 build_engine(SkeletonOptions {
-                    controller: sim_core::control::foc::FocSpec {
-                        open_loop_vq: Some(6.0),
-                        ..sim_core::control::foc::FocSpec::skeleton()
-                    },
+                    controller: sim_core::control::ControllerSpec::Foc(
+                        sim_core::control::foc::FocSpec {
+                            open_loop_vq: Some(6.0),
+                            ..sim_core::control::foc::FocSpec::skeleton()
+                        },
+                    ),
                     dt_max: 1e-7,
                     ..Default::default()
                 })

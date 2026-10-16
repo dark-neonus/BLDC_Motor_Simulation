@@ -91,6 +91,9 @@ pub struct SwitchingInverter {
     p_loss: SignalId,
     /// Book the DC-link input V_bus·(i_dc + i_sw) here (no bus module yet).
     dc_input: bool,
+    /// Six-step drive (EQ-INV-07): a High leg is H/O-PWM'd with its duty, a Low leg is L
+    /// for the whole period; only the High leg switches.
+    six_step: bool,
 }
 
 /// Averaged-mode data (EQ-INV-03, `fidelity.inverter_mode = averaged`).
@@ -143,7 +146,25 @@ pub fn averaged_voltage(
         - sigma * dead_frac * (v_bus + 2.0 * dev.v_f - 2.0 * dev.r_on * i.abs())
 }
 
+/// Averaged six-step High leg (EQ-INV-07): H for d, O otherwise (the low diode clamps to
+/// −V_f for i > 0, the high diode to V_bus + V_f for i < 0), blended with
+/// w = (1 + σ(i))/2. Returns (v̄_xT, its DC-link current).
+pub fn six_step_high_voltage(d: f64, i: f64, v_bus: f64, dev: &Devices, i_eps: f64) -> (f64, f64) {
+    let w = 0.5 * (1.0 + (i / i_eps).tanh());
+    let on = d * (v_bus - dev.r_on * i);
+    let v = w * (on + (1.0 - d) * (-dev.v_f)) + (1.0 - w) * (on + (1.0 - d) * (v_bus + dev.v_f));
+    (v, w * d * i + (1.0 - w) * i)
+}
+
 impl SwitchingInverter {
+    /// Six-step drive (EQ-INV-07): High legs are H/O-PWM'd (no complementary low side),
+    /// Low legs stay L. In switching mode the PWM block produces the H/O edges
+    /// (`Pwm::with_six_step`).
+    pub fn with_six_step(mut self) -> Self {
+        self.six_step = true;
+        self
+    }
+
     /// Switching loss (EQ-INV-09) as an extra bus current i_sw = f_pwm·Σ ½|i_x|(t_r + t_f)
     /// over the legs that switch.
     pub fn with_switching_loss(mut self, t_rise_fall: f64, f_pwm: f64) -> Self {
@@ -225,6 +246,7 @@ impl SwitchingInverter {
             i_sw,
             p_loss,
             dc_input: true,
+            six_step: false,
         })
     }
 
@@ -298,19 +320,37 @@ impl PlantModule for SwitchingInverter {
         for k in 0..3 {
             let s = LegState::from_signal(bus.get(self.legs[k]));
             let i = bus.get(self.i[k]);
+            let mut dc = None;
             let v = if let (Some(a), true) = (self.averaged, s != LegState::Off) {
                 let d = bus.get(a.duty[k]).clamp(0.0, 1.0);
-                averaged_voltage(d, i, v_bus, &self.d, a.dead_frac, a.i_eps)
+                match (self.six_step, s) {
+                    (true, LegState::High) => {
+                        let (v, idc) = six_step_high_voltage(d, i, v_bus, &self.d, a.i_eps);
+                        dc = Some(idc);
+                        v
+                    }
+                    (true, _) => {
+                        dc = Some(0.0);
+                        terminal_voltage(LegState::Low, i, v_bus, &self.d).unwrap_or(0.0)
+                    }
+                    (false, _) => averaged_voltage(d, i, v_bus, &self.d, a.dead_frac, a.i_eps),
+                }
             } else if s != LegState::Off {
                 terminal_voltage(s, i, v_bus, &self.d).unwrap_or(0.0)
             } else if open == k as f64 {
                 // Floating: v_n + e_x (EQ-MOT-12); i = 0, no diode conducts.
-                (bus.get(self.v_n) + bus.get(self.e[k])).clamp(-self.d.v_f, v_bus + self.d.v_f)
+                // max/min, not clamp: a bus below −2V_f (no reverse clamp yet, P10.T09)
+                // would invert the bounds, and clamp panics on that.
+                (bus.get(self.v_n) + bus.get(self.e[k]))
+                    .min(v_bus + self.d.v_f)
+                    .max(-self.d.v_f)
             } else {
                 terminal_voltage(s, self.diode_of(k, i, v_bus, bus), v_bus, &self.d).unwrap_or(0.0)
             };
             bus.set(self.v[k], v);
-            if let (Some(a), true) = (self.averaged, s != LegState::Off) {
+            if let Some(idc) = dc {
+                i_dc += idc;
+            } else if let (Some(a), true) = (self.averaged, s != LegState::Off) {
                 // EQ-INV-08 averaged: the dead time changes the effective high-side duty.
                 let d = bus.get(a.duty[k]).clamp(0.0, 1.0);
                 i_dc += (d - (i / a.i_eps).tanh() * dead_eff(d, a.dead_frac)) * i;
@@ -321,10 +361,15 @@ impl PlantModule for SwitchingInverter {
             }
         }
         bus.set(self.i_dc, i_dc);
-        // Switching loss: every leg that is not Off switches once per period (EQ-INV-09).
+        // Switching loss: every leg that is not Off switches once per period (EQ-INV-09);
+        // in six-step only the High (PWM'd) leg switches.
+        let switches = |s: LegState| match self.six_step {
+            true => s == LegState::High,
+            false => s != LegState::Off,
+        };
         let i_sw = self.sw.map_or(0.0, |(t_sw, f)| {
             (0..3)
-                .filter(|&k| LegState::from_signal(bus.get(self.legs[k])) != LegState::Off)
+                .filter(|&k| switches(LegState::from_signal(bus.get(self.legs[k]))))
                 .map(|k| 0.5 * bus.get(self.i[k]).abs() * t_sw * f)
                 .sum()
         });
@@ -461,6 +506,19 @@ mod tests {
             (dead_eff(0.004, f), dead_eff(0.997, f)),
             (0.004, 1.0 - 0.997)
         );
+    }
+
+    /// EQ-INV-07 averaged six-step High leg: i > 0 → d(V − R_on i) − (1 − d)V_f with
+    /// i_dc = d·i; i < 0 → d(V − R_on i) + (1 − d)(V + V_f) with i_dc = i.
+    #[test]
+    fn six_step_high_leg_average() {
+        let (d, v) = (0.3, 24.0);
+        let (vp, ip) = six_step_high_voltage(d, 2.0, v, &D, 0.01);
+        assert!((vp - (d * (v - D.r_on * 2.0) - (1.0 - d) * D.v_f)).abs() < 1e-12);
+        assert!((ip - d * 2.0).abs() < 1e-12);
+        let (vn, i_n) = six_step_high_voltage(d, -2.0, v, &D, 0.01);
+        assert!((vn - (d * (v + D.r_on * 2.0) + (1.0 - d) * (v + D.v_f))).abs() < 1e-12);
+        assert!((i_n + 2.0).abs() < 1e-12);
     }
 
     /// Inside the pulse-dropping band the switching leg stays Low (v = −R_on·i, PWM test

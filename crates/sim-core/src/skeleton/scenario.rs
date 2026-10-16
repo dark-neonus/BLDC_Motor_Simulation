@@ -79,10 +79,10 @@ pub fn simulate(sc: &SkeletonScenario) -> Result<Vec<[f64; 6]>, String> {
     }
     let mut e = build_engine(SkeletonOptions {
         locked: sc.lock_rotor,
-        controller: crate::control::foc::FocSpec {
+        controller: crate::control::ControllerSpec::Foc(crate::control::foc::FocSpec {
             open_loop_vq: sc.vq_open_loop,
             ..crate::control::foc::FocSpec::skeleton()
-        },
+        }),
         dt_max: sc.dt,
         ..Default::default()
     });

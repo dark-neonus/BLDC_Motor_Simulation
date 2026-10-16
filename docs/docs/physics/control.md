@@ -77,10 +77,14 @@ $$
 
 ### EQ-CTRL-05 — Six-step with Hall sensors {/* #eq-ctrl-05 */}
 
-1. The Hall code selects the leg pattern (EQ-SENS-02 → EQ-INV-07).
-2. Duty: either set directly, or from a speed PI with output clamped to $[0, 1]$.
-3. Direction swaps the High and Low legs.
-4. An optional advance angle shifts commutation by up to 30°.
+1. The Hall code selects the leg pattern (EQ-SENS-02 → EQ-INV-07); without Halls the controller uses the true angle (ideal feedback).
+2. Command $u \in [-1, 1]$: either set directly (`ctrl.duty_ref`) or from a speed PI with output clamped to $[-1, 1]$. The duty is $|u|$.
+3. The sign of $u$ is the direction: negative swaps the High and Low legs.
+4. An optional advance angle shifts commutation by up to 30°. With Halls the angle inside a sector is interpolated: $\hat\theta_e$ = start of the sector + $\hat\omega_e\,(t - t_{edge})$, clamped to the sector, with $\hat\omega_e = 60°/\Delta t$ of the last sector.
+
+**Speed-PI design** on the DC-equivalent model of the two conducting phases: $J\dot\omega = k_e i - \tau_L$, $u V_{bus} = 2R\,i + k_e\,\omega$, with $k_e = p\,\lambda_m\,\overline{(k_{max} - k_{min})}$ (the sector-average line-to-line EMF shape, EQ-MOT-03; $3\sqrt3/\pi$ for a sinusoidal machine). Then $\omega/u = (V_{bus}/k_e)/(1 + s\tau_m)$, $\tau_m = 2RJ/k_e^2$, and pole-zero cancellation gives $K_p = \omega_s \tau_m k_e/V_{bus}$, $K_i = \omega_s k_e/V_{bus}$ (closed loop $\approx \omega_s/(s + \omega_s)$; default $\omega_s$ = rate/50·2π).
+
+**Current limit.** There is no current loop; the duty is capped from the DC model including the inverter so that the current cannot exceed `controller.limits.current` $I_{lim}$. With H/O PWM the High leg freewheels through the low diode during O (EQ-INV-07), so the line voltage is $d(V_{bus} + V_f) - V_f - R_{on}(1 + d)\,i$, and $|u| \le \big(k_e|\hat\omega| + V_f + 2(R + R_{on}) I_{lim}\big)/(V_{bus} + V_f)$ (measured bus). At low duty the diode drop dominates: a cap without it would leave a stalled motor with a fraction of $I_{lim}$. Validation: on a trapezoidal machine (120° flat top) the line-to-line EMF is flat across each sector, so the torque between commutations is flat (within 5 % of the mean outside ±20° of each commutation) **when** a sector lasts many electrical time constants ($\pi/(3\omega_e) \ge 10\,L/R$, so the current settles) and the inertia keeps the speed ripple negligible. Otherwise the torque ramps within each sector: near the no-load speed most of the voltage is back-EMF, so a small speed ripple is a large current ripple. The floating phase's current decays through a diode to zero after each commutation (EQ-INV-07, EQ-MOT-12).
 
 ### EQ-CTRL-06 — Open-loop V/f {/* #eq-ctrl-06 */}
 

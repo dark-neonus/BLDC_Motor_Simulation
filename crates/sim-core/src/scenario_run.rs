@@ -378,6 +378,12 @@ pub fn run(sc: &Scenario, mut b: BuiltScene, asserts: bool) -> Result<RunOutput,
                             );
                         }
                     };
+                    let speed = [
+                        "controller.velocity.enabled",
+                        "controller.speed_loop.enabled",
+                    ]
+                    .into_iter()
+                    .find(|p| e.get_param(p).is_some());
                     let mut set = |path: &str, value: f64| {
                         e.queue(EngineCommand::SetParam {
                             path: path.into(),
@@ -388,7 +394,16 @@ pub fn run(sc: &Scenario, mut b: BuiltScene, asserts: bool) -> Result<RunOutput,
                     if has_position {
                         set("controller.position.enabled", position);
                     }
-                    set("controller.velocity.enabled", velocity);
+                    // FOC: the velocity loop; six-step: its speed loop (no torque mode).
+                    match (speed, m) {
+                        (Some(p), _) if p.ends_with("velocity.enabled") => set(p, velocity),
+                        (Some(p), TargetKind::Velocity) => set(p, 1.0),
+                        _ => {
+                            return Err(format!(
+                                "{m:?} targets are not supported by this scene's controller"
+                            ));
+                        }
+                    }
                 }
                 Ev::Disturbance(torque, duration) => e.queue(EngineCommand::Disturbance {
                     torque,

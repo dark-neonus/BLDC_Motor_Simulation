@@ -13,9 +13,11 @@ use sim_model::params::{
 use sim_model::scene::ResolvedScene;
 use sim_model::units::Kind;
 
+use crate::control::ControllerSpec;
 use crate::control::foc::current_loop::M_MAX;
 use crate::control::foc::{FocSpec, LoopSpec};
 use crate::control::pid::AntiWindup;
+use crate::control::six_step::SixStepSpec;
 use crate::engine::commands::{ChangeSource, EngineCommand};
 use crate::engine::engine::Engine;
 use crate::engine::fidelity::InverterMode;
@@ -679,7 +681,8 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
         return Err(BuildError::Invalid(rejects.join("\n")));
     }
     let scene = &scene;
-    let (controller, rate) = foc_spec(&scene.controller)?;
+    let (mut controller, rate) =
+        controller_spec(&scene.controller, supply_voltage(&scene.supply)?)?;
     let extra_j = reflected_inertia(scene.gearbox.as_ref(), scene.load.as_ref())?;
     let mp = pmsm_from(&scene.motor, 0.0)?;
     let (load, conserve_momentum) = load(scene)?;
@@ -692,6 +695,9 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
     }
     .min(dt_contact)
     .min(dt_drive);
+    if let (ControllerSpec::SixStep(s), Drive::Inverter(o)) = (&mut controller, &drive) {
+        (s.r_on, s.v_f) = (o.devices.r_on, o.devices.v_f);
+    }
     let drive_kind = drive.clone();
     let engine = try_build_engine_with(
         mp,
@@ -744,9 +750,36 @@ fn loop_spec(l: &LoopParams, at: &str) -> Result<LoopSpec, BuildError> {
     })
 }
 
-/// The FOC family from the scene's controller (EQ-CTRL-03/04) and its current-loop
-/// rate [Hz]. Other families arrive with their tasks (P09.T05–T07, T10).
-fn foc_spec(c: &ControllerParams) -> Result<(FocSpec, f64), BuildError> {
+/// The controller family from the scene (EQ-CTRL-03…05) and its fastest rate [Hz]
+/// (the sensors' default sampling). Other families arrive with their tasks.
+fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, f64), BuildError> {
+    if let ControllerParams::SixStep {
+        rate,
+        speed_loop,
+        advance,
+        limits,
+    } = c
+    {
+        let rate = si(rate, Kind::Frequency, "controller.rate")?;
+        let spec = SixStepSpec {
+            rate_hz: rate,
+            advance: opt(advance, Kind::Angle, "controller.advance")?,
+            speed_loop: speed_loop
+                .as_ref()
+                .map(|l| loop_spec(l, "controller.speed_loop"))
+                .transpose()?,
+            speed_limit: match &limits.speed {
+                Some(p) => si(p, Kind::AngularVelocity, "controller.limits.speed")?,
+                None => f64::INFINITY,
+            },
+            v_nominal: v_bus,
+            i_max: si(&limits.current, Kind::Current, "controller.limits.current")?,
+            // Filled from the inverter by `build_engine` (it knows the devices).
+            r_on: 0.0,
+            v_f: 0.0,
+        };
+        return Ok((ControllerSpec::SixStep(spec), rate));
+    }
     let ControllerParams::Foc {
         current,
         velocity,
@@ -806,7 +839,7 @@ fn foc_spec(c: &ControllerParams) -> Result<(FocSpec, f64), BuildError> {
         prefilter: *prefilter,
         open_loop_vq: None,
     };
-    Ok((spec, cur.rate_hz))
+    Ok((ControllerSpec::Foc(spec), cur.rate_hz))
 }
 
 /// A rate [Hz] as an exact-ns period.

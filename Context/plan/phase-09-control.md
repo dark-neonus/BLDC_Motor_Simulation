@@ -59,7 +59,7 @@
     - position hold of the arm at 90° under gravity with a steady-state error explained by the loop type (P → error ∝ load; PI → 0)
   - **Done when:** Passing.
 
-- [ ] **P09.T05** — Six-step with halls
+- [x] **P09.T05** — Six-step with halls
   - **Depends:** P09.T02
   - **Do:** Hall sector → commutation table → six-step leg pattern (P07.T04). Duty from either direct duty or a speed PI. Optional advance angle.
   - **Files:** `crates/sim-core/src/control/six_step.rs`

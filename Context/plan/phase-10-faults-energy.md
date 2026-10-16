@@ -86,7 +86,14 @@
   - **Verify:** `bldc-sim run-scenario` asserts pass; `cargo nextest run determinism`.
   - **Done when:** Green.
 
+- [ ] **P10.T09** — DC-bus reverse clamp through the bridge diodes (found in P09.T05)
+  - **Depends:** P07
+  - **Do:** A large inductive current can drain the bus capacitor below zero (e.g. six-step started at a high duty on a current-limited PSU); in hardware the bridge's free-wheeling diodes conduct and hold V_bus ≥ −2V_f. Spec first (supply.md / inverter.md: the clamp, its energy booking), then model it as a state event in `DcBus` (or an equivalent stiff diode) and book the diode loss.
+  - **Files:** `crates/sim-core/src/physics/supply/bus.rs`, `docs/docs/physics/{supply,inverter}.md`
+  - **Verify:** Test: an inductive load forced to discharge the bus holds V_bus at −2V_f and the energy residual stays < 1e-6.
+  - **Done when:** Passing.
+
 - [ ] **P10.T08** — Phase gate
-  - **Depends:** P10.T01, P10.T02, P10.T03, P10.T04, P10.T05, P10.T06, P10.T07
+  - **Depends:** P10.T01, P10.T02, P10.T03, P10.T04, P10.T05, P10.T06, P10.T07, P10.T09
   - **Do:** PLAN §8 checklist. Also: confirm every catalog case with `side: rust` or `both` has a Rust test (`grep` the catalog IDs vs the test names; script it in `scripts/catalog_coverage.py` and add it to `just check`).
   - **Done when:** Tagged `phase-10-done`.

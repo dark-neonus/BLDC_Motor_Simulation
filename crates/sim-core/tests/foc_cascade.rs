@@ -63,7 +63,7 @@ fn speed_step_settles_per_the_design() {
             v.omega = Some(wv);
         }
         let mut e = build_engine(SkeletonOptions {
-            controller: spec,
+            controller: sim_core::control::ControllerSpec::Foc(spec),
             ..Default::default()
         });
         set_signal(&mut e, "ctrl.omega_ref", dw);
