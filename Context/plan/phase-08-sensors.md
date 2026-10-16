@@ -107,7 +107,7 @@
   - **Verify:** `cargo nextest run -p sim-core` with a test per item.
   - **Done when:** Green.
 
-- [ ] **P08.T09** — Phase gate
+- [x] **P08.T09** — Phase gate
   - **Depends:** P08.T01, P08.T02, P08.T03, P08.T04, P08.T05, P08.T06, P08.T07, P08.T08, P08.T10, P08.T11, P08.T12
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-08-done`.

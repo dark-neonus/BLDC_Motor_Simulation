@@ -523,3 +523,13 @@ Phase-end review (P08.T09): 2 majors, 8 minors, no blockers. M1 (no sensor/estim
 - Hall and encoder blocks take a first-sample phase (`with_phase`).
 - Tests (`tests/sensor_scenes.rs`): every sensor preset builds and publishes; bypass equals motor.theta / motor.i_a (and −i_a − i_b for c) at controller instants despite INL, noise, offsets and a 1 kHz `update_rate`; sampling per mode and rate; per-phase errors and the bus channel reach the readings, bus channel refused in ideal mode; seeded noise repeats.
 - `just check-fast` green (239 tests).
+
+## 2026-10-16 — P08 phase gate (Sensors)
+- `just check` exit 0: 239 Rust tests, web 5/5, e2e 1/1, validation suite, docs build, schemas and presets check, plan check.
+- Exit criteria:
+  - All V-SENS cases pass: `cargo nextest run -p sim-core v_sens` → 001–007 pass (the Python half of V-SENS-006 is P11).
+  - Every sensor is bypassable and has rate, latency, noise and resolution: the blocks (P08.T01–T05) and, since P08.T11, scenes build them (`tests/sensor_scenes.rs`: presets publish, bypass equals the true value at every controller step, sampling per mode/rate).
+  - Observer converges above its minimum speed and fails below it as documented: `converges_above_ten_percent_speed`, `low_speed_error_table_matches_the_spec` (EQ-CTRL-09 table re-measured with its conditions), `valid_drops_on_a_wrong_flux_above_omega_min`. Evidence run: 20/20 sensor/observer tests pass.
+- Phase-end review: 2 majors, 8 minors, no blockers. M1 (nothing built sensors from a scene) → P08.T11 (sensors) + P09.T15 (estimators and m7, T from the block period, γλ²T check), user's choice; M2 and m1–m6, m8 fixed in P08.T12. Nits left: unipolar bus-voltage ADC range, Hall initial state inside the hysteresis band.
+- Phase summary: common sensor pipeline (EQ-SENS-01), Halls (02), magnetic encoder with chip presets and air-gap law (03/04), quadrature encoder with index (05), shunt/bus ADC (06), velocity estimators (EQ-CTRL-08) and the sensorless flux observer (09); P07 carry-overs (pulse dropping, per-leg pending zeros, D-019 flat supply paths, live bus parameters, diode choice out of `outputs()`).
+- graphify: hook rebuilt the code graph; 14 changed docs re-extracted (3 Haiku agents) and merged → 3677 nodes, 6974 edges, 327 communities.
