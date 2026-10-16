@@ -9,6 +9,7 @@ use crate::control::estimators::{self, EstimatorSpec, ObserverModel};
 use crate::control::foc::current_loop::{BusVoltage, FocSignals};
 use crate::control::foc::{self, FocIo, FocSpec, MotorModel};
 use crate::control::framework::{PlantInfo, Scaled};
+use crate::control::luau_block::{self, LuauBlock, LuauConfig};
 use crate::control::mit::MitBlock;
 use crate::control::open_loop::{OpenLoopBlock, OpenLoopSignals};
 use crate::control::six_step::{self, CommutationAngle};
@@ -168,7 +169,7 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
     // The controller's signals first: the ideal source reads its v_α, v_β.
     let err = |e: crate::engine::signals::SignalError| e.to_string();
     let foc_sig = match &opts.controller {
-        ControllerSpec::Foc(_) | ControllerSpec::Mit(_) => {
+        ControllerSpec::Foc(_) | ControllerSpec::Mit(_) | ControllerSpec::Custom(_) => {
             Some(FocSignals::register(&mut bus).map_err(err)?)
         }
         _ => None,
@@ -379,6 +380,7 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
     let current_rate = match &opts.controller {
         ControllerSpec::Foc(f) => Some(f.current_rate_hz),
         ControllerSpec::Mit(m) => Some(m.foc.current_rate_hz),
+        ControllerSpec::Custom(c) if c.needs_current_loop() => Some(c.foc.current_rate_hz),
         _ => None,
     };
     let mut omega_min = None;
@@ -483,6 +485,39 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
             };
             blocks.push(Box::new(MitBlock::new(
                 spec, io.theta_l, omega_l, n, info.kt, sig.iq_ref, &mut bus,
+            )?));
+        }
+        ControllerSpec::Custom(spec) => {
+            let sig = foc_sig.expect("registered for custom");
+            if spec.needs_current_loop() {
+                blocks.extend(foc::build(&spec.foc, &model, &info, &io, sig, &mut bus)?);
+            }
+            // The script's init(params): limits and the controller's motor model.
+            let params = vec![
+                ("i_max".into(), spec.foc.i_max),
+                ("ratio".into(), n),
+                ("kt".into(), info.kt),
+                ("pole_pairs".into(), mp.p),
+                ("r".into(), mp.r),
+                ("ld".into(), mp.ld),
+                ("lq".into(), mp.lq),
+                ("lambda".into(), mp.lambda),
+                ("j".into(), info.j_motor),
+            ];
+            let period = crate::engine::time::period_from_hz(spec.rate_hz)
+                .map_err(|e| format!("controller.rate: {e}"))?
+                .period;
+            blocks.push(Box::new(LuauBlock::new(
+                LuauConfig {
+                    script: spec.script.clone(),
+                    period,
+                    inputs: spec.inputs.clone(),
+                    outputs: spec.outputs.clone(),
+                    params,
+                    memory: luau_block::DEFAULT_MEMORY,
+                    budget: luau_block::DEFAULT_BUDGET,
+                },
+                &bus,
             )?));
         }
         ControllerSpec::OpenLoop(spec) => {

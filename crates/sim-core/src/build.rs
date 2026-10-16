@@ -13,7 +13,6 @@ use sim_model::params::{
 use sim_model::scene::ResolvedScene;
 use sim_model::units::Kind;
 
-use crate::control::ControllerSpec;
 use crate::control::estimators::{EstimatorSpec, ObserverSpec, VelocitySpec};
 use crate::control::foc::current_loop::M_MAX;
 use crate::control::foc::sensorless::StartupOptions;
@@ -22,6 +21,7 @@ use crate::control::mit::MitSpec;
 use crate::control::open_loop::OpenLoopSpec;
 use crate::control::pid::AntiWindup;
 use crate::control::six_step::SixStepSpec;
+use crate::control::{ControllerSpec, CustomSpec};
 use crate::engine::commands::{ChangeSource, EngineCommand};
 use crate::engine::engine::Engine;
 use crate::engine::fidelity::InverterMode;
@@ -810,6 +810,40 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
             },
         };
         return Ok((ControllerSpec::OpenLoop(spec), rate));
+    }
+    if let ControllerParams::Custom {
+        script,
+        rate,
+        inputs,
+        outputs,
+        limits,
+    } = c
+    {
+        let rate = si(rate, Kind::Frequency, "controller.rate")?;
+        let foc = FocSpec {
+            current_rate_hz: rate,
+            omega_c: None,
+            m_max: limits.voltage_fraction.unwrap_or(M_MAX),
+            aw: AntiWindup::Clamping,
+            i_max: si(&limits.current, Kind::Current, "controller.limits.current")?,
+            speed_limit: f64::INFINITY,
+            ramp: f64::INFINITY,
+            velocity: None,
+            position: None,
+            prefilter: false,
+            open_loop_vq: None,
+            cascade: false,
+            sensorless: None,
+            encoder_offset: 0.0,
+        };
+        let spec = CustomSpec {
+            script: script.clone(),
+            rate_hz: rate,
+            inputs: inputs.clone(),
+            outputs: outputs.clone(),
+            foc,
+        };
+        return Ok((ControllerSpec::Custom(spec), rate));
     }
     if let ControllerParams::Mit {
         current,

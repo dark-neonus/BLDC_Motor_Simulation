@@ -108,7 +108,7 @@
   - **Verify:** Test: a random true offset is recovered within 1° electrical.
   - **Done when:** Passing.
 
-- [ ] **P09.T10** — Luau custom controller block
+- [x] **P09.T10** — Luau custom controller block
   - **Depends:** P09.T01
   - **Do:**
     1. `mlua` with features `luau` + `vendored`. `Lua::sandbox(true)`, memory limit and an interrupt-based instruction budget per call (exceeding it → block error, auto-pause).

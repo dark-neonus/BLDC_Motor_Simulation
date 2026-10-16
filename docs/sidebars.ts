@@ -23,6 +23,11 @@ const sidebars: SidebarsConfig = {
         "physics/references",
       ],
     },
+    {
+      type: "category",
+      label: "Control",
+      items: ["control/custom-block"],
+    },
   ],
 };
 
