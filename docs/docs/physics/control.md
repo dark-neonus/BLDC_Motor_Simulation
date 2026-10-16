@@ -174,6 +174,8 @@ $$
 2. Read the encoder and set $\hat\theta_{e,0} = -p\,\theta_{raw} \bmod 2\pi$.
 3. Pole-pair and direction check: sweep $\theta_e$ through $n$ electrical turns and measure $\Delta\theta_m$. Then $\hat p = 2\pi n/|\Delta\theta_m|$, and the sign of $\Delta\theta_m$ gives the direction.
 
+**In the simulator** (a routine run on the engine, `control::calibration`): the velocity loop is switched off (its bypass gives $i_q^* = 0$), the current loop is forced to the commanded angle (`ctrl.foc.angle_forced` = 1, `ctrl.foc.angle_cmd`), $i_d^* = I_{cal}$ (default $0.5\,I_{lim}$) for $t_{align}$ (default 0.5 s), then $\hat\theta_{e,0}$ is written to `ctrl.foc.angle_offset`, which the current loop adds every tick ($\hat\theta_e = p\,\theta_{enc} + \hat\theta_{e,0}$; initial value `controller.encoder_offset`, default 0). The sweep runs $n + 1$ turns at one electrical turn per second ($n = 2$), and $\Delta\theta_m$ is read between the commanded angles $\pi$ and $\pi + 2\pi n$: the rotor lags the command by the same angle at both, while a reading after the sweep stops would include the d-axis spring's barely damped swing (found: $\hat p$ = 10.6 for 11). The swing excited at the start of the sweep still leaves ≈ 0.5 % ($\hat p$ = 10.94), so $\hat p$ is rounded to identify $p$. The recovered offset is only as good as the encoder: its INL times $p$ is an electrical error (0.8° INL × 11 pole pairs ≈ 9°), and a load or cogging torque during the alignment shifts the rest angle.
+
 ## Auto-tune
 
 ### EQ-CTRL-12 — Measurement and gain computation {/* #eq-ctrl-12 */}

@@ -686,6 +686,8 @@ pub enum ControllerParams {
         sensorless: bool,
         /// Sensorless startup (EQ-CTRL-10; defaults from the current limit and the plant).
         startup: Option<StartupParams>,
+        /// Electrical offset added to p·(encoder angle) (EQ-CTRL-11; default 0).
+        encoder_offset: Option<Param>,
         /// Setpoint prefilter.
         #[serde(default)]
         prefilter: bool,

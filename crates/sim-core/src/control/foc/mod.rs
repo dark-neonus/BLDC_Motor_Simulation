@@ -55,6 +55,8 @@ pub struct FocSpec {
     /// Sensorless (EQ-CTRL-10): the startup supervisor replaces the cascade and the
     /// current loop runs on the observer's angle.
     pub sensorless: Option<sensorless::StartupOptions>,
+    /// Initial `ctrl.foc.angle_offset` θ̂e0 [rad electrical] (EQ-CTRL-11).
+    pub encoder_offset: f64,
 }
 
 impl FocSpec {
@@ -81,6 +83,7 @@ impl FocSpec {
             open_loop_vq: None,
             cascade: true,
             sensorless: None,
+            encoder_offset: 0.0,
         }
     }
 }
@@ -133,6 +136,7 @@ pub fn build(
 ) -> Result<Vec<Box<dyn DiscreteBlock>>, String> {
     let e = |err: SignalError| err.to_string();
     let sp = Setpoints::get_or_register(bus).map_err(e)?;
+    bus.set(sig.angle_offset, spec.encoder_offset);
     let n = plant.ratio;
     let t_c = period(spec.current_rate_hz, "controller.current.rate")?;
     let omega_c = spec

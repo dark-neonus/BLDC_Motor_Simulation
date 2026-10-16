@@ -835,6 +835,7 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
             open_loop_vq: None,
             cascade: false,
             sensorless: None,
+            encoder_offset: 0.0,
         };
         let spec = MitSpec {
             foc,
@@ -851,6 +852,7 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
         position,
         sensorless,
         startup,
+        encoder_offset,
         prefilter,
         limits,
     } = c
@@ -920,6 +922,7 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
         open_loop_vq: None,
         cascade: true,
         sensorless,
+        encoder_offset: opt(encoder_offset, Kind::Angle, "controller.encoder_offset")?,
     };
     Ok((ControllerSpec::Foc(spec), cur.rate_hz))
 }

@@ -537,6 +537,17 @@
               "description": "Current loop (EQ-CTRL-03).",
               "$ref": "#/$defs/LoopParams"
             },
+            "encoder_offset": {
+              "description": "Electrical offset added to p·(encoder angle) (EQ-CTRL-11; default 0).",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Param"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "family": {
               "type": "string",
               "const": "foc"

@@ -1,6 +1,7 @@
 //! Controllers and estimators (EQ-CTRL-*), as discrete blocks that see only sensor
 //! readings.
 
+pub mod calibration;
 pub mod estimators;
 pub mod foc;
 pub mod framework;

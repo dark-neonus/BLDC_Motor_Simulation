@@ -101,7 +101,7 @@
   - **Verify:** Test: starts from standstill and reaches the speed target; the handoff is smooth (bounded current spike, specified).
   - **Done when:** Passing.
 
-- [ ] **P09.T09** — Encoder offset calibration routine
+- [x] **P09.T09** — Encoder offset calibration routine
   - **Depends:** P09.T03
   - **Do:** Align the rotor with a d-axis current and record the electrical offset; optionally check direction and pole pairs by slow rotation. Results are written to controller params. Also used to *demonstrate* the "wrong offset" fault in P10.
   - **Files:** `crates/sim-core/src/control/calibration.rs`

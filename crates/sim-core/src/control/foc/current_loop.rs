@@ -92,6 +92,11 @@ pub struct FocSignals {
     pub i_d: SignalId,
     pub i_q: SignalId,
     pub saturated: SignalId,
+    /// θ̂e0 added to the measured angle every tick (EQ-CTRL-11; calibration writes it).
+    pub angle_offset: SignalId,
+    /// While `angle_forced` = 1 the loop uses `angle_cmd` instead (calibration).
+    pub angle_cmd: SignalId,
+    pub angle_forced: SignalId,
 }
 
 impl FocSignals {
@@ -132,6 +137,24 @@ impl FocSignals {
                 "-",
                 "1 while the voltage limit clamps the command",
                 Output,
+            )?,
+            angle_offset: reg(
+                "ctrl.foc.angle_offset",
+                "rad",
+                "electrical angle offset θ̂e0 added to the measured angle (calibration)",
+                Input,
+            )?,
+            angle_cmd: reg(
+                "ctrl.foc.angle_cmd",
+                "rad",
+                "commanded electrical angle used while ctrl.foc.angle_forced = 1",
+                Input,
+            )?,
+            angle_forced: reg(
+                "ctrl.foc.angle_forced",
+                "-",
+                "1: the current loop uses ctrl.foc.angle_cmd (calibration)",
+                Input,
             )?,
         })
     }
@@ -227,7 +250,13 @@ impl DiscreteBlock for FocCurrentLoop {
         let bus = &mut *ctx.bus;
         // Measure.
         let t = self.cfg.period.as_secs_f64();
-        let th = self.inp.angle.gain * bus.get(self.inp.angle.id) + self.inp.angle_offset;
+        let th = if bus.get(self.sig.angle_forced) > 0.5 {
+            bus.get(self.sig.angle_cmd)
+        } else {
+            self.inp.angle.gain * bus.get(self.inp.angle.id)
+                + self.inp.angle_offset
+                + bus.get(self.sig.angle_offset)
+        };
         let w = match &mut self.speed {
             SpeedSource::Signal(s) => s.gain * bus.get(s.id),
             SpeedSource::FromAngle(f) => f.update(th).1,
