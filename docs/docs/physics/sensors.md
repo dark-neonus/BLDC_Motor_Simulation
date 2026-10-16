@@ -30,6 +30,13 @@ The reading is held (zero-order hold) until $t_{k+1}$.
 
 **Bypass** (`…bypass = true`) returns $y(t) = x(t)$ exactly and continuously: no delay, no sampling, no noise. This is the "ideal feedback" switch on every sensor block.
 
+**Sampling in a scene.** A sensor samples at its `update_rate` when one is given. Otherwise:
+- the ADC samples at `pwm.center` (period $T_{pwm}$, phase 0) in switching mode, and at the controller rate otherwise (EQ-SENS-06);
+- the magnetic encoder samples at 10 kHz, a typical SPI/SSI polling rate (the chip presets give their own);
+- the Hall set and the incremental encoder sample at the controller rate.
+
+A bypassed sensor ignores `update_rate` and samples at exactly the controller period. Sensors run before controllers at the same instant, so every controller step reads $x(t)$ at its own instant: bypass is continuous as far as any consumer can tell. Each sensor block draws its noise from its own substream of the scene seed.
+
 ## Hall sensors
 
 ### EQ-SENS-02 — Three digital Hall sensors {/* #eq-sens-02 */}

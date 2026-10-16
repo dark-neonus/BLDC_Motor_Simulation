@@ -60,6 +60,8 @@ pub struct IncrementalEncoder {
     error: SignalId,
     pipe: SensorPipeline,
     st: Option<State>,
+    /// First-sample offset within the period.
+    phase: SimTime,
 }
 
 impl IncrementalEncoder {
@@ -101,6 +103,7 @@ impl IncrementalEncoder {
             )?,
             pipe,
             st: None,
+            phase: SimTime::from_nanos(0),
         })
     }
 
@@ -112,12 +115,23 @@ impl IncrementalEncoder {
     }
 }
 
+impl IncrementalEncoder {
+    /// First sample offset within the period (default 0).
+    pub fn with_phase(mut self, phase: SimTime) -> Self {
+        self.phase = phase;
+        self
+    }
+}
+
 impl DiscreteBlock for IncrementalEncoder {
     fn id(&self) -> &str {
         "sensors.encoder"
     }
     fn period(&self) -> Option<SimTime> {
         Some(self.period)
+    }
+    fn phase(&self) -> SimTime {
+        self.phase
     }
     fn priority(&self) -> u8 {
         priority::SENSOR

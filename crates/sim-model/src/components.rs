@@ -261,7 +261,8 @@ pub fn validate_bus(b: &BusParams) -> Vec<Issue> {
     v.out
 }
 
-fn common(v: &mut V, c: &SensorCommon, at: &str) {
+/// Rate, latency and noise; `noise` is in the sensor's own unit.
+fn common(v: &mut V, c: &SensorCommon, at: &str, noise: Kind) {
     v.o(
         &c.update_rate,
         Kind::Frequency,
@@ -269,6 +270,7 @@ fn common(v: &mut V, c: &SensorCommon, at: &str) {
         Pos,
     );
     v.o(&c.latency, Kind::Time, &format!("{at}.latency"), NonNeg);
+    v.o(&c.noise, noise, &format!("{at}.noise"), NonNeg);
 }
 
 pub fn validate_sensors(s: &SensorsParams) -> Vec<Issue> {
@@ -280,7 +282,7 @@ pub fn validate_sensors(s: &SensorsParams) -> Vec<Issue> {
         if h.offsets.len() > 3 {
             v.reject("sensors.hall.offsets", "a Hall set has three sensors");
         }
-        common(&mut v, &h.common, "sensors.hall");
+        common(&mut v, &h.common, "sensors.hall", Kind::Angle);
     }
     match &s.encoder {
         Some(EncoderParams::Magnetic {
@@ -309,7 +311,7 @@ pub fn validate_sensors(s: &SensorsParams) -> Vec<Issue> {
                 "sensors.encoder.mount_offset",
                 Any,
             );
-            common(&mut v, c, "sensors.encoder");
+            common(&mut v, c, "sensors.encoder", Kind::Angle);
         }
         Some(EncoderParams::Incremental {
             cpr,
@@ -323,17 +325,39 @@ pub fn validate_sensors(s: &SensorsParams) -> Vec<Issue> {
                 );
             }
             v.o(index_angle, Kind::Angle, "sensors.encoder.index_angle", Any);
-            common(&mut v, c, "sensors.encoder");
+            common(&mut v, c, "sensors.encoder", Kind::Angle);
         }
         None => {}
     }
     if let Some(a) = &s.adc {
         v.p(&a.full_scale, Kind::Current, "sensors.adc.full_scale", Pos);
         v.o(&a.offset, Kind::Current, "sensors.adc.offset", Any);
+        for (i, o) in a.offsets.iter().enumerate() {
+            v.p(o, Kind::Current, &format!("sensors.adc.offsets.{i}"), Any);
+        }
+        if !matches!(a.offsets.len(), 0 | 3) {
+            v.reject("sensors.adc.offsets", "give one offset per phase (a, b, c)");
+        }
+        if !matches!(a.gain_errors.len(), 0 | 3) {
+            v.reject(
+                "sensors.adc.gain_errors",
+                "give one gain error per phase (a, b, c)",
+            );
+        }
         if !(2..=3).contains(&a.shunts) {
             v.reject("sensors.adc.shunts", "current sensing uses 2 or 3 shunts");
         }
-        common(&mut v, &a.common, "sensors.adc");
+        if let Some(b) = &a.bus {
+            v.p(
+                &b.full_scale,
+                Kind::Voltage,
+                "sensors.adc.bus.full_scale",
+                Pos,
+            );
+            v.o(&b.offset, Kind::Voltage, "sensors.adc.bus.offset", Any);
+            v.o(&b.noise, Kind::Voltage, "sensors.adc.bus.noise", NonNeg);
+        }
+        common(&mut v, &a.common, "sensors.adc", Kind::Current);
     }
     v.out
 }

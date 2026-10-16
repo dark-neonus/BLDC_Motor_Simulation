@@ -515,3 +515,11 @@ Phase-end review (P08.T09): 2 majors, 8 minors, no blockers. M1 (no sensor/estim
 - m6: control.md EQ-CTRL-09 table re-measured with its conditions stated (it gave no setup and did not reproduce): 700/140/14/1.4 rad/s → 0.2°/23°/52°/147°, valid fraction 1/0.97/0/0; `est.valid` does not detect parameter-mismatch angle error (|η| is driven to λ), only gross flux error (true flux ≥ 1.3× assumed clears it at 700 rad/s). Tests for the table (±3 %) and the |η| check replace the old low-speed test whose `!valid` held through the speed gate alone.
 - m8: `PlantModule::params` doc matches D-015 (names under a param root are full paths); bus snapshots without the P08.T10 keys restore with the built values. Test.
 - `just check-fast` green (234 tests).
+
+## 2026-10-16 — P08.T11 Build the sensors from a scene (review M1)
+- `physics::sensors::SensorSpec` (plain data: Hall, magnetic/incremental encoder, ADC, each with period and phase; `blocks()` builds them on their own substreams of the scene seed). `SkeletonOptions.sensors`; `try_build_engine_with` returns the signal error (e.g. a missing input) instead of panicking, `build_engine_with` keeps its signature.
+- `build::sensors`: `update_rate` when given; else the ADC at `pwm.center` (T_pwm, phase 0) in switching mode and at the controller rate otherwise, the magnetic encoder at 10 kHz, the Halls and incremental encoder at the controller rate. Bypass samples at exactly the controller period (sensors run before controllers at the same instant, so each controller step reads x(t)); sensors.md states the rules.
+- Schema: `sensors.adc.offsets` / `gain_errors` (per phase, override the scalars), `sensors.adc.bus` (full_scale, gain_error, offset, noise; refused at build without a DC bus); validation checks sensor noise in the sensor's unit. Schemas regenerated.
+- Hall and encoder blocks take a first-sample phase (`with_phase`).
+- Tests (`tests/sensor_scenes.rs`): every sensor preset builds and publishes; bypass equals motor.theta / motor.i_a (and −i_a − i_b for c) at controller instants despite INL, noise, offsets and a 1 kHz `update_rate`; sampling per mode and rate; per-phase errors and the bus channel reach the readings, bus channel refused in ideal mode; seeded noise repeats.
+- `just check-fast` green (239 tests).

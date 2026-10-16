@@ -512,11 +512,33 @@ pub struct AdcParams {
     pub gain_error: f64,
     /// Offset current.
     pub offset: Option<Param>,
+    /// Per-phase gain errors [a, b, c] (override `gain_error`).
+    #[serde(default)]
+    pub gain_errors: Vec<f64>,
+    /// Per-phase offset currents [a, b, c] (override `offset`).
+    #[serde(default)]
+    pub offsets: Vec<Param>,
     /// 2 or 3 shunts.
     pub shunts: u32,
+    /// Bus-voltage channel (optional; needs an inverter and DC bus).
+    pub bus: Option<AdcBusChannel>,
     /// Rate, latency, noise.
     #[serde(flatten)]
     pub common: SensorCommon,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AdcBusChannel {
+    /// Voltage at full scale (±).
+    pub full_scale: Param,
+    /// Relative gain error.
+    #[serde(default)]
+    pub gain_error: f64,
+    /// Offset voltage.
+    pub offset: Option<Param>,
+    /// Noise standard deviation.
+    pub noise: Option<Param>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]

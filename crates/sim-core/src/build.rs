@@ -1,14 +1,14 @@
 //! Engine from a scene (P04.T13). Until the full physics lands (P05+), a scene is mapped
 //! onto the skeleton dq motor + FOC: motor R, L, λ, p and the rotor inertia plus the
 //! reflected gearbox/load inertia; bus voltage from the supply; FOC current limit, current
-//! bandwidth and rate from the controller. Inverter, sensors and gravity are not modelled yet.
+//! bandwidth and rate from the controller; the inverter, bus and sensors from their sections.
 //! Parameters arrive as unit strings and are converted to SI f64 here (D-003).
 
 use sim_model::constraints::{self, Severity};
 use sim_model::param::Param;
 use sim_model::params::{
     ControllerParams, EmfShape, EncoderParams, GearboxParams, LoadParams, MotorParams, OnChange,
-    SupplyParams, TierParam, Topology,
+    SensorCommon, SupplyParams, TierParam, Topology,
 };
 use sim_model::scene::ResolvedScene;
 use sim_model::units::Kind;
@@ -18,6 +18,7 @@ use crate::engine::engine::Engine;
 use crate::engine::fidelity::InverterMode;
 use crate::engine::fidelity::{FidelityConfig, Tier};
 use crate::engine::time::SimTime;
+use crate::engine::time::period_from_hz;
 use crate::physics::inverter::leg::Devices;
 use crate::physics::mech::backlash::{Backlash, DEFAULT_STIFFNESS, DEFAULT_ZETA};
 use crate::physics::mech::friction::Friction;
@@ -28,12 +29,17 @@ use crate::physics::motor::backemf::Shape;
 use crate::physics::motor::cogging::CoggingParams;
 use crate::physics::motor::electrical::SatParams;
 use crate::physics::motor::iron_loss::IronLossParams;
+use crate::physics::sensors::adc::{AdcConfig, Channel};
+use crate::physics::sensors::encoder_incremental::IncrementalConfig;
 use crate::physics::sensors::encoder_magnetic::{AirGap, MagneticEncoderConfig};
+use crate::physics::sensors::hall::HallConfig;
+use crate::physics::sensors::pipeline::PipelineConfig;
+use crate::physics::sensors::{EncoderSpec, Sampled, SensorSpec};
 use crate::physics::supply::battery::Battery;
 use crate::physics::supply::bus::{Chopper, Source};
 use crate::physics::thermal::ThermalParams;
 use crate::skeleton::adapter::{
-    Drive, InverterOptions, SkeletonOptions, ThermalOptions, build_engine_with,
+    Drive, InverterOptions, SkeletonOptions, ThermalOptions, try_build_engine_with,
 };
 use crate::skeleton::foc::FocConfig;
 use crate::skeleton::params::PmsmParams;
@@ -702,7 +708,8 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
     }
     .min(dt_contact)
     .min(dt_drive);
-    let engine = build_engine_with(
+    let drive_kind = drive.clone();
+    let engine = try_build_engine_with(
         mp,
         cfg,
         SkeletonOptions {
@@ -723,8 +730,10 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             iron: iron(scene)?,
             saturation: saturation(scene)?,
             shape: shape(scene)?,
+            sensors: sensors(scene, rate, &drive_kind)?,
         },
-    );
+    )
+    .map_err(|e| BuildError::Param("sensors".into(), e.to_string()))?;
     Ok(BuiltScene {
         engine,
         model: SceneModel {
@@ -734,6 +743,154 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
         ratio: scene.gearbox.as_ref().map_or(1.0, |g| g.ratio),
         ctrl_dt: cfg.dt,
     })
+}
+
+/// A rate [Hz] as an exact-ns period.
+fn period_of(hz: f64, path: &str) -> Result<SimTime, BuildError> {
+    period_from_hz(hz)
+        .map(|p| p.period)
+        .map_err(|e| BuildError::Param(path.into(), e.to_string()))
+}
+
+/// Latency, noise and bypass of the common pipeline (no quantisation, wrap or range).
+fn plain_pipe(c: &SensorCommon, noise: Kind, at: &str) -> Result<PipelineConfig, BuildError> {
+    Ok(PipelineConfig {
+        bypass: c.bypass,
+        latency_ns: (opt(&c.latency, Kind::Time, &format!("{at}.latency"))? * 1e9).round() as i64,
+        noise_sigma: opt(&c.noise, noise, &format!("{at}.noise"))?,
+        ..Default::default()
+    })
+}
+
+/// The scene's sensors (EQ-SENS-*, P08.T11). Sampling: `update_rate` when given;
+/// otherwise the ADC at `pwm.center` (T_pwm, phase 0) in switching mode, the magnetic
+/// encoder at `DEFAULT_ENCODER_RATE` and the rest at the controller rate `ctrl_hz`.
+/// A bypassed sensor samples at exactly the controller period, so every controller
+/// step reads the true value (EQ-SENS-01).
+fn sensors(scene: &ResolvedScene, ctrl_hz: f64, drive: &Drive) -> Result<SensorSpec, BuildError> {
+    let mut spec = SensorSpec {
+        seed: scene.seed,
+        ..Default::default()
+    };
+    let Some(s) = &scene.sensors else {
+        return Ok(spec);
+    };
+    let ctrl = period_of(ctrl_hz, "controller.current.rate")?;
+    let zero = SimTime::from_nanos(0);
+    // (period, phase) for a sensor with `default` when no rate is given.
+    let sampling = |c: &SensorCommon, default: (SimTime, SimTime), at: &str| {
+        if c.bypass {
+            return Ok((ctrl, zero));
+        }
+        match &c.update_rate {
+            Some(r) => {
+                let hz = si(r, Kind::Frequency, &format!("{at}.update_rate"))?;
+                Ok((period_of(hz, &format!("{at}.update_rate"))?, zero))
+            }
+            None => Ok(default),
+        }
+    };
+    if let Some(h) = &s.hall {
+        let mut offsets = [0.0; 3];
+        for (k, o) in h.offsets.iter().enumerate().take(3) {
+            offsets[k] = si(o, Kind::Angle, &format!("sensors.hall.offsets.{k}"))?;
+        }
+        let cfg = HallConfig {
+            offsets,
+            hysteresis: h.hysteresis.unwrap_or(0.0),
+        };
+        let pipe = plain_pipe(&h.common, Kind::Angle, "sensors.hall")?;
+        let (period, phase) = sampling(&h.common, (ctrl, zero), "sensors.hall")?;
+        spec.hall = Some(Sampled {
+            cfg: (cfg, pipe),
+            period,
+            phase,
+        });
+    }
+    match &s.encoder {
+        Some(p @ EncoderParams::Magnetic { common, .. }) => {
+            let (cfg, default) = magnetic_encoder(p)?
+                .ok_or_else(|| BuildError::Unsupported("magnetic encoder".into()))?;
+            let (period, phase) = sampling(common, (default, zero), "sensors.encoder")?;
+            spec.encoder = Some(Sampled {
+                cfg: EncoderSpec::Magnetic(cfg),
+                period,
+                phase,
+            });
+        }
+        Some(EncoderParams::Incremental {
+            cpr,
+            index_angle,
+            common,
+        }) => {
+            let cfg = IncrementalConfig {
+                cpr: *cpr,
+                index_angle: opt(index_angle, Kind::Angle, "sensors.encoder.index_angle")?,
+            };
+            let pipe = plain_pipe(common, Kind::Angle, "sensors.encoder")?;
+            let (period, phase) = sampling(common, (ctrl, zero), "sensors.encoder")?;
+            spec.encoder = Some(Sampled {
+                cfg: EncoderSpec::Incremental(cfg, pipe),
+                period,
+                phase,
+            });
+        }
+        None => {}
+    }
+    if let Some(a) = &s.adc {
+        let n = |x: &str| format!("sensors.adc.{x}");
+        let fs = si(&a.full_scale, Kind::Current, &n("full_scale"))?;
+        let off = opt(&a.offset, Kind::Current, &n("offset"))?;
+        let mut phase = [Channel {
+            full_scale: fs,
+            gain_error: a.gain_error,
+            offset: off,
+        }; 3];
+        for (k, g) in a.gain_errors.iter().enumerate().take(3) {
+            phase[k].gain_error = *g;
+        }
+        for (k, o) in a.offsets.iter().enumerate().take(3) {
+            phase[k].offset = si(o, Kind::Current, &n(&format!("offsets.{k}")))?;
+        }
+        let (bus, bus_noise) = match &a.bus {
+            Some(b) => {
+                if matches!(drive, Drive::Ideal) {
+                    return Err(BuildError::Param(
+                        n("bus"),
+                        "a bus-voltage channel needs an inverter and DC bus (fidelity.inverter_mode averaged or switching)".into(),
+                    ));
+                }
+                let ch = Channel {
+                    full_scale: si(&b.full_scale, Kind::Voltage, &n("bus.full_scale"))?,
+                    gain_error: b.gain_error,
+                    offset: opt(&b.offset, Kind::Voltage, &n("bus.offset"))?,
+                };
+                (Some(ch), opt(&b.noise, Kind::Voltage, &n("bus.noise"))?)
+            }
+            None => (None, 0.0),
+        };
+        let pipe = plain_pipe(&a.common, Kind::Current, "sensors.adc")?;
+        let cfg = AdcConfig {
+            bits: a.bits,
+            phase,
+            shunts: a.shunts,
+            bus,
+            noise: pipe.noise_sigma,
+            bus_noise,
+            latency_ns: pipe.latency_ns,
+            bypass: pipe.bypass,
+        };
+        // Switching: sample at pwm.center, the start of each PWM period (EQ-INV-02).
+        let default = match drive {
+            Drive::Inverter(o) if o.switching => {
+                (SimTime::from_nanos((1e9 / o.f_pwm).round() as i64), zero)
+            }
+            _ => (ctrl, zero),
+        };
+        let (period, phase) = sampling(&a.common, default, "sensors.adc")?;
+        spec.adc = Some(Sampled { cfg, period, phase });
+    }
+    Ok(spec)
 }
 
 /// Encoder sample rate when the preset gives none [Hz] (a typical SPI/SSI polling rate).

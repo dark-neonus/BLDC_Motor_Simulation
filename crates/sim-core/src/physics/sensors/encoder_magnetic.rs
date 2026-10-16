@@ -118,6 +118,8 @@ pub struct MagneticEncoder {
     pipe: SensorPipeline,
     /// Last register value and unwrapped angle (None before the first sample).
     last: Option<(f64, f64)>,
+    /// First-sample offset within the period.
+    phase: SimTime,
 }
 
 impl MagneticEncoder {
@@ -144,7 +146,16 @@ impl MagneticEncoder {
             )?,
             pipe: cfg.pipeline(rng),
             last: None,
+            phase: SimTime::from_nanos(0),
         })
+    }
+}
+
+impl MagneticEncoder {
+    /// First sample offset within the period (default 0).
+    pub fn with_phase(mut self, phase: SimTime) -> Self {
+        self.phase = phase;
+        self
     }
 }
 
@@ -154,6 +165,9 @@ impl DiscreteBlock for MagneticEncoder {
     }
     fn period(&self) -> Option<SimTime> {
         Some(self.period)
+    }
+    fn phase(&self) -> SimTime {
+        self.phase
     }
     fn priority(&self) -> u8 {
         priority::SENSOR

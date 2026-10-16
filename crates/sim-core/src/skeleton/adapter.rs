@@ -8,7 +8,7 @@ use super::params::PmsmParams;
 use crate::engine::block::{DiscreteBlock, SimError, StepCtx, priority};
 use crate::engine::engine::Engine;
 use crate::engine::plant::Plant;
-use crate::engine::signals::{SignalBus, SignalId, SignalKind};
+use crate::engine::signals::{SignalBus, SignalError, SignalId, SignalKind};
 use crate::engine::time::{SimTime, period_from_hz};
 use crate::physics::inverter::ideal::IdealVoltageSource;
 use crate::physics::inverter::leg::{Devices, LegState, SwitchingInverter};
@@ -26,6 +26,7 @@ use crate::physics::motor::electrical::{
     RTemperature, SatParams,
 };
 use crate::physics::motor::iron_loss::{IronLoss, IronLossParams};
+use crate::physics::sensors::SensorSpec;
 use crate::physics::supply::bus::{Chopper, DcBus, Source};
 use crate::physics::thermal::{Thermal, ThermalInputs, ThermalParams};
 
@@ -213,6 +214,8 @@ pub struct SkeletonOptions {
     pub saturation: Option<SatParams>,
     /// Back-EMF shape (EQ-MOT-03).
     pub shape: Shape,
+    /// Sensor blocks (EQ-SENS-*), built after the plant's signals.
+    pub sensors: SensorSpec,
 }
 
 impl Default for SkeletonOptions {
@@ -235,6 +238,7 @@ impl Default for SkeletonOptions {
             iron: None,
             saturation: None,
             shape: Shape::Sinusoidal,
+            sensors: SensorSpec::default(),
         }
     }
 }
@@ -256,6 +260,17 @@ pub fn build_engine(opts: SkeletonOptions) -> Engine {
 
 /// Skeleton engine with given motor parameters (`mp.j` = rotor only) and controller.
 pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) -> Engine {
+    // INVARIANT: without sensors every signal is registered by the skeleton itself.
+    try_build_engine_with(mp, cfg, opts).expect("skeleton signals")
+}
+
+/// As `build_engine_with`; fails when a sensor's input signal does not exist (e.g. an
+/// ADC bus-voltage channel without a DC bus).
+pub fn try_build_engine_with(
+    mp: PmsmParams,
+    cfg: FocConfig,
+    opts: SkeletonOptions,
+) -> Result<Engine, SignalError> {
     let mut bus = SignalBus::new();
     // INVARIANT: the skeleton registers a fixed, unique set of paths into a fresh bus,
     // so `register` cannot fail here.
@@ -506,7 +521,8 @@ pub fn build_engine_with(mp: PmsmParams, cfg: FocConfig, opts: SkeletonOptions) 
         torque_mode: false,
     })];
     blocks.extend(extra_blocks);
-    Engine::new(plant, bus, blocks, opts.dt_max)
+    blocks.extend(opts.sensors.blocks(&mut bus)?);
+    Ok(Engine::new(plant, bus, blocks, opts.dt_max))
 }
 
 #[cfg(test)]

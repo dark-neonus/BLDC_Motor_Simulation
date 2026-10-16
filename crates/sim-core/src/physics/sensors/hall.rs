@@ -57,6 +57,8 @@ pub struct HallBlock {
     sector: SignalId,
     pipe: SensorPipeline,
     state: [bool; 3],
+    /// First-sample offset within the period.
+    phase: SimTime,
 }
 
 impl HallBlock {
@@ -89,7 +91,16 @@ impl HallBlock {
             sector,
             pipe,
             state: [false; 3],
+            phase: SimTime::from_nanos(0),
         })
+    }
+}
+
+impl HallBlock {
+    /// First sample offset within the period (default 0).
+    pub fn with_phase(mut self, phase: SimTime) -> Self {
+        self.phase = phase;
+        self
     }
 }
 
@@ -99,6 +110,9 @@ impl DiscreteBlock for HallBlock {
     }
     fn period(&self) -> Option<SimTime> {
         Some(self.period)
+    }
+    fn phase(&self) -> SimTime {
+        self.phase
     }
     fn priority(&self) -> u8 {
         priority::SENSOR

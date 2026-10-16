@@ -145,8 +145,8 @@ impl SensorPipeline {
 /// A sensor as a fixed-rate discrete block: reads a true signal, writes the reading.
 /// PWM-triggered sampling (`pwm.center`) is a period of T_pwm with phase 0: the PWM
 /// periods start at the centre of the all-Low zero vector (EQ-INV-02). With `bypass`
-/// the reading is exact at each firing; the continuous bypass of EQ-SENS-01 (consumers
-/// reading x(t) itself) is wired by the sensor's builder.
+/// the reading is exact at each firing; a scene's bypassed sensors sample at the
+/// controller period (`build::sensors`), so every controller step reads x(t) (EQ-SENS-01).
 pub struct SensorBlock {
     id: String,
     period: SimTime,

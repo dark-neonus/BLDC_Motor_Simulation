@@ -89,7 +89,7 @@
   - **Verify:** `cargo nextest run -p sim-core` with a test per item.
   - **Done when:** Green.
 
-- [ ] **P08.T11** — Build the sensors from a scene (P08 review M1)
+- [x] **P08.T11** — Build the sensors from a scene (P08 review M1)
   - **Depends:** P08.T10
   - **Do:**
     1. `build_engine` builds `sensors.hall`, `sensors.encoder` (magnetic and incremental) and `sensors.adc` from the scene, each on its own RNG substream of the scene seed.

@@ -50,6 +50,47 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "AdcBusChannel": {
+      "type": "object",
+      "properties": {
+        "full_scale": {
+          "description": "Voltage at full scale (±).",
+          "$ref": "#/$defs/Param"
+        },
+        "gain_error": {
+          "description": "Relative gain error.",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "noise": {
+          "description": "Noise standard deviation.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offset": {
+          "description": "Offset voltage.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "full_scale"
+      ]
+    },
     "AdcParams": {
       "type": "object",
       "properties": {
@@ -58,6 +99,17 @@
           "type": "integer",
           "format": "uint32",
           "minimum": 0
+        },
+        "bus": {
+          "description": "Bus-voltage channel (optional; needs an inverter and DC bus).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AdcBusChannel"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "bypass": {
           "description": "Use the true value instead of the sensor model.",
@@ -73,6 +125,15 @@
           "type": "number",
           "format": "double",
           "default": 0.0
+        },
+        "gain_errors": {
+          "description": "Per-phase gain errors [a, b, c] (override `gain_error`).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
         },
         "latency": {
           "description": "Delay from measurement to output.",
@@ -106,6 +167,14 @@
               "type": "null"
             }
           ]
+        },
+        "offsets": {
+          "description": "Per-phase offset currents [a, b, c] (override `offset`).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Param"
+          }
         },
         "shunts": {
           "description": "2 or 3 shunts.",
