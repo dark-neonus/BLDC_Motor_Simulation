@@ -50,6 +50,7 @@ Every parameter, signal, action and panel has **one dotted path**, used identica
 
 Rules:
 - Path segments are `snake_case`. Top-level roots: `sim`, `motor`, `inverter`, `supply`, `bus`, `sensors`, `ctrl`, `gearbox`, `load`, `thermal`, `fault`, `protect`, `energy`, `scenario`.
+- A **parameter** path is its scene path (`controller.velocity.bandwidth`, `fidelity.tier`, `seed`); controller **signals** live under `ctrl.*` and actions/engine signals under `sim.*` (D-020).
 - Paths are **stable API**. Renaming one requires a decision entry and a YAML migration.
 - Every interactive UI element has a `data-agent-id` **and** an `aria-label`. The Playwright audit (P13.T04) enforces this.
 

@@ -40,6 +40,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `sensors.adc.i_a`, `.i_b`, `.i_c`, `sensors.adc.v_bus` | A, V | measured currents / bus | ADC | EQ-SENS-06 |
 | `est.theta`, `est.omega`, `est.valid` | rad, rad/s, – | estimator outputs, in the frame of the estimator's input (velocity estimator on a shaft encoder: mechanical; flux observer: electrical) | estimators | EQ-CTRL-08/09 |
 | `ctrl.omega_ref`, `ctrl.theta_ref`, `ctrl.torque_ref` | rad/s, rad, N·m | active setpoints | setpoint | EQ-CTRL-04/07 |
+| `ctrl.omega_cmd` | rad/s | velocity-loop reference, motor side: the position loop's output, or N·`ctrl.omega_ref` while the position loop is disabled (EQ-CTRL-04 bypass) | controller | EQ-CTRL-04 |
 | `ctrl.foc.id_ref`, `ctrl.foc.iq_ref`, `ctrl.foc.v_d`, `ctrl.foc.v_q`, `ctrl.foc.v_alpha`, `ctrl.foc.v_beta`, `ctrl.foc.saturated` | A, V, – | FOC internals (αβ = commands after inverse Park, held until the next tick) | FOC | EQ-CTRL-03 |
 | `ctrl.six_step.sector`, `ctrl.open_loop.theta_ref` | –, rad | controller internals | controllers | EQ-CTRL-05/06 |
 | `fault.<id>.active`, `protect.<id>.tripped` | – | fault / protection flags | faults | P10 |
@@ -58,6 +59,6 @@ Two engine-only live parameters are not scene fields: `motor.open_phase` (−1 r
 
 Parameter paths are `<component>.<group>.<name>` and live under these roots:
 
-`sim.*` (fidelity, seed), `motor.{identity,electrical,magnetic,winding,geometry,mechanical,thermal,ratings}.*`, `gearbox.*` (ratio, efficiency, backlash, stiffness, inertias; no separate gearbox friction: its loss is η), `load.*`, `inverter.*`, `supply.*` (flat source fields under the `kind` tag: `voltage`, `current_limit`, `r_out`, `series`, `r0_cell`, …; D-019), `bus.*`, `sensors.{hall,encoder,adc,observer}.*`, `ctrl.{foc,six_step,open_loop,mit,custom,limits}.*`, `fault.*`, `protect.*`.
+`fidelity.*`, `seed`, `motor.{identity,electrical,magnetic,winding,geometry,mechanical,thermal,ratings}.*`, `gearbox.*` (ratio, efficiency, backlash, stiffness, inertias; no separate gearbox friction: its loss is η), `load.*`, `inverter.*`, `supply.*` (flat source fields under the `kind` tag: `voltage`, `current_limit`, `r_out`, `series`, `r0_cell`, …; D-019), `bus.*`, `sensors.{hall,encoder,adc,observer}.*`, `controller.*` (the scene's controller: `family`, `current`, `velocity`, `position`, `limits`, …), `fault.*`, `protect.*`. Parameters use their scene paths (D-020); controller *signals* are `ctrl.*`, actions and engine signals `sim.*`.
 
 The authoritative list of parameter fields is the generated JSON Schema (`schemas/*.schema.json`, P04.T07). Field names must match the paths used in the physics pages, e.g. `motor.electrical.lambda_m` and `motor.electrical.r_phase`.

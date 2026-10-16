@@ -15,10 +15,10 @@
 > - A Luau custom controller runs at 20 kHz in a release build at ≥ 1× real time in the averaged Standard tier.
 > - Auto-tune on any motor preset produces a stable current loop within ±20 % of the target bandwidth.
 
-- [ ] **P09.T01** — Controller block framework
+- [x] **P09.T01** — Controller block framework
   - **Depends:** P08
   - **Do:**
-    - Common traits/utilities: `LoopConfig { enabled, rate_hz, limits }`, a setpoint source (`ctrl.setpoint.*` signals fed by the UI, scenarios or MCP), and ramp/rate limiters.
+    - Common traits/utilities: `LoopConfig { enabled, rate_hz, limits }`, a setpoint source (the load-side `ctrl.theta_ref`, `ctrl.omega_ref`, `ctrl.torque_ref` of signals.md, fed by the UI, scenarios or MCP), and ramp/rate limiters.
     - "Bypass" semantics for loops: a disabled outer loop passes its setpoint straight to the inner loop's reference.
     - A controller family is a set of blocks wired on the bus.
     - A `ControllerFactory` builds a family from `ControllerParams`.

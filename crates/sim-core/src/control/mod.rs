@@ -2,3 +2,5 @@
 //! readings.
 
 pub mod estimators;
+pub mod framework;
+pub mod setpoint;
