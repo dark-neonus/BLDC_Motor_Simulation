@@ -550,8 +550,49 @@ pub struct SensorsParams {
     pub encoder: Option<EncoderParams>,
     /// Current-sense ADC (optional).
     pub adc: Option<AdcParams>,
-    /// Gain γ of the sensorless flux observer (EQ-CTRL-09).
-    pub observer_gamma: Option<Param>,
+    /// Velocity estimator on the encoder angle (EQ-CTRL-08).
+    pub velocity: Option<VelocityEstimatorParams>,
+    /// Sensorless flux observer (EQ-CTRL-09).
+    pub observer: Option<ObserverParams>,
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum VelocityMethod {
+    /// Phase-locked loop (default).
+    #[default]
+    Pll,
+    /// Difference + first-order low-pass.
+    DiffLpf,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct VelocityEstimatorParams {
+    /// Estimation method.
+    #[serde(default)]
+    pub method: VelocityMethod,
+    /// PLL natural frequency ω_n/2π (default: sample rate / 50).
+    pub bandwidth: Option<Param>,
+    /// PLL damping ζ (default 1).
+    pub zeta: Option<f64>,
+    /// Low-pass time constant τ_f (default: 10 samples).
+    pub tau_f: Option<Param>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ObserverParams {
+    /// Observer gain γ [1/(Wb²·s)] (default 1000/λ_m²).
+    pub gamma: Option<f64>,
+    /// Minimum electrical speed for `est.valid` (default 0.05·V_bus/(√3·λ_m)).
+    pub omega_min: Option<Param>,
+    /// PLL natural frequency ω_n/2π (default: control rate / 100).
+    pub pll_bandwidth: Option<Param>,
+    /// PLL damping ζ (default 1).
+    pub pll_zeta: Option<f64>,
 }
 
 // ------------------------------------------------------------------ control

@@ -5,6 +5,7 @@
 
 use super::params::PmsmParams;
 use crate::control::ControllerSpec;
+use crate::control::estimators::{self, EstimatorSpec, ObserverModel};
 use crate::control::foc::current_loop::{BusVoltage, FocSignals};
 use crate::control::foc::{self, FocIo, FocSpec, MotorModel};
 use crate::control::framework::{PlantInfo, Scaled};
@@ -100,6 +101,8 @@ pub struct SkeletonOptions {
     pub shape: Shape,
     /// Sensor blocks (EQ-SENS-*), built after the plant's signals.
     pub sensors: SensorSpec,
+    /// Velocity estimator / flux observer (EQ-CTRL-08/09).
+    pub estimators: EstimatorSpec,
 }
 
 impl Default for SkeletonOptions {
@@ -124,6 +127,7 @@ impl Default for SkeletonOptions {
             saturation: None,
             shape: Shape::Sinusoidal,
             sensors: SensorSpec::default(),
+            estimators: EstimatorSpec::default(),
         }
     }
 }
@@ -363,13 +367,56 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
     let sc = |b: &SignalBus, p: &str, g: f64| Scaled::of(b, p, g).map_err(|e| e.to_string());
     let n = opts.ratio;
     // Feedback: sensor readings where a sensor is fitted, else the true values (ideal
-    // feedback). The speeds are the true ones until the estimators are built (P09.T15).
-    let currents = if opts.sensors.adc.is_some() {
+    // feedback).
+    let current_paths = if opts.sensors.adc.is_some() {
         ["sensors.adc.i_a", "sensors.adc.i_b", "sensors.adc.i_c"]
     } else {
         ["motor.i_a", "motor.i_b", "motor.i_c"]
-    }
-    .map(|p| id(&bus, p));
+    };
+    let currents = current_paths.map(|p| id(&bus, p));
+    // One estimator owns est.* (EQ-CTRL-08/09): the flux observer when requested, else a
+    // velocity estimator on the encoder. Speeds: the estimate, else the true values.
+    let current_rate = match &opts.controller {
+        ControllerSpec::Foc(f) => Some(f.current_rate_hz),
+        ControllerSpec::Mit(m) => Some(m.foc.current_rate_hz),
+        _ => None,
+    };
+    let (omega_m, omega_e) = if let Some(o) = opts.estimators.observer {
+        let hz =
+            current_rate.ok_or("the flux observer needs a FOC current loop (family foc or mit)")?;
+        let period = crate::engine::time::period_from_hz(hz)
+            .map_err(|e| e.to_string())?
+            .period;
+        let model = ObserverModel {
+            r: mp.r,
+            ls: 0.5 * (mp.ld + mp.lq),
+            lambda: mp.lambda,
+            v_bus: opts.v_supply,
+        };
+        blocks.push(estimators::observer_block(
+            o,
+            model,
+            period,
+            current_paths,
+            &mut bus,
+        )?);
+        (
+            sc(&bus, "est.omega", 1.0 / mp.p)?,
+            sc(&bus, "est.omega", 1.0)?,
+        )
+    } else if let Some(enc) = &opts.sensors.encoder {
+        blocks.push(estimators::velocity_block(
+            opts.estimators.velocity,
+            enc.period,
+            &mut bus,
+        )?);
+        (sc(&bus, "est.omega", 1.0)?, sc(&bus, "est.omega", mp.p)?)
+    } else {
+        (
+            sc(&bus, "motor.omega", 1.0)?,
+            sc(&bus, "motor.omega_e", 1.0)?,
+        )
+    };
     let (angle_e, theta_l) = if opts.sensors.encoder.is_some() {
         (
             sc(&bus, "sensors.encoder.angle", mp.p)?,
@@ -392,8 +439,8 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
     let io = FocIo {
         currents,
         angle_e,
-        omega_e: sc(&bus, "motor.omega_e", 1.0)?,
-        omega_m: sc(&bus, "motor.omega", 1.0)?,
+        omega_e,
+        omega_m,
         theta_l,
         v_bus,
         duties: duties.map(|(d, _)| d),
@@ -419,10 +466,17 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
         ControllerSpec::Mit(spec) => {
             let sig = foc_sig.expect("registered for MIT");
             blocks.extend(foc::build(&spec.foc, &model, &info, &io, sig, &mut bus)?);
-            // Load-side speed: the drivetrain's, else the motor's / N (true until P09.T15).
-            let omega_l = match bus.id("load.omega") {
-                Ok(_) => sc(&bus, "load.omega", 1.0)?,
-                Err(_) => sc(&bus, "motor.omega", 1.0 / n)?,
+            // Load-side speed: the estimate / N, else the true load speed.
+            let omega_l = if bus.id("est.omega").is_ok() {
+                Scaled {
+                    id: omega_m.id,
+                    gain: omega_m.gain / n,
+                }
+            } else {
+                match bus.id("load.omega") {
+                    Ok(_) => sc(&bus, "load.omega", 1.0)?,
+                    Err(_) => sc(&bus, "motor.omega", 1.0 / n)?,
+                }
             };
             blocks.push(Box::new(MitBlock::new(
                 spec, io.theta_l, omega_l, n, info.kt, sig.iq_ref, &mut bus,

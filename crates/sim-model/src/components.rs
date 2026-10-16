@@ -329,6 +329,38 @@ pub fn validate_sensors(s: &SensorsParams) -> Vec<Issue> {
         }
         None => {}
     }
+    if let Some(e) = &s.velocity {
+        v.o(
+            &e.bandwidth,
+            Kind::Frequency,
+            "sensors.velocity.bandwidth",
+            Pos,
+        );
+        v.o(&e.tau_f, Kind::Time, "sensors.velocity.tau_f", Pos);
+        if e.zeta.is_some_and(|z| z.is_nan() || z <= 0.0) {
+            v.reject("sensors.velocity.zeta", "damping must be > 0");
+        }
+    }
+    if let Some(o) = &s.observer {
+        if o.gamma.is_some_and(|g| g.is_nan() || g <= 0.0) {
+            v.reject("sensors.observer.gamma", "gain must be > 0");
+        }
+        v.o(
+            &o.omega_min,
+            Kind::AngularVelocity,
+            "sensors.observer.omega_min",
+            NonNeg,
+        );
+        v.o(
+            &o.pll_bandwidth,
+            Kind::Frequency,
+            "sensors.observer.pll_bandwidth",
+            Pos,
+        );
+        if o.pll_zeta.is_some_and(|z| z.is_nan() || z <= 0.0) {
+            v.reject("sensors.observer.pll_zeta", "damping must be > 0");
+        }
+    }
     if let Some(a) = &s.adc {
         v.p(&a.full_scale, Kind::Current, "sensors.adc.full_scale", Pos);
         v.o(&a.offset, Kind::Current, "sensors.adc.offset", Any);

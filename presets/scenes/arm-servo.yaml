@@ -12,8 +12,11 @@ sensors: { preset: "builtin:sensors/as5047p" }
 controller:
   family: foc
   current: { rate: 40 kHz, bandwidth: 1.5 kHz }
-  velocity: { rate: 8 kHz, bandwidth: 60 Hz }
-  position: { rate: 1 kHz, bandwidth: 8 Hz }
+  # Tuned for the encoder's PLL speed estimate and the compliant, backlashed gear: at
+  # 60 Hz the velocity loop rings (±22 % speed ripple); 30 Hz leaves ≈ ±4 %. P09.T12
+  # retunes the presets.
+  velocity: { rate: 8 kHz, bandwidth: 30 Hz }
+  position: { rate: 1 kHz, bandwidth: 5 Hz }
   limits: { current: 20 A }
 seed: 1
 # load.theta: 0 = hanging straight down, 90 deg = horizontal (EQ-CONV-05).

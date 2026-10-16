@@ -2000,6 +2000,50 @@
         "pole_pairs"
       ]
     },
+    "ObserverParams": {
+      "type": "object",
+      "properties": {
+        "gamma": {
+          "description": "Observer gain γ [1/(Wb²·s)] (default 1000/λ_m²).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "omega_min": {
+          "description": "Minimum electrical speed for `est.valid` (default 0.05·V_bus/(√3·λ_m)).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pll_bandwidth": {
+          "description": "PLL natural frequency ω_n/2π (default: control rate / 100).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pll_zeta": {
+          "description": "PLL damping ζ (default 1).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
     "OnChange": {
       "type": "string",
       "enum": [
@@ -2183,11 +2227,22 @@
             }
           ]
         },
-        "observer_gamma": {
-          "description": "Gain γ of the sensorless flux observer (EQ-CTRL-09).",
+        "observer": {
+          "description": "Sensorless flux observer (EQ-CTRL-09).",
           "anyOf": [
             {
-              "$ref": "#/$defs/Param"
+              "$ref": "#/$defs/ObserverParams"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "velocity": {
+          "description": "Velocity estimator on the encoder angle (EQ-CTRL-08).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VelocityEstimatorParams"
             },
             {
               "type": "null"
@@ -2396,6 +2451,61 @@
       "enum": [
         "inrunner",
         "outrunner"
+      ]
+    },
+    "VelocityEstimatorParams": {
+      "type": "object",
+      "properties": {
+        "bandwidth": {
+          "description": "PLL natural frequency ω_n/2π (default: sample rate / 50).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "method": {
+          "description": "Estimation method.",
+          "$ref": "#/$defs/VelocityMethod",
+          "default": "pll"
+        },
+        "tau_f": {
+          "description": "Low-pass time constant τ_f (default: 10 samples).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "zeta": {
+          "description": "PLL damping ζ (default 1).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "VelocityMethod": {
+      "oneOf": [
+        {
+          "description": "Phase-locked loop (default).",
+          "type": "string",
+          "const": "pll"
+        },
+        {
+          "description": "Difference + first-order low-pass.",
+          "type": "string",
+          "const": "diff_lpf"
+        }
       ]
     }
   }

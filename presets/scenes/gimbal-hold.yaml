@@ -16,8 +16,10 @@ sensors: { preset: "builtin:sensors/as5600" }
 controller:
   family: foc
   current: { rate: 20 kHz, bandwidth: 500 Hz }
-  velocity: { rate: 5 kHz, bandwidth: 30 Hz }
-  position: { rate: 1 kHz, bandwidth: 5 Hz }
+  # The AS5600 is polled at 1 kHz over I2C: its speed estimate supports ≈ 15 Hz of
+  # velocity bandwidth (30 Hz limit-cycles). P09.T12 retunes the presets.
+  velocity: { rate: 5 kHz, bandwidth: 15 Hz }
+  position: { rate: 1 kHz, bandwidth: 3 Hz }
   limits: { current: 2 A }
 seed: 1
 initial: { theta: 0 deg }

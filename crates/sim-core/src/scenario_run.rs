@@ -554,12 +554,16 @@ mod tests {
         );
         let last = o.rows.last().unwrap();
         assert_eq!(last[1], 2.0, "ctrl.omega_ref holds the load-side value");
-        // Motor side = N · load side = 9 · 2; 2 % covers the PI settling after 1 s.
-        assert!(
-            (last[2] / 18.0 - 1.0).abs() < 0.02,
-            "motor.omega {}",
-            last[2]
-        );
+        // Motor side = N · load side = 9 · 2. The mean over the last 0.5 s: the encoder's
+        // speed estimate and the backlashed gear leave a ≈ ±4 % ripple (EQ-CTRL-08).
+        let tail: Vec<f64> = o
+            .rows
+            .iter()
+            .filter(|r| r[0] >= 0.5)
+            .map(|r| r[2])
+            .collect();
+        let mean = tail.iter().sum::<f64>() / tail.len() as f64;
+        assert!((mean / 18.0 - 1.0).abs() < 0.02, "mean motor.omega {mean}");
     }
 
     #[test]
@@ -790,9 +794,10 @@ mod tests {
 
     #[test]
     fn assert_values_take_quantities_in_the_signal_unit() {
-        // motor.omega is rad/s: 5 rad/s = 47.746 rpm; the tolerance is in rpm too.
+        // ctrl.omega_ref is rad/s: 5 rad/s = 47.746 rpm; the tolerance is in rpm too. (The
+        // setpoint, not the speed: this tests units, not how well the loop tracks.)
         let o = go(&format!(
-            "{HEAD}sample: 1 ms\ntimeline:\n  - target: {{ kind: velocity, value: 5 rad/s, ramp: 0.1 s }}\n  - wait: 0.6 s\n  - assert: {{ signal: motor.omega, op: eq, value: 47.746 rpm, tol: 2 rpm }}\n  - assert: {{ signal: motor.omega, op: gt, value: 100 rpm }}\n"
+            "{HEAD}sample: 1 ms\ntimeline:\n  - target: {{ kind: velocity, value: 5 rad/s, ramp: 0.1 s }}\n  - wait: 0.6 s\n  - assert: {{ signal: ctrl.omega_ref, op: eq, value: 47.746 rpm, tol: 2 rpm }}\n  - assert: {{ signal: ctrl.omega_ref, op: gt, value: 100 rpm }}\n"
         ));
         assert!(o.asserts[0].passed, "{:?}", o.asserts[0]);
         assert!((o.asserts[0].value - 5.0).abs() < 1e-4, "converted to SI");

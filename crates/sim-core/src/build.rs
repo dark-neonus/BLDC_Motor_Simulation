@@ -8,12 +8,13 @@ use sim_model::constraints::{self, Severity};
 use sim_model::param::Param;
 use sim_model::params::{
     ControllerParams, EmfShape, EncoderParams, GearboxParams, LoadParams, LoopParams, MotorParams,
-    OnChange, SensorCommon, SupplyParams, TierParam, Topology,
+    OnChange, SensorCommon, SupplyParams, TierParam, Topology, VelocityMethod,
 };
 use sim_model::scene::ResolvedScene;
 use sim_model::units::Kind;
 
 use crate::control::ControllerSpec;
+use crate::control::estimators::{EstimatorSpec, ObserverSpec, VelocitySpec};
 use crate::control::foc::current_loop::M_MAX;
 use crate::control::foc::{FocSpec, LoopSpec};
 use crate::control::mit::MitSpec;
@@ -723,6 +724,7 @@ pub fn build_engine(scene: &ResolvedScene) -> Result<BuiltScene, BuildError> {
             saturation: saturation(scene)?,
             shape: shape(scene)?,
             sensors: sensors(scene, rate, &drive_kind)?,
+            estimators: estimators(scene)?,
         },
     )
     .map_err(BuildError::Invalid)?;
@@ -897,6 +899,47 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
         cascade: true,
     };
     Ok((ControllerSpec::Foc(spec), cur.rate_hz))
+}
+
+/// `sensors.velocity` / `sensors.observer` in SI (defaults resolved at engine build).
+fn estimators(scene: &ResolvedScene) -> Result<EstimatorSpec, BuildError> {
+    let mut spec = EstimatorSpec::default();
+    let Some(s) = &scene.sensors else {
+        return Ok(spec);
+    };
+    let w = |p: &Option<Param>, at: &str| -> Result<Option<f64>, BuildError> {
+        p.as_ref()
+            .map(|p| Ok(2.0 * std::f64::consts::PI * si(p, Kind::Frequency, at)?))
+            .transpose()
+    };
+    if let Some(v) = &s.velocity {
+        spec.velocity = match v.method {
+            VelocityMethod::Pll => VelocitySpec::Pll {
+                omega_n: w(&v.bandwidth, "sensors.velocity.bandwidth")?,
+                zeta: v.zeta,
+            },
+            VelocityMethod::DiffLpf => VelocitySpec::DiffLpf {
+                tau_f: v
+                    .tau_f
+                    .as_ref()
+                    .map(|p| si(p, Kind::Time, "sensors.velocity.tau_f"))
+                    .transpose()?,
+            },
+        };
+    }
+    if let Some(o) = &s.observer {
+        spec.observer = Some(ObserverSpec {
+            gamma: o.gamma,
+            omega_min: o
+                .omega_min
+                .as_ref()
+                .map(|p| si(p, Kind::AngularVelocity, "sensors.observer.omega_min"))
+                .transpose()?,
+            pll_omega_n: w(&o.pll_bandwidth, "sensors.observer.pll_bandwidth")?,
+            pll_zeta: o.pll_zeta,
+        });
+    }
+    Ok(spec)
 }
 
 /// A rate [Hz] as an exact-ns period.

@@ -96,6 +96,9 @@ pub struct SixStepBlock {
     duties: [SignalId; 3],
     sector: SignalId,
     interp: Interp,
+    /// `ctrl.six_step.omega`: the Hall-interval speed ω̂e/p [rad/s].
+    omega_out: SignalId,
+    pole_pairs: f64,
 }
 
 impl SixStepBlock {
@@ -116,6 +119,12 @@ impl SixStepBlock {
             "six-step command u: duty |u|, direction sign(u)",
             SignalKind::Input,
         )?;
+        let omega_out = bus.register(
+            "ctrl.six_step.omega",
+            "rad/s",
+            "motor speed from the Hall interval (ω̂e/p)",
+            SignalKind::Output,
+        )?;
         let sector = bus.register(
             "ctrl.six_step.sector",
             "-",
@@ -132,7 +141,26 @@ impl SixStepBlock {
             duties,
             sector,
             interp: Interp::default(),
+            omega_out,
+            pole_pairs: 1.0,
         })
+    }
+
+    pub fn with_pole_pairs(mut self, p: f64) -> Self {
+        self.pole_pairs = p;
+        self
+    }
+
+    /// ω̂e from the Hall interval, bounded by one sector over the time since the last
+    /// edge (so it decays when the rotor stops instead of holding the last value).
+    fn hall_speed(&self, t: f64) -> f64 {
+        let i = &self.interp;
+        let since = t - i.t_edge;
+        if since > 0.0 {
+            i.omega.signum() * i.omega.abs().min(SECTOR / since)
+        } else {
+            i.omega
+        }
     }
 
     pub fn with_duty_limit(mut self, l: DutyLimit) -> Self {
@@ -202,6 +230,10 @@ impl DiscreteBlock for SixStepBlock {
             ctx.bus.set(self.sector, -1.0);
             return Ok(());
         };
+        if matches!(self.angle, CommutationAngle::Hall(_)) {
+            ctx.bus
+                .set(self.omega_out, self.hall_speed(t) / self.pole_pairs);
+        }
         let dir = if u < 0.0 { -1.0 } else { 1.0 };
         let th = th + dir * self.advance;
         let deg = th.to_degrees().rem_euclid(360.0);
@@ -306,6 +338,7 @@ pub fn build(
     let k_e = motor.pole_pairs * motor.lambda * emf_shape_ll(shape);
     let block = SixStepBlock::new(period, spec.advance, angle, legs, duties, bus)
         .map_err(e)?
+        .with_pole_pairs(motor.pole_pairs)
         .with_duty_limit(DutyLimit {
             k_e,
             r: motor.r,
@@ -346,7 +379,14 @@ pub fn build(
                 id: sp.omega,
                 gain: n,
             },
-            feedback: omega_m,
+            // Halls: the Hall-interval speed (sensor-only feedback).
+            feedback: match angle {
+                CommutationAngle::Hall(_) => Scaled {
+                    id: block.omega_out,
+                    gain: 1.0,
+                },
+                CommutationAngle::True(_) => omega_m,
+            },
             bypass: Scaled {
                 id: duty_ref,
                 gain: 1.0,

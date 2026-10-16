@@ -69,7 +69,7 @@ $$
 - Loop semantics: a disabled outer loop passes its setpoint straight through, and each loop has its own rate and ramp limiter.
 - A P-only position loop under constant load torque holds a steady error of $\tau_L/(N^2\,K_t\,K_{p,v}\,K_{p,p})$ when the velocity loop is P-only, and zero error with a PI velocity loop.
 
-**Defaults and units.** Without a `bandwidth`, $\omega_v = \omega_c/10$ and $\omega_p = \omega_v/10$; explicit `kp`/`ki` override the design (velocity in A per rad/s and A per rad, position in load rad/s per rad and per rad·s). The position loop is P unless a `ki` is given. `controller.limits.speed` (load side) clamps $\omega^*$ to $\pm N\,\omega_{lim}$ on the motor side; `controller.limits.current` clamps $i_q^*$; `controller.limits.ramp` (load side, rad/s²) limits how fast the velocity reference may change. A disabled velocity loop passes the torque setpoint as $i_q^* = \tau^*/(N K_t)$. Feedback: the position loop reads the load angle (the encoder angle / $N$ when an encoder is fitted), the velocity loop the motor speed (the true speed until the estimators are built from a scene, P09.T15).
+**Defaults and units.** Without a `bandwidth`, $\omega_v = \omega_c/10$ and $\omega_p = \omega_v/10$; explicit `kp`/`ki` override the design (velocity in A per rad/s and A per rad, position in load rad/s per rad and per rad·s). The position loop is P unless a `ki` is given. `controller.limits.speed` (load side) clamps $\omega^*$ to $\pm N\,\omega_{lim}$ on the motor side; `controller.limits.current` clamps $i_q^*$; `controller.limits.ramp` (load side, rad/s²) limits how fast the velocity reference may change. A disabled velocity loop passes the torque setpoint as $i_q^* = \tau^*/(N K_t)$. Feedback: the position loop reads the load angle (the encoder angle / $N$ when an encoder is fitted), the velocity loop the motor speed (`est.omega` when an estimator runs, EQ-CTRL-08/09; the true speed without a speed sensor).
 
 **Modes from scenarios.** A velocity target disables the position loop; a torque target disables the velocity loop; a position target enables both. $\theta^*$ starts at the initial load angle, so a scene with a position loop holds its initial pose.
 
@@ -128,6 +128,8 @@ $$
 
 with $K_p = 2\zeta\omega_n$ and $K_i = \omega_n^2$. For $\zeta = 1$ the −3 dB bandwidth is $2.48\,\omega_n$ (verified). With this update order, $\hat\theta$ after step $k$ is the prediction for the next sample, $\theta(t_k + T)$; on a constant-speed ramp the loop (type 2) settles with no lag beyond that.
 
+**In a scene** (`sensors.velocity`): with an encoder fitted and no flux observer, a velocity estimator runs at the encoder's rate on `sensors.encoder.angle` (mechanical) — a PLL by default with $\omega_n = 2\pi f_s/50$, $\zeta = 1$, or difference + LPF with $\tau_f$ = 10 samples. Its T is the sample period. Its `est.omega` is the velocity loop's feedback and $p\,$`est.omega` the current loop's $\hat\omega_e$ (MIT: `est.omega`/N). Six-step on Halls uses its Hall-interval speed $\hat\omega_e/p$ (`ctrl.six_step.omega`). Without a speed sensor the true speeds are used (ideal feedback).
+
 ### EQ-CTRL-09 — Nonlinear flux observer `[Lee2010]` {/* #eq-ctrl-09 */}
 
 $$
@@ -137,6 +139,7 @@ $$
 $$
 
 - Speed comes from a PLL on $\hat\theta_e$. The radial convergence rate is $\gamma\lambda_m^2$; default $\gamma = 1000/\lambda_m^2$.
+- **In a scene** (`sensors.observer`): built when the controller is sensorless or the section is given (then it replaces the encoder's velocity estimator: one estimator owns `est.*`). It runs at the current-loop rate (its T is that period) on the phase currents (ADC when fitted) and the applied command `ctrl.foc.v_alpha/v_beta` read before the current loop updates it, i.e. the voltage over the last period; $L_s = (L_d + L_q)/2$. Defaults: $\gamma = 1000/\lambda_m^2$, $\omega_{min} = 0.05\,V_{bus}/(\sqrt3\,\lambda_m)$, PLL $\omega_n = 2\pi f_c/100$, $\zeta = 1$. Forward Euler on the radial dynamics needs $\gamma\lambda_m^2 T < 2$; a larger γ is refused at build.
 - `est.valid` is set when $|\hat\omega_e| > \omega_{min}$ and $\big||\eta| - \lambda_m\big| < 0.2\lambda_m$.
 - **Convergence:** started from $\eta = 0$ ($x = L_s i$), with the default $\gamma$ and exact parameters, the angle error falls below 5° within 100 ms at $\omega_e \ge 10\,\%$ of rated speed and stays there (P08.T07 test: about 55 ms at 200 rad/s for $\lambda_m$ = 10 mWb). The integration is forward Euler at the control rate, with the voltage applied over the last period.
 - **Expected low-speed failure:** the back-EMF shrinks with speed while errors in $R$, offsets and dead time do not. Verified (P08 test) with a 3 % resistance error, $\lambda_m$ = 10 mWb, $L_s$ = 1 mH, $R$ = 0.5 Ω, a pure $i_q$ = 2 A, $T$ = 50 µs, default $\gamma$, PLL $\omega_n = 2\pi\cdot100$ rad/s, $\zeta = 1$; run for 40 electrical radians (at least 0.3 s, at most 4 s), mean over the second half:
