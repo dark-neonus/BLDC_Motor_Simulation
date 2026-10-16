@@ -398,6 +398,8 @@ pub fn run(sc: &Scenario, mut b: BuiltScene, asserts: bool) -> Result<RunOutput,
                     match (speed, m) {
                         (Some(p), _) if p.ends_with("velocity.enabled") => set(p, velocity),
                         (Some(p), TargetKind::Velocity) => set(p, 1.0),
+                        // Open loop: ctrl.omega_ref drives it directly.
+                        (None, TargetKind::Velocity) => {}
                         _ => {
                             return Err(format!(
                                 "{m:?} targets are not supported by this scene's controller"

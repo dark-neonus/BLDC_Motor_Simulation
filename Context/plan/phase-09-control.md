@@ -69,7 +69,7 @@
     - the floating-phase current decays through the diodes
   - **Done when:** Passing.
 
-- [ ] **P09.T06** — Open-loop sinusoidal (V/f)
+- [x] **P09.T06** — Open-loop sinusoidal (V/f)
   - **Depends:** P09.T02
   - **Do:** A rotating voltage vector with a commanded frequency ramp and voltage amplitude (V/f law or fixed V). No feedback.
   - **Files:** `crates/sim-core/src/control/open_loop.rs`

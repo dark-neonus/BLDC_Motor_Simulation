@@ -4,6 +4,7 @@
 pub mod estimators;
 pub mod foc;
 pub mod framework;
+pub mod open_loop;
 pub mod pid;
 pub mod setpoint;
 pub mod six_step;
@@ -13,4 +14,5 @@ pub mod six_step;
 pub enum ControllerSpec {
     Foc(foc::FocSpec),
     SixStep(six_step::SixStepSpec),
+    OpenLoop(open_loop::OpenLoopSpec),
 }

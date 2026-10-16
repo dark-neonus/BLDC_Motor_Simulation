@@ -178,6 +178,13 @@ impl Engine {
                 bus: &mut self.bus,
             };
             self.blocks[i].step(&mut ctx)?;
+            for msg in self.blocks[i].take_warnings() {
+                self.events.push(EngineEvent::Warning {
+                    t: self.time,
+                    source: self.blocks[i].id().to_string(),
+                    msg,
+                });
+            }
             let b = &self.blocks[i];
             self.next_fire[i] = match b.period() {
                 Some(p) => self.time + p,

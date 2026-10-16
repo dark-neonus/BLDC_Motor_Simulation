@@ -94,7 +94,7 @@ $$
 v_{\alpha\beta} = |v|\,[-\sin\theta^*_e,\ \cos\theta^*_e]
 $$
 
-There is no feedback. **Loss of synchronism** is flagged when $|\mathrm{wrap}(\theta^*_e - \theta_e)| > \pi/2$ for more than one electrical period.
+There is no feedback. $\omega^*_e = N p\,$`ctrl.omega_ref` (load side → electrical), ramped at `controller.accel` (load side, rad/s²) and clamped to the speed limit; $k_{vf}$ is in V per electrical rad/s. The vector is applied at the centre of its hold interval ($\theta^* + \tfrac12\omega^* T$). **Loss of synchronism** is flagged (`ctrl.open_loop.sync_lost`, latched, and a warning) when $|\mathrm{wrap}(\theta^*_e - \theta_e)| > \pi/2$ for more than one electrical period, **or** when the rotor slips a pole: the unwrapped error (the sum of the wrapped per-tick changes of $\theta^*_e - \theta_e$) has moved by $2\pi$ from its first value. The second rule is needed because a fast-slipping rotor passes through $|\mathrm{wrap}| < \pi/2$ every turn, so the first never fires. The true angle serves this diagnostic only.
 
 ### EQ-CTRL-07 — Impedance / MIT mode {/* #eq-ctrl-07 */}
 

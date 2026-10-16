@@ -51,7 +51,7 @@
       "type": "object",
       "properties": {
         "accel": {
-          "description": "Open-loop acceleration [rad/s²].",
+          "description": "Speed-reference ramp, load side [rad/s²].",
           "$ref": "#/$defs/Param"
         },
         "family": {
@@ -59,7 +59,7 @@
           "const": "open_loop"
         },
         "k_vf": {
-          "description": "Voltage per electrical speed (V/f slope) [V·s/rad].",
+          "description": "Voltage per electrical speed (V/f slope), a back-EMF constant [V per rad/s].",
           "$ref": "#/$defs/Param"
         },
         "limits": {

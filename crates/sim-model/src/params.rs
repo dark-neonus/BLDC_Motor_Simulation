@@ -607,9 +607,9 @@ pub enum ControllerParams {
         rate: Param,
         /// Voltage at standstill (boost).
         v0: Param,
-        /// Voltage per electrical speed (V/f slope) [V·s/rad].
+        /// Voltage per electrical speed (V/f slope), a back-EMF constant [V per rad/s].
         k_vf: Param,
-        /// Open-loop acceleration [rad/s²].
+        /// Speed-reference ramp, load side [rad/s²].
         accel: Param,
         /// Current, speed and voltage limits.
         limits: Limits,

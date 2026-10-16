@@ -46,6 +46,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `ctrl.duty_ref` | – | six-step command setpoint u ∈ [−1, 1] (sign: direction), used while the speed loop is off | setpoint | EQ-CTRL-05 |
 | `ctrl.six_step.duty` | – | six-step command u (speed-loop output or `ctrl.duty_ref`), before the current-limit cap | controller | EQ-CTRL-05 |
 | `ctrl.six_step.sector`, `ctrl.open_loop.theta_ref` | –, rad | controller internals | controllers | EQ-CTRL-05/06 |
+| `ctrl.open_loop.v_alpha`, `ctrl.open_loop.v_beta`, `ctrl.open_loop.omega_ref`, `ctrl.open_loop.sync_lost` | V, rad/s, – | open-loop voltage command, ramped electrical speed, loss-of-synchronism flag (latched) | open-loop controller | EQ-CTRL-06 |
 | `fault.<id>.active`, `protect.<id>.tripped` | – | fault / protection flags | faults | P10 |
 | `energy.in`, `energy.loss`, `energy.loss.<term>`, `energy.stored`, `energy.external`, `energy.residual`, `energy.ok` | J, J, J, J, J, –, – | energy accounting | engine | EQ-ENER |
 

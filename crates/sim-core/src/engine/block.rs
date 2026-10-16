@@ -43,6 +43,10 @@ pub trait DiscreteBlock: Send {
     fn step(&mut self, ctx: &mut StepCtx<'_>) -> Result<(), SimError>;
     /// Return to the initial state.
     fn reset(&mut self);
+    /// Diagnostics raised since the last call (reported as engine warnings).
+    fn take_warnings(&mut self) -> Vec<String> {
+        Vec::new()
+    }
     /// Live-settable parameters `(name, unit)`; full path is `<id>.<name>`.
     fn params(&self) -> Vec<(String, String)> {
         Vec::new()

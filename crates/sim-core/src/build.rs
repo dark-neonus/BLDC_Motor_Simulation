@@ -16,6 +16,7 @@ use sim_model::units::Kind;
 use crate::control::ControllerSpec;
 use crate::control::foc::current_loop::M_MAX;
 use crate::control::foc::{FocSpec, LoopSpec};
+use crate::control::open_loop::OpenLoopSpec;
 use crate::control::pid::AntiWindup;
 use crate::control::six_step::SixStepSpec;
 use crate::engine::commands::{ChangeSource, EngineCommand};
@@ -779,6 +780,27 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
             v_f: 0.0,
         };
         return Ok((ControllerSpec::SixStep(spec), rate));
+    }
+    if let ControllerParams::OpenLoop {
+        rate,
+        v0,
+        k_vf,
+        accel,
+        limits,
+    } = c
+    {
+        let rate = si(rate, Kind::Frequency, "controller.rate")?;
+        let spec = OpenLoopSpec {
+            rate_hz: rate,
+            v0: si(v0, Kind::Voltage, "controller.v0")?,
+            k_vf: si(k_vf, Kind::BackEmfConstant, "controller.k_vf")?,
+            accel: si(accel, Kind::AngularAcceleration, "controller.accel")?,
+            speed_limit: match &limits.speed {
+                Some(p) => si(p, Kind::AngularVelocity, "controller.limits.speed")?,
+                None => f64::INFINITY,
+            },
+        };
+        return Ok((ControllerSpec::OpenLoop(spec), rate));
     }
     let ControllerParams::Foc {
         current,

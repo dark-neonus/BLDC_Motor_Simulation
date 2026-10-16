@@ -8,6 +8,7 @@ use crate::control::ControllerSpec;
 use crate::control::foc::current_loop::{BusVoltage, FocSignals};
 use crate::control::foc::{self, FocIo, FocSpec, MotorModel};
 use crate::control::framework::{PlantInfo, Scaled};
+use crate::control::open_loop::{OpenLoopBlock, OpenLoopSignals};
 use crate::control::six_step::{self, CommutationAngle};
 use crate::engine::block::DiscreteBlock;
 use crate::engine::engine::Engine;
@@ -159,8 +160,19 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
         );
     }
     let mut bus = SignalBus::new();
-    // The controller's signals first: the ideal source reads ctrl.foc.v_alpha/v_beta.
-    let sig = FocSignals::register(&mut bus).map_err(|e| e.to_string())?;
+    // The controller's signals first: the ideal source reads its v_α, v_β.
+    let err = |e: crate::engine::signals::SignalError| e.to_string();
+    let foc_sig = match &opts.controller {
+        ControllerSpec::Foc(_) => Some(FocSignals::register(&mut bus).map_err(err)?),
+        _ => None,
+    };
+    let ol_sig = match &opts.controller {
+        ControllerSpec::OpenLoop(_) => Some(OpenLoopSignals::register(&mut bus).map_err(err)?),
+        _ => None,
+    };
+    let v_ab = foc_sig
+        .map(|s| (s.v_alpha, s.v_beta))
+        .or(ol_sig.map(|s| (s.v_alpha, s.v_beta)));
     // Front end: the ideal source, or bus + inverter (+ PWM block).
     // Built once per engine and consumed below; its size does not matter.
     #[allow(clippy::large_enum_variant)]
@@ -171,10 +183,14 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
     // INVARIANT: as above, the front-end modules register fixed, unique paths into this
     // fresh bus, so their constructors cannot fail.
     let front = match &opts.drive {
-        Drive::Ideal => Front::Ideal(
-            IdealVoltageSource::new(&mut bus, sig.v_alpha, sig.v_beta, opts.v_supply)
-                .expect("unique skeleton signal"),
-        ),
+        Drive::Ideal => {
+            // INVARIANT: six-step (no v_α, v_β) on the ideal drive was refused above.
+            let (va, vb) = v_ab.expect("a voltage-command family");
+            Front::Ideal(
+                IdealVoltageSource::new(&mut bus, va, vb, opts.v_supply)
+                    .expect("unique skeleton signal"),
+            )
+        }
         Drive::Inverter(o) => {
             let dc = DcBus::new(o.source.clone(), o.c_bus, o.chopper, &mut bus)
                 .expect("unique skeleton signal");
@@ -394,7 +410,20 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
     };
     match &opts.controller {
         ControllerSpec::Foc(spec) => {
+            let sig = foc_sig.expect("registered for FOC");
             blocks.extend(foc::build(spec, &model, &info, &io, sig, &mut bus)?);
+        }
+        ControllerSpec::OpenLoop(spec) => {
+            let sp = crate::control::setpoint::Setpoints::get_or_register(&mut bus).map_err(err)?;
+            blocks.push(Box::new(OpenLoopBlock::new(
+                spec.clone(),
+                sp.omega,
+                n * mp.p,
+                id(&bus, "motor.theta_e"),
+                ol_sig.expect("registered for open loop"),
+                io.duties,
+                io.v_bus,
+            )?));
         }
         ControllerSpec::SixStep(spec) => {
             let Some((duty, v_dc)) = duties else {

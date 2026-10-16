@@ -423,11 +423,14 @@ pub fn validate_controller(c: &ControllerParams) -> Vec<Issue> {
         ControllerParams::OpenLoop {
             rate,
             v0,
+            k_vf,
+            accel,
             limits: l,
-            ..
         } => {
             v.p(rate, Kind::Frequency, "controller.rate", Pos);
             v.p(v0, Kind::Voltage, "controller.v0", NonNeg);
+            v.p(k_vf, Kind::BackEmfConstant, "controller.k_vf", NonNeg);
+            v.p(accel, Kind::AngularAcceleration, "controller.accel", Pos);
             limits(&mut v, l);
         }
         ControllerParams::Foc {
