@@ -48,6 +48,9 @@ pub struct FocSpec {
     pub prefilter: bool,
     /// Test mode: v_d = 0, v_q fixed, no current control.
     pub open_loop_vq: Option<f64>,
+    /// Build the velocity/position cascade (false: the current loop alone, its
+    /// `ctrl.foc.iq_ref` written by another law, e.g. MIT).
+    pub cascade: bool,
 }
 
 impl FocSpec {
@@ -72,6 +75,7 @@ impl FocSpec {
             position: None,
             prefilter: false,
             open_loop_vq: None,
+            cascade: true,
         }
     }
 }
@@ -133,7 +137,8 @@ pub fn build(
         .unwrap_or(omega_c / 10.0);
     let mut blocks: Vec<Box<dyn DiscreteBlock>> = vec![];
     // Velocity reference: the position loop's output, or N·ω_ref without one.
-    let vel_ref = match &spec.position {
+    let position = if spec.cascade { spec.position } else { None };
+    let vel_ref = match &position {
         Some(p) => {
             let w_cmd = bus
                 .register(
@@ -177,6 +182,9 @@ pub fn build(
         },
     };
     // Velocity loop (built disabled without one: the torque setpoint drives i_q).
+    if !spec.cascade {
+        return current_only(spec, motor, io, sig, t_c, omega_c, blocks);
+    }
     let v = spec.velocity.unwrap_or(LoopSpec {
         enabled: false,
         rate_hz: spec.current_rate_hz,
@@ -214,6 +222,33 @@ pub fn build(
         .with_reference_limit(n * spec.speed_limit),
     ));
     // Current loop.
+    let current = current_block(spec, motor, io, sig, t_c, omega_c)?;
+    blocks.push(Box::new(current));
+    Ok(blocks)
+}
+
+/// The current loop alone (no cascade).
+fn current_only(
+    spec: &FocSpec,
+    motor: &MotorModel,
+    io: &FocIo,
+    sig: FocSignals,
+    t_c: SimTime,
+    omega_c: f64,
+    mut blocks: Vec<Box<dyn DiscreteBlock>>,
+) -> Result<Vec<Box<dyn DiscreteBlock>>, String> {
+    blocks.push(Box::new(current_block(spec, motor, io, sig, t_c, omega_c)?));
+    Ok(blocks)
+}
+
+fn current_block(
+    spec: &FocSpec,
+    motor: &MotorModel,
+    io: &FocIo,
+    sig: FocSignals,
+    t_c: SimTime,
+    omega_c: f64,
+) -> Result<FocCurrentLoop, String> {
     let cfg = CurrentLoopConfig {
         period: t_c,
         phase: SimTime::from_nanos(0),
@@ -232,8 +267,5 @@ pub fn build(
         speed: SpeedSource::Signal(io.omega_e),
         v_bus: io.v_bus,
     };
-    let current =
-        FocCurrentLoop::new(cfg, inputs, sig, io.duties)?.with_open_loop_vq(spec.open_loop_vq);
-    blocks.push(Box::new(current));
-    Ok(blocks)
+    Ok(FocCurrentLoop::new(cfg, inputs, sig, io.duties)?.with_open_loop_vq(spec.open_loop_vq))
 }

@@ -78,7 +78,7 @@
     - with a high load step it **loses sync** (the rotor slips poles: detected via the angle error), as documented
   - **Done when:** Passing.
 
-- [ ] **P09.T07** — MIT / impedance mode
+- [x] **P09.T07** — MIT / impedance mode
   - **Depends:** P09.T03
   - **Do:** τ = Kp(θ*−θ) + Kd(ω*−ω) + τ_ff → iq_ref = τ/(Kt·N·η) per EQ-CTRL, running at its own rate on top of the current loop.
   - **Files:** `crates/sim-core/src/control/mit.rs`

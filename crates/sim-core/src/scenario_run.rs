@@ -365,6 +365,8 @@ pub fn run(sc: &Scenario, mut b: BuiltScene, asserts: bool) -> Result<RunOutput,
                     };
                     cmds.into_iter().for_each(|c| e.queue(c));
                 }
+                // MIT takes θ*, ω* and τ_ff together: every target kind is just a setpoint.
+                Ev::Mode(_) if e.get_param("controller.kd").is_some() => {}
                 Ev::Mode(m) => {
                     let has_position = e.get_param("controller.position.enabled").is_some();
                     let (position, velocity) = match m {

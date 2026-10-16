@@ -454,12 +454,15 @@ pub fn validate_controller(c: &ControllerParams) -> Vec<Issue> {
         ControllerParams::Mit {
             current,
             rate,
+            kp,
+            kd,
             tau_ff,
             limits: l,
-            ..
         } => {
             loop_(&mut v, current, "controller.current");
             v.p(rate, Kind::Frequency, "controller.rate", Pos);
+            v.p(kp, Kind::TorsionalStiffness, "controller.kp", NonNeg);
+            v.p(kd, Kind::RotationalDamping, "controller.kd", NonNeg);
             v.o(tau_ff, Kind::Torque, "controller.tau_ff", Any);
             limits(&mut v, l);
         }

@@ -577,3 +577,9 @@ Phase-end review (P08.T09): 2 majors, 8 minors, no blockers. M1 (no sensor/estim
 - Engine: `DiscreteBlock::take_warnings` (reported as engine warnings after each block step).
 - Tests (`tests/open_loop.rs`, 5010 on the ideal 24 V source, k_vf = 1.05·λ, V_0 = 0.3 V, 0.02 N·m brake): follows 50 rad/s (mean over 0.5 s within 1 %, in sync, ω*_e = 700 rad/s); V-CTRL-009: a 3 N·m step (pull-out ≈ 2 N·m) latches `sync_lost`, raises the warning, and the mean speed leaves the command by > 10 %.
 - `just check-fast` green (266 tests), `just validate` 5/5.
+
+## 2026-10-16 — P09.T07 MIT / impedance mode
+- The plan's "i_q* = τ/(K_t·N·η)" contradicts EQ-CTRL-07 (no efficiency factor: gear loss is speed-dependent and zero at standstill); the spec wins, the law uses τ*/(N K_t).
+- `control::mit`: `MitBlock` (block `controller`, live `controller.kp`/`kd`/`tau_ff`; τ* = K_p(θ* − θ_L) + K_d(ω* − ω_L) + τ_ff + `ctrl.torque_ref`, i_q* clamped to the current limit, written to `ctrl.foc.iq_ref`), `MitSpec`, `damping_ratio`. `FocSpec.cascade` (false: the current loop alone); `ControllerSpec::Mit`; the adapter feeds the load angle (encoder/N or the true load angle) and load speed (`load.omega` or motor/N, true until P09.T15). Validation: `controller.kp` torsional stiffness, `controller.kd` rotational damping. Scenario targets on MIT scenes are plain setpoints (no loop switching).
+- Tests (`tests/mit.rs`, 5010 + flywheel, N = 1, ω_n = 2π·5 rad/s, ζ = 0.3, Ideal tier): V-CTRL-003 deflection under a constant 0.1 N·m = τ_L/K_p within 2 %; the step-overshoot ζ matches K_d/(2√(K_p J)) within 5 %; `controller.kp` live.
+- `just check-fast` green (268 tests), `just validate` 5/5.

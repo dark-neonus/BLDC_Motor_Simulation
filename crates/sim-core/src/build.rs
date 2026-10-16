@@ -16,6 +16,7 @@ use sim_model::units::Kind;
 use crate::control::ControllerSpec;
 use crate::control::foc::current_loop::M_MAX;
 use crate::control::foc::{FocSpec, LoopSpec};
+use crate::control::mit::MitSpec;
 use crate::control::open_loop::OpenLoopSpec;
 use crate::control::pid::AntiWindup;
 use crate::control::six_step::SixStepSpec;
@@ -802,6 +803,39 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
         };
         return Ok((ControllerSpec::OpenLoop(spec), rate));
     }
+    if let ControllerParams::Mit {
+        current,
+        rate,
+        kp,
+        kd,
+        tau_ff,
+        limits,
+    } = c
+    {
+        let cur = loop_spec(current, "controller.current")?;
+        let foc = FocSpec {
+            current_rate_hz: cur.rate_hz,
+            omega_c: cur.omega,
+            m_max: limits.voltage_fraction.unwrap_or(M_MAX),
+            aw: AntiWindup::Clamping,
+            i_max: si(&limits.current, Kind::Current, "controller.limits.current")?,
+            speed_limit: f64::INFINITY,
+            ramp: f64::INFINITY,
+            velocity: None,
+            position: None,
+            prefilter: false,
+            open_loop_vq: None,
+            cascade: false,
+        };
+        let spec = MitSpec {
+            foc,
+            rate_hz: si(rate, Kind::Frequency, "controller.rate")?,
+            kp: si(kp, Kind::TorsionalStiffness, "controller.kp")?,
+            kd: si(kd, Kind::RotationalDamping, "controller.kd")?,
+            tau_ff: opt(tau_ff, Kind::Torque, "controller.tau_ff")?,
+        };
+        return Ok((ControllerSpec::Mit(spec), cur.rate_hz));
+    }
     let ControllerParams::Foc {
         current,
         velocity,
@@ -860,6 +894,7 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
             .transpose()?,
         prefilter: *prefilter,
         open_loop_vq: None,
+        cascade: true,
     };
     Ok((ControllerSpec::Foc(spec), cur.rate_hz))
 }

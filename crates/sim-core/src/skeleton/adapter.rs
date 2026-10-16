@@ -8,6 +8,7 @@ use crate::control::ControllerSpec;
 use crate::control::foc::current_loop::{BusVoltage, FocSignals};
 use crate::control::foc::{self, FocIo, FocSpec, MotorModel};
 use crate::control::framework::{PlantInfo, Scaled};
+use crate::control::mit::MitBlock;
 use crate::control::open_loop::{OpenLoopBlock, OpenLoopSignals};
 use crate::control::six_step::{self, CommutationAngle};
 use crate::engine::block::DiscreteBlock;
@@ -163,7 +164,9 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
     // The controller's signals first: the ideal source reads its v_α, v_β.
     let err = |e: crate::engine::signals::SignalError| e.to_string();
     let foc_sig = match &opts.controller {
-        ControllerSpec::Foc(_) => Some(FocSignals::register(&mut bus).map_err(err)?),
+        ControllerSpec::Foc(_) | ControllerSpec::Mit(_) => {
+            Some(FocSignals::register(&mut bus).map_err(err)?)
+        }
         _ => None,
     };
     let ol_sig = match &opts.controller {
@@ -412,6 +415,18 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
         ControllerSpec::Foc(spec) => {
             let sig = foc_sig.expect("registered for FOC");
             blocks.extend(foc::build(spec, &model, &info, &io, sig, &mut bus)?);
+        }
+        ControllerSpec::Mit(spec) => {
+            let sig = foc_sig.expect("registered for MIT");
+            blocks.extend(foc::build(&spec.foc, &model, &info, &io, sig, &mut bus)?);
+            // Load-side speed: the drivetrain's, else the motor's / N (true until P09.T15).
+            let omega_l = match bus.id("load.omega") {
+                Ok(_) => sc(&bus, "load.omega", 1.0)?,
+                Err(_) => sc(&bus, "motor.omega", 1.0 / n)?,
+            };
+            blocks.push(Box::new(MitBlock::new(
+                spec, io.theta_l, omega_l, n, info.kt, sig.iq_ref, &mut bus,
+            )?));
         }
         ControllerSpec::OpenLoop(spec) => {
             let sp = crate::control::setpoint::Setpoints::get_or_register(&mut bus).map_err(err)?;
