@@ -38,6 +38,9 @@ pub enum EngineCommand {
     },
     /// An impulse H [N·m·s] (mouse flick): the pulse H/Δt with Δt = max(1 ms, 5·dt_max).
     Impulse { h: f64, source: ChangeSource },
+    /// A velocity target [rad/s, load side] in velocity mode (EQ-CTRL-04): the position
+    /// loop off and the velocity loop on (where they exist), then `ctrl.omega_ref`.
+    VelocityTarget { value: f64, source: ChangeSource },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

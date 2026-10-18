@@ -174,3 +174,27 @@ fn arm_servo_preset_reaches_and_holds_90_deg() {
     assert!(err.abs() < bound, "load error {err} rad, bound {bound}");
     assert!(sig(&e, "load.omega").abs() < 1e-2, "at rest");
 }
+
+/// The live UI/MCP speed command (`EngineCommand::VelocityTarget`) switches a scene
+/// with a position loop (arm-servo) to velocity mode, as a scenario velocity target does.
+#[test]
+fn velocity_target_switches_off_the_position_loop() {
+    let dir = std::env::temp_dir().join(format!("bldc-vt-{}", std::process::id()));
+    let lib = Library::new(None, dir.join("user"), vec![]).unwrap();
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../presets/scenes/arm-servo.yaml"
+    ))
+    .unwrap();
+    let sc: Scene = parse_yaml(&text, "arm-servo").unwrap();
+    let mut e = build_scene(&sc.resolve(&lib).unwrap()).unwrap().engine;
+    assert_eq!(e.get_param("controller.position.enabled"), Some(1.0));
+    e.queue(EngineCommand::VelocityTarget {
+        value: 2.0,
+        source: ChangeSource::Ui,
+    });
+    e.step_until(SimTime::from_secs_f64(1.5)).unwrap();
+    assert_eq!(e.get_param("controller.position.enabled"), Some(0.0));
+    let w = sig(&e, "load.omega");
+    assert!((w / 2.0 - 1.0).abs() < 0.1, "load ω {w}");
+}

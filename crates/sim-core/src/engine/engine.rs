@@ -423,6 +423,26 @@ impl Engine {
         let t = self.time;
         let reject = |reason: String| EngineEvent::CommandRejected { t, reason };
         match cmd {
+            EngineCommand::VelocityTarget { value, source } => {
+                for (path, v) in [
+                    ("controller.position.enabled", 0.0),
+                    ("controller.velocity.enabled", 1.0),
+                ] {
+                    if self.get_param(path).is_some_and(|x| x != v) {
+                        let ev = self.apply(EngineCommand::SetParam {
+                            path: path.into(),
+                            value: v,
+                            source,
+                        });
+                        self.events.push(ev);
+                    }
+                }
+                self.apply(EngineCommand::SetSignal {
+                    path: "ctrl.omega_ref".into(),
+                    value,
+                    source,
+                })
+            }
             EngineCommand::Impulse { h, source } => {
                 let duration = crate::physics::mech::load_basic::impulse_duration(self.dt_max);
                 self.apply(EngineCommand::Disturbance {

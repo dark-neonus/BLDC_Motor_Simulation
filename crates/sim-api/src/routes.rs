@@ -88,8 +88,8 @@ async fn time_scale(State(s): State<AppState>, Json(v): Json<Value>) -> Reply {
     command(&s, RunnerCommand::TimeScale(v.value)).await
 }
 async fn target_speed(State(s): State<AppState>, Json(v): Json<Value>) -> Reply {
-    let cmd = EngineCommand::SetSignal {
-        path: "ctrl.omega_ref".into(),
+    // Velocity mode: the position loop off (EQ-CTRL-04), then the setpoint.
+    let cmd = EngineCommand::VelocityTarget {
         value: v.value,
         source: ChangeSource::Ui,
     };

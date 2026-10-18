@@ -124,8 +124,8 @@ impl BldcMcp {
                 None,
             ));
         }
-        let cmd = EngineCommand::SetSignal {
-            path: "ctrl.omega_ref".into(),
+        // Velocity mode: the position loop off (EQ-CTRL-04), then the setpoint.
+        let cmd = EngineCommand::VelocityTarget {
             value: rad_per_s,
             source: ChangeSource::Mcp,
         };
