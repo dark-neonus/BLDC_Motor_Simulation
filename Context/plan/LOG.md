@@ -632,3 +632,6 @@ Phase-end review (P08.T09): 2 majors, 8 minors, no blockers. M1 (no sensor/estim
   5. **Sensorless blend**: δ = θ̂ − θ* is unwrapped from the start of the blend; wrapping it every tick jumped the angle by w·2π when the I/f lag passed ±π (48 A spike on a 5010).
   6. **Inverter floating clamp** min/max (kept from P09.T05).
 - `just check-fast` green (303 tests), `just validate` 5/5, presets-check OK.
+
+## 2026-10-18 — P09.T13 V-CTRL sweep
+- Every V-CTRL catalog case has an id-named test; `cargo nextest run -p sim-core v_ctrl` → 18/18 pass: 001 current-step τ63 (foc_current), 002 speed step at ω_c/20 (foc_cascade, renamed), 003 MIT deflection (mit), 004 PLL bandwidth (velocity estimator, renamed), 005 observer with a 3 % R error at 10 % and 100 % of rated speed: worst settled error 4.8° and 0.55° (< 5°), valid (new test; the catalog claim was checked first — it holds with little margin at 10 %), 006 observer invalid near standstill (new), 007 calibration, 008 auto-tune × 9 presets, 009 V/f loss of sync, 010 Luau PI = Rust PI. The Python halves of the "both" cases are P11.

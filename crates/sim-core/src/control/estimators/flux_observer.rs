@@ -216,6 +216,32 @@ mod tests {
         (errs, flags)
     }
 
+    /// V-CTRL-005: with a 3 % resistance error, at 10 % and 100 % of rated speed
+    /// (ω_e = 200 and 2000 rad/s here), the angle error after settling (second half of
+    /// 0.5 s) stays below 5° (measured: 4.8° and 0.55°), and the estimate is valid.
+    #[test]
+    fn v_ctrl_005_observer_with_r_error_above_ten_percent_speed() {
+        for w in [200.0, 2000.0] {
+            let mut obs = observer(0.03);
+            let (errs, flags) = run_full(&mut obs, w, 0.5, LAMBDA);
+            let worst = errs[errs.len() / 2..].iter().cloned().fold(0.0, f64::max);
+            assert!(worst < 5.0, "ω_e {w}: {worst}°");
+            assert!(
+                flags[flags.len() / 2..].iter().all(|x| *x),
+                "ω_e {w}: valid"
+            );
+        }
+    }
+
+    /// V-CTRL-006: near standstill (ω_e = 1.4 rad/s, 3 % R error) `est.valid` is false
+    /// throughout the settled half (the documented failure).
+    #[test]
+    fn v_ctrl_006_observer_invalid_near_standstill() {
+        let mut obs = observer(0.03);
+        let (_, flags) = run_full(&mut obs, 1.4, 2.0, LAMBDA);
+        assert!(!flags[flags.len() / 2..].iter().any(|x| *x));
+    }
+
     #[test]
     fn converges_above_ten_percent_speed() {
         // Rated ω_e = 2000 rad/s here; 10 % = 200 rad/s. From η = 0 (x = L·i) with the

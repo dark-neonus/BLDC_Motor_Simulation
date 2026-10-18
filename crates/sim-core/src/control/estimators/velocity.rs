@@ -207,7 +207,7 @@ mod tests {
     /// For ζ = 1 the −3 dB bandwidth of θ̂/θ is 2.48·ω_n (EQ-CTRL-08): a small sinusoid at
     /// that frequency comes through at 1/√2 (rtol 2 %), and at ω_n/10 at ≈ 1.
     #[test]
-    fn pll_bandwidth_matches_the_design_formula() {
+    fn v_ctrl_004_pll_bandwidth_matches_the_design_formula() {
         let wn = 2.0 * PI * 20.0;
         let gain = |w: f64| {
             let mut p = Pll::design(T, wn, 1.0);

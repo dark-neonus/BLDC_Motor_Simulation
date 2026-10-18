@@ -149,7 +149,7 @@
   - **Verify:** A test runs every controller preset × 3 motor presets for 1 s: no instability, no protection trips.
   - **Done when:** Passing.
 
-- [ ] **P09.T13** — V-CTRL sweep
+- [x] **P09.T13** — V-CTRL sweep
   - **Depends:** P09.T12, P09.T10, P09.T09
   - **Do:** Implement all V-CTRL catalog cases as tests.
   - **Verify:** `cargo nextest run -p sim-core v_ctrl`

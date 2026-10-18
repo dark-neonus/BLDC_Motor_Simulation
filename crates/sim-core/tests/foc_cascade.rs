@@ -48,7 +48,7 @@ fn metrics(samples: &[(f64, f64)]) -> (f64, f64) {
 /// 15 % of the design's; ≈ 0 with the prefilter. At the default ω_v = ω_c/10 the
 /// current loop's lag gives the 15–16 % control.md states.
 #[test]
-fn speed_step_settles_per_the_design() {
+fn v_ctrl_002_speed_step_settles_per_the_design() {
     let mp = PmsmParams::skeleton_6020();
     let wc = 2.0 * std::f64::consts::PI * 1000.0;
     let run = |sep: f64, prefilter: bool| {
