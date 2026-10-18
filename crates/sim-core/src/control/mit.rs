@@ -18,10 +18,26 @@ pub struct MitSpec {
     /// The current loop underneath (its cascade is not built).
     pub foc: crate::control::foc::FocSpec,
     pub rate_hz: f64,
-    /// Stiffness K_p [N·m/rad], damping K_d [N·m·s/rad], feed-forward τ_ff [N·m].
-    pub kp: f64,
-    pub kd: f64,
+    /// Stiffness K_p [N·m/rad], damping K_d [N·m·s/rad], feed-forward τ_ff [N·m]; without
+    /// K_p / K_d: K_p = J_L ω², K_d = 2ζ√(K_p J_L) (EQ-CTRL-12).
+    pub kp: Option<f64>,
+    pub kd: Option<f64>,
+    pub omega: Option<f64>,
+    pub zeta: f64,
     pub tau_ff: f64,
+}
+
+impl MitSpec {
+    /// (K_p, K_d) for the load-side total inertia J_L.
+    pub fn gains(&self, j_load: f64) -> Result<(f64, f64), String> {
+        let kp = match (self.kp, self.omega) {
+            (Some(kp), _) => kp,
+            (None, Some(w)) => j_load * w * w,
+            (None, None) => return Err("controller.kp: give kp or a bandwidth".into()),
+        };
+        let kd = self.kd.unwrap_or(2.0 * self.zeta * (kp * j_load).sqrt());
+        Ok((kp, kd))
+    }
 }
 
 /// Damping ratio of the hold: ζ = K_d / (2√(K_p J_L,tot)) (EQ-CTRL-07), with J_L,tot the
@@ -53,13 +69,15 @@ impl MitBlock {
         omega_l: Scaled,
         ratio: f64,
         kt: f64,
+        j_motor: f64,
         iq_ref: SignalId,
         bus: &mut SignalBus,
     ) -> Result<Self, String> {
+        let (kp, kd) = spec.gains(j_motor * ratio * ratio)?;
         let period = crate::engine::time::period_from_hz(spec.rate_hz)
             .map_err(|e| format!("controller.rate: {e}"))?
             .period;
-        for (n, x) in [("kp", spec.kp), ("kd", spec.kd)] {
+        for (n, x) in [("kp", kp), ("kd", kd)] {
             if !(x.is_finite() && x >= 0.0) {
                 return Err(format!("controller.{n} must be ≥ 0, got {x}"));
             }
@@ -67,8 +85,8 @@ impl MitBlock {
         let sp = Setpoints::get_or_register(bus).map_err(|e: SignalError| e.to_string())?;
         Ok(Self {
             period,
-            kp: spec.kp,
-            kd: spec.kd,
+            kp,
+            kd,
             tau_ff: spec.tau_ff,
             sp,
             theta_l,

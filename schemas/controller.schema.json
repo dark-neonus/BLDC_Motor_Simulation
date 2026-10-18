@@ -59,8 +59,15 @@
           "const": "open_loop"
         },
         "k_vf": {
-          "description": "Voltage per electrical speed (V/f slope), a back-EMF constant [V per rad/s].",
-          "$ref": "#/$defs/Param"
+          "description": "Voltage per electrical speed (V/f slope), a back-EMF constant [V per rad/s]\n(default 1.1·λ_m).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "limits": {
           "description": "Current, speed and voltage limits.",
@@ -71,16 +78,21 @@
           "$ref": "#/$defs/Param"
         },
         "v0": {
-          "description": "Voltage at standstill (boost).",
-          "$ref": "#/$defs/Param"
+          "description": "Voltage at standstill (boost; default 2R · 0.3 I_lim).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
       "required": [
         "family",
         "rate",
-        "v0",
-        "k_vf",
         "accel",
         "limits"
       ]
@@ -165,21 +177,54 @@
     {
       "type": "object",
       "properties": {
+        "bandwidth": {
+          "description": "Hold bandwidth ω/2π: K_p = J_L ω² when `kp` is not given (EQ-CTRL-12).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "current": {
           "description": "Current loop (EQ-CTRL-03).",
           "$ref": "#/$defs/LoopParams"
+        },
+        "damping": {
+          "description": "Damping ratio ζ: K_d = 2ζ√(K_p J_L) when `kd` is not given (default 0.7).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
         },
         "family": {
           "type": "string",
           "const": "mit"
         },
         "kd": {
-          "description": "MIT damping K_d [N·m·s/rad].",
-          "$ref": "#/$defs/Param"
+          "description": "MIT damping K_d [N·m·s/rad]; or from `damping`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "kp": {
-          "description": "MIT stiffness K_p [N·m/rad] (EQ-CTRL-07).",
-          "$ref": "#/$defs/Param"
+          "description": "MIT stiffness K_p [N·m/rad] (EQ-CTRL-07); or from `bandwidth`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "limits": {
           "description": "Current, speed and voltage limits.",
@@ -206,8 +251,6 @@
         "family",
         "current",
         "rate",
-        "kp",
-        "kd",
         "limits"
       ]
     },

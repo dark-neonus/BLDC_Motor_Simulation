@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=../../schemas/controller.schema.json
+# Six-step on Halls, gentle speed loop (EQ-CTRL-05).
+family: six_step
+rate: 20 kHz
+speed_loop: { rate: 1 kHz, bandwidth: 3 Hz }
+limits: { current: 5 A }

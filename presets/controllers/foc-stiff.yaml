@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../../schemas/controller.schema.json
+# Sensored FOC, stiff: needs a fast, clean encoder (AS5047P-class at 10 kHz).
+family: foc
+current: { rate: 40 kHz, bandwidth: 2 kHz }
+velocity: { rate: 10 kHz, bandwidth: 50 Hz }
+position: { rate: 2 kHz, bandwidth: 10 Hz, enabled: false }
+limits: { current: 5 A }

@@ -801,8 +801,15 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
         let rate = si(rate, Kind::Frequency, "controller.rate")?;
         let spec = OpenLoopSpec {
             rate_hz: rate,
-            v0: si(v0, Kind::Voltage, "controller.v0")?,
-            k_vf: si(k_vf, Kind::BackEmfConstant, "controller.k_vf")?,
+            v0: v0
+                .as_ref()
+                .map(|p| si(p, Kind::Voltage, "controller.v0"))
+                .transpose()?,
+            k_vf: k_vf
+                .as_ref()
+                .map(|p| si(p, Kind::BackEmfConstant, "controller.k_vf"))
+                .transpose()?,
+            i_max: si(&limits.current, Kind::Current, "controller.limits.current")?,
             accel: si(accel, Kind::AngularAcceleration, "controller.accel")?,
             speed_limit: match &limits.speed {
                 Some(p) => si(p, Kind::AngularVelocity, "controller.limits.speed")?,
@@ -852,6 +859,8 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
         kp,
         kd,
         tau_ff,
+        bandwidth,
+        damping,
         limits,
     } = c
     {
@@ -876,8 +885,24 @@ fn controller_spec(c: &ControllerParams, v_bus: f64) -> Result<(ControllerSpec, 
         let spec = MitSpec {
             foc,
             rate_hz: si(rate, Kind::Frequency, "controller.rate")?,
-            kp: si(kp, Kind::TorsionalStiffness, "controller.kp")?,
-            kd: si(kd, Kind::RotationalDamping, "controller.kd")?,
+            kp: kp
+                .as_ref()
+                .map(|p| si(p, Kind::TorsionalStiffness, "controller.kp"))
+                .transpose()?,
+            kd: kd
+                .as_ref()
+                .map(|p| si(p, Kind::RotationalDamping, "controller.kd"))
+                .transpose()?,
+            omega: bandwidth
+                .as_ref()
+                .map(|p| {
+                    Ok::<_, BuildError>(
+                        2.0 * std::f64::consts::PI
+                            * si(p, Kind::Frequency, "controller.bandwidth")?,
+                    )
+                })
+                .transpose()?,
+            zeta: damping.unwrap_or(0.7),
             tau_ff: opt(tau_ff, Kind::Torque, "controller.tau_ff")?,
         };
         return Ok((ControllerSpec::Mit(spec), cur.rate_hz));

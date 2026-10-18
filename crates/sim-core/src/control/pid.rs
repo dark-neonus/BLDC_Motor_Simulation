@@ -118,6 +118,10 @@ impl LoopLaw for Pid {
     fn update(&mut self, r: f64, y: f64, t: f64) -> f64 {
         Pid::update(self, r, y, t)
     }
+    fn update_limited(&mut self, r: f64, y: f64, t: f64, lo: f64, hi: f64) -> f64 {
+        let (lo, hi) = (lo.max(self.limits.0), hi.min(self.limits.1));
+        self.step(r, y, 0.0, (lo, hi.max(lo)), t)
+    }
     fn reset(&mut self) {
         Pid::reset(self);
     }

@@ -460,8 +460,8 @@ pub fn validate_controller(c: &ControllerParams) -> Vec<Issue> {
             limits: l,
         } => {
             v.p(rate, Kind::Frequency, "controller.rate", Pos);
-            v.p(v0, Kind::Voltage, "controller.v0", NonNeg);
-            v.p(k_vf, Kind::BackEmfConstant, "controller.k_vf", NonNeg);
+            v.o(v0, Kind::Voltage, "controller.v0", NonNeg);
+            v.o(k_vf, Kind::BackEmfConstant, "controller.k_vf", NonNeg);
             v.p(accel, Kind::AngularAcceleration, "controller.accel", Pos);
             limits(&mut v, l);
         }
@@ -489,12 +489,18 @@ pub fn validate_controller(c: &ControllerParams) -> Vec<Issue> {
             kp,
             kd,
             tau_ff,
+            bandwidth,
             limits: l,
+            ..
         } => {
             loop_(&mut v, current, "controller.current");
             v.p(rate, Kind::Frequency, "controller.rate", Pos);
-            v.p(kp, Kind::TorsionalStiffness, "controller.kp", NonNeg);
-            v.p(kd, Kind::RotationalDamping, "controller.kd", NonNeg);
+            v.o(kp, Kind::TorsionalStiffness, "controller.kp", NonNeg);
+            v.o(kd, Kind::RotationalDamping, "controller.kd", NonNeg);
+            v.o(bandwidth, Kind::Frequency, "controller.bandwidth", Pos);
+            if kp.is_none() && bandwidth.is_none() {
+                v.reject("controller.kp", "give kp or a bandwidth");
+            }
             v.o(tau_ff, Kind::Torque, "controller.tau_ff", Any);
             limits(&mut v, l);
         }

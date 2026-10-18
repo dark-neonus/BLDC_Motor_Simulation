@@ -133,17 +133,19 @@ fn off_leg_freewheels_then_floats_then_reconnects() {
     assert!((sig(&e, "motor.i_a") / expect - 1.0).abs() < 1e-6);
 }
 
-/// Spinning faster than the bus with leg A Off: its floating terminal hits V_bus + V_f,
-/// the high diode conducts (i_a < 0, regeneration), and the phase floats again at the
-/// next zero. With B and C Low a conducting low diode shorts the motor, so conduction
-/// spans long parts of the cycle: only a few float/reconnect transitions in 40 ms.
+/// Spinning faster than the bus with leg A Off: its free terminal voltage passes
+/// V_bus + V_f and −V_f each cycle. The high diode conducts (i_a < 0, regeneration), the
+/// low one too (i_a > 0; with B and C Low it shorts the motor), and the terminal stays
+/// within the clamps. The inductive current reaches zero only after the EMF has passed
+/// the opposite bound, so the current hands over diode to diode (EQ-MOT-12: the phase
+/// reconnects at once when it opens beyond a bound).
 #[test]
 fn floating_terminal_reconnects_through_its_diode() {
     use LegState::*;
     // e peak = λ·p·ω = 0.03·7·200 = 42 V ≫ 12 V.
     let mut e = rig(false, 200.0, [Off, Low, Low]);
-    let (mut neg, mut opened, mut closed) = (false, 0, 0);
-    let mut prev = sig(&e, "motor.open_phase");
+    let (mut neg, mut pos, mut handovers) = (false, false, 0);
+    let mut prev = sig(&e, "motor.diode_a");
     for k in 1..=8000 {
         e.step_until(SimTime::from_secs_f64(k as f64 * 5e-6))
             .unwrap();
@@ -153,17 +155,24 @@ fn floating_terminal_reconnects_through_its_diode() {
             "{va}"
         );
         neg |= ia < -1e-3;
-        let op = sig(&e, "motor.open_phase");
-        if op != prev {
-            if op == 0.0 { opened += 1 } else { closed += 1 }
+        pos |= ia > 1e-3;
+        let d = sig(&e, "motor.diode_a");
+        if d != 0.0 && prev != 0.0 && d != prev {
+            handovers += 1;
         }
-        prev = op;
+        if d != 0.0 {
+            prev = d;
+        }
+        // Each diode carries its own current direction only.
+        if d == -1.0 {
+            assert!(ia <= 1e-6, "high diode with i_a = {ia}");
+        }
+        if d == 1.0 {
+            assert!(ia >= -1e-6, "low diode with i_a = {ia}");
+        }
     }
-    assert!(neg, "the high diode conducted");
-    assert!(
-        opened >= 2 && closed >= 2,
-        "opened {opened}, reconnected {closed}"
-    );
+    assert!(neg && pos, "both diodes conducted");
+    assert!(handovers >= 4, "diode handovers: {handovers}");
 }
 
 /// P07 review #9: the `motor.open_phase` fault takes over a leg-driven float (same

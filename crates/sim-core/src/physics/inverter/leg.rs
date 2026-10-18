@@ -148,7 +148,8 @@ pub fn averaged_voltage(
 
 /// Averaged six-step High leg (EQ-INV-07): H for d, O otherwise (the low diode clamps to
 /// −V_f for i > 0, the high diode to V_bus + V_f for i < 0), blended with
-/// w = (1 + σ(i))/2. Returns (v̄_xT, its DC-link current).
+/// w = (1 + σ(i))/2. Returns (v̄_xT, its DC-link current). At d = 0 the controller commands
+/// the leg Off instead (the blend would hold it at ≈ V_bus/2 at zero current).
 pub fn six_step_high_voltage(d: f64, i: f64, v_bus: f64, dev: &Devices, i_eps: f64) -> (f64, f64) {
     let w = 0.5 * (1.0 + (i / i_eps).tanh());
     let on = d * (v_bus - dev.r_on * i);
@@ -519,24 +520,6 @@ mod tests {
         let (vn, i_n) = six_step_high_voltage(d, -2.0, v, &D, 0.01);
         assert!((vn - (d * (v + D.r_on * 2.0) + (1.0 - d) * (v + D.v_f))).abs() < 1e-12);
         assert!((i_n + 2.0).abs() < 1e-12);
-    }
-
-    /// Inside the pulse-dropping band the switching leg stays Low (v = −R_on·i, PWM test
-    /// `duties_within_the_dead_time_drop_the_pulse`); the averaged model is continuous and
-    /// deviates by 2d·(V_bus + V_f − R_on|i|) for the sign that gains on-time and by
-    /// 2d·(R_on|i| − V_f) for the other (EQ-INV-03, P08 review m3).
-    #[test]
-    fn averaged_deviation_inside_the_pulse_dropping_band() {
-        let (f, v, i) = (0.01, 24.0, 3.0);
-        let d = 0.5 * f;
-        let gain = averaged_voltage(d, -i, v, &D, f, 0.01) - D.r_on * i;
-        let lose = averaged_voltage(d, i, v, &D, f, 0.01) + D.r_on * i;
-        let want_gain = 2.0 * d * (v + D.v_f - D.r_on * i);
-        let want_lose = 2.0 * d * (D.r_on * i - D.v_f);
-        assert!((gain - want_gain).abs() < 1e-12, "{gain} vs {want_gain}");
-        assert!((lose - want_lose).abs() < 1e-12, "{lose} vs {want_lose}");
-        // The stated bounds: 2(t_d/T)(V_bus + V_f) and 2(t_d/T)·V_f.
-        assert!(gain.abs() <= 2.0 * f * (v + D.v_f) && lose.abs() <= 2.0 * f * D.v_f);
     }
 
     /// Review P07 #4 / P08.T10: a terminal reconnected at the high bound uses the high

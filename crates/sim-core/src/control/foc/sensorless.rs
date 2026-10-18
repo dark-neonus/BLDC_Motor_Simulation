@@ -85,6 +85,9 @@ struct State {
     omega: f64,
     /// Since when est.valid (I/f) or its loss (closed loop) has held.
     since: Option<f64>,
+    /// Blend: θ̂ − θ* unwrapped, and its last wrapped value.
+    delta: f64,
+    last: f64,
 }
 
 impl Default for State {
@@ -95,6 +98,8 @@ impl Default for State {
             theta: 0.0,
             omega: 0.0,
             since: None,
+            delta: 0.0,
+            last: 0.0,
         }
     }
 }
@@ -211,6 +216,9 @@ impl DiscreteBlock for SensorlessBlock {
                     let since = *st.since.get_or_insert(now);
                     if now - since >= s.valid_time {
                         (st.mode, st.t_mode, st.since) = (Mode::Blend, Some(now), None);
+                        // Wrapped once at the start; unwrapped from here on.
+                        st.last = wrap_pi(th_hat - st.theta);
+                        st.delta = st.last;
                     }
                 } else {
                     st.since = None;
@@ -220,7 +228,10 @@ impl DiscreteBlock for SensorlessBlock {
             Mode::Blend => {
                 ramp(st);
                 let wgt = ((now - t_mode) / s.blend_time).min(1.0);
-                let th = st.theta + wgt * wrap_pi(th_hat - st.theta);
+                let d = wrap_pi(th_hat - st.theta);
+                st.delta += wrap_pi(d - st.last);
+                st.last = d;
+                let th = st.theta + wgt * st.delta;
                 let iq = s.current * sign(st.omega);
                 if wgt >= 1.0 {
                     // Bumpless: the velocity PI starts from the I/f current.

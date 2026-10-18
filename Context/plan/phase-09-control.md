@@ -142,7 +142,7 @@
     - all loops are stable (no oscillation growth over 1 s)
   - **Done when:** Passing.
 
-- [ ] **P09.T12** — Controller presets & preset scenes
+- [x] **P09.T12** — Controller presets & preset scenes
   - **Depends:** P09.T05, P09.T06, P09.T07, P09.T08, P09.T11
   - **Do:** `presets/controllers/`: six-step-{soft,medium,stiff}, open-loop-{slow,fast}, foc-{soft,medium,stiff} (sensored), foc-sensorless, mit-{soft,medium,stiff}. Gains are expressed **relative to the motor** (bandwidth targets → auto-computed at scene build), so they work on any motor preset. Update the example scenes.
   - **Files:** `presets/controllers/*.yaml`, `presets/scenes/*.yaml`

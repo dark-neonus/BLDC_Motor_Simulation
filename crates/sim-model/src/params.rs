@@ -665,10 +665,11 @@ pub enum ControllerParams {
     OpenLoop {
         /// Controller rate.
         rate: Param,
-        /// Voltage at standstill (boost).
-        v0: Param,
-        /// Voltage per electrical speed (V/f slope), a back-EMF constant [V per rad/s].
-        k_vf: Param,
+        /// Voltage at standstill (boost; default 2R · 0.3 I_lim).
+        v0: Option<Param>,
+        /// Voltage per electrical speed (V/f slope), a back-EMF constant [V per rad/s]
+        /// (default 1.1·λ_m).
+        k_vf: Option<Param>,
         /// Speed-reference ramp, load side [rad/s²].
         accel: Param,
         /// Current, speed and voltage limits.
@@ -699,10 +700,14 @@ pub enum ControllerParams {
         current: LoopParams,
         /// Controller rate.
         rate: Param,
-        /// MIT stiffness K_p [N·m/rad] (EQ-CTRL-07).
-        kp: Param,
-        /// MIT damping K_d [N·m·s/rad].
-        kd: Param,
+        /// MIT stiffness K_p [N·m/rad] (EQ-CTRL-07); or from `bandwidth`.
+        kp: Option<Param>,
+        /// MIT damping K_d [N·m·s/rad]; or from `damping`.
+        kd: Option<Param>,
+        /// Hold bandwidth ω/2π: K_p = J_L ω² when `kp` is not given (EQ-CTRL-12).
+        bandwidth: Option<Param>,
+        /// Damping ratio ζ: K_d = 2ζ√(K_p J_L) when `kd` is not given (default 0.7).
+        damping: Option<f64>,
         /// MIT feed-forward torque [N·m].
         tau_ff: Option<Param>,
         /// Current, speed and voltage limits.

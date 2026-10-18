@@ -93,6 +93,11 @@ impl LoopConfig {
 /// A loop law: reference r and feedback y → command u, at period T [s].
 pub trait LoopLaw: Send {
     fn update(&mut self, r: f64, y: f64, t: f64) -> f64;
+    /// One update clamped to this tick's limits; laws with anti-windup override it so the
+    /// integrator respects the limits that actually apply.
+    fn update_limited(&mut self, r: f64, y: f64, t: f64, lo: f64, hi: f64) -> f64 {
+        self.update(r, y, t).clamp(lo, hi)
+    }
     fn reset(&mut self);
     /// Follow an externally imposed output u while the loop is disabled, so that
     /// re-enabling it is bumpless (an integrator starts from u).
@@ -160,9 +165,18 @@ pub struct LoopBlock {
     enabled: bool,
     /// |reference| limit (e.g. the speed limit on a velocity reference); ∞ = none.
     ref_limit: f64,
+    /// Output limits published by another block each tick (lo, hi), intersected with the
+    /// static ones (e.g. the six-step current cap).
+    dyn_limits: Option<(SignalId, SignalId)>,
 }
 
 impl LoopBlock {
+    /// Also clamp the output to the limits in signals `lo`, `hi` (read each tick).
+    pub fn with_dynamic_limits(mut self, lo: SignalId, hi: SignalId) -> Self {
+        self.dyn_limits = Some((lo, hi));
+        self
+    }
+
     /// Clamp the reference to ±`lim` before the ramp.
     pub fn with_reference_limit(mut self, lim: f64) -> Self {
         self.ref_limit = lim;
@@ -178,6 +192,7 @@ impl LoopBlock {
             ramp: RampLimiter::new(cfg.ramp),
             enabled: cfg.enabled,
             ref_limit: f64::INFINITY,
+            dyn_limits: None,
         }
     }
 }
@@ -194,7 +209,13 @@ impl DiscreteBlock for LoopBlock {
     }
     fn step(&mut self, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
         let t = self.cfg.period.as_secs_f64();
-        let (lo, hi) = self.cfg.limits;
+        let (mut lo, mut hi) = self.cfg.limits;
+        if let Some((l, h)) = self.dyn_limits {
+            (lo, hi) = (lo.max(ctx.bus.get(l)), hi.min(ctx.bus.get(h)));
+            if lo > hi {
+                (lo, hi) = (0.0, 0.0);
+            }
+        }
         let (r_in, y) = (
             self.io
                 .reference
@@ -204,7 +225,7 @@ impl DiscreteBlock for LoopBlock {
         );
         let u = if self.enabled {
             let r = self.ramp.step(r_in, t);
-            self.law.update(r, y, t).clamp(lo, hi)
+            self.law.update_limited(r, y, t, lo, hi)
         } else {
             // Bypass: the inner loop gets the setpoint of its own quantity. The law
             // follows it, and the ramp restarts from the measurement on re-enable.

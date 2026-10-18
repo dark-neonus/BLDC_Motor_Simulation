@@ -660,6 +660,32 @@ impl MotorElectrical {
         self.pending[k] = Some(if i_k < 0.0 { -1.0 } else { 1.0 });
     }
 
+    /// A phase just opened by an Off leg (not a fault): if its free terminal voltage
+    /// v_n + e_k already lies beyond a diode bound, that diode conducts at once and the
+    /// current reverses through it (EQ-MOT-12). The bound events only see a terminal
+    /// moving *past* a bound, so this case is decided here.
+    fn reconnect_if_beyond_bound(&mut self, x_own: &mut [f64], bus: &SignalBus) {
+        let (Some(k), Some(l), false) = (self.open, self.legs, self.fault_open) else {
+            return;
+        };
+        let (y, z) = ((k + 1) % 3, (k + 2) % 3);
+        let (v, e) = (
+            self.inp.v.map(|id| bus.get(id)),
+            self.out.e.map(|id| bus.get(id)),
+        );
+        let v_k = 0.5 * (v[y] + v[z] - e[y] - e[z]) + e[k];
+        let d = if v_k > bus.get(l.v_bus) + l.v_f {
+            -1.0
+        } else if v_k < -l.v_f {
+            1.0
+        } else {
+            return;
+        };
+        self.reconnect(x_own);
+        self.pending[k] = Some(d);
+        self.diode[k] = d;
+    }
+
     /// Switch to the open-phase state (EQ-MOT-11) with phase k's current at zero.
     fn enter_open(&mut self, k: usize, x_own: &mut [f64]) {
         let (th, lam) = (self.last_theta_e, self.last_lambda);
@@ -896,10 +922,10 @@ impl PlantModule for MotorElectrical {
     fn on_event(
         &mut self,
         idx: usize,
-        _rising: bool,
+        rising: bool,
         _t: f64,
         x_own: &mut [f64],
-        _bus: &mut SignalBus,
+        bus: &mut SignalBus,
     ) {
         match idx {
             0..=2 => {
@@ -908,9 +934,17 @@ impl PlantModule for MotorElectrical {
                 if self.pending[idx].is_some() {
                     self.pending = [None; 3];
                     self.enter_open(idx, x_own);
+                    self.reconnect_if_beyond_bound(x_own, bus);
                 }
             }
             _ => {
+                // Only a terminal moving *past* a bound turns its diode on (g falling
+                // through zero). Coming back inside (g rising) the diode is reverse-biased:
+                // reconnecting there forced the current the wrong way through the diode
+                // (found in P09.T12: a six-step 5010 reached 33 A on a 20 A limit).
+                if rising {
+                    return;
+                }
                 let Some(k) = self.open else { return };
                 // A diode starts conducting: back to two states; the current grows out of
                 // the high diode (i < 0) or into the low one (i > 0) and the phase opens
@@ -970,6 +1004,7 @@ impl PlantModule for MotorElectrical {
                 }
                 if self.open.is_some() {
                     self.pending = [None; 3];
+                    self.reconnect_if_beyond_bound(x_own, bus);
                     break;
                 }
             }

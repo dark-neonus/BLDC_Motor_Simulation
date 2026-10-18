@@ -21,9 +21,12 @@ use crate::physics::inverter::modulation::svpwm_ab;
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpenLoopSpec {
     pub rate_hz: f64,
-    /// Boost V_0 [V] and slope k_vf [V per electrical rad/s].
-    pub v0: f64,
-    pub k_vf: f64,
+    /// Boost V_0 [V] and slope k_vf [V per electrical rad/s]; `None`: the motor-relative
+    /// defaults 2R·0.3·I_lim and 1.1·λ_m (resolved by `resolve`).
+    pub v0: Option<f64>,
+    pub k_vf: Option<f64>,
+    /// Current limit [A] (for the default boost).
+    pub i_max: f64,
     /// Speed-reference ramp, load side [rad/s²].
     pub accel: f64,
     /// Load-side speed limit [rad/s] (∞ = none).
@@ -78,9 +81,18 @@ struct State {
     last: f64,
 }
 
+/// Resolved V/f settings.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Vf {
+    v0: f64,
+    k_vf: f64,
+    accel: f64,
+    speed_limit: f64,
+}
+
 pub struct OpenLoopBlock {
     period: SimTime,
-    spec: OpenLoopSpec,
+    spec: Vf,
     /// Load setpoint → electrical speed: gain N·p on `ctrl.omega_ref`.
     reference: Scaled,
     elec_per_load: f64,
@@ -93,9 +105,12 @@ pub struct OpenLoopBlock {
 }
 
 impl OpenLoopBlock {
+    /// `r`, `lambda`: the motor's phase resistance and flux (defaults of V_0 and k_vf).
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         spec: OpenLoopSpec,
+        r: f64,
+        lambda: f64,
         omega_ref: SignalId,
         elec_per_load: f64,
         theta_true: SignalId,
@@ -106,6 +121,12 @@ impl OpenLoopBlock {
         let period = crate::engine::time::period_from_hz(spec.rate_hz)
             .map_err(|e| format!("controller.rate: {e}"))?
             .period;
+        let spec = Vf {
+            v0: spec.v0.unwrap_or(2.0 * r * 0.3 * spec.i_max),
+            k_vf: spec.k_vf.unwrap_or(1.1 * lambda),
+            accel: spec.accel,
+            speed_limit: spec.speed_limit,
+        };
         for (n, x) in [("v0", spec.v0), ("k_vf", spec.k_vf)] {
             if !(x.is_finite() && x >= 0.0) {
                 return Err(format!("controller.{n} must be ≥ 0, got {x}"));

@@ -308,8 +308,8 @@ pub fn apply(scene: &ResolvedScene, a: &Autotune) -> ResolvedScene {
         } => {
             set_current(current);
             (*kp, *kd) = (
-                num(g.mit_kp, Source::Measured),
-                num(g.mit_kd, Source::Measured),
+                Some(num(g.mit_kp, Source::Measured)),
+                Some(num(g.mit_kd, Source::Measured)),
             );
         }
         _ => {}

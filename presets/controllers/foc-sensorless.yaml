@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../../schemas/controller.schema.json
+# Sensorless FOC on the flux observer, align + I/f startup (EQ-CTRL-09/10).
+family: foc
+sensorless: true
+current: { rate: 20 kHz, bandwidth: 1 kHz }
+velocity: { rate: 20 kHz, bandwidth: 10 Hz }
+limits: { current: 5 A }

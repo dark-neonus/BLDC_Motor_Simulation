@@ -35,6 +35,20 @@ pub fn emf_shape_ll(shape: &Shape) -> f64 {
         / n as f64
 }
 
+/// The smallest line-to-line EMF shape over the angle, min(k_max − k_min): the current cap
+/// uses it so the current stays under the limit anywhere in a sector (EQ-CTRL-05);
+/// √3·cos 30° = 1.5 for a sinusoidal machine, the flat 2·k for a 120° trapezoid.
+pub fn emf_shape_ll_min(shape: &Shape) -> f64 {
+    let n = 3600;
+    (0..n)
+        .map(|i| {
+            let th = 2.0 * PI * (i as f64 + 0.5) / n as f64;
+            let k: [f64; 3] = std::array::from_fn(|x| shape.k(th - x as f64 * 2.0 * PI / 3.0));
+            k.iter().cloned().fold(f64::MIN, f64::max) - k.iter().cloned().fold(f64::MAX, f64::min)
+        })
+        .fold(f64::MAX, f64::min)
+}
+
 /// Speed-PI gains (K_p, K_i) for bandwidth ω_s [rad/s] (EQ-CTRL-05).
 pub fn speed_design(omega_s: f64, k_e: f64, r: f64, j: f64, v_bus: f64) -> (f64, f64) {
     let tau_m = 2.0 * r * j / (k_e * k_e);
@@ -74,14 +88,19 @@ pub struct DutyLimit {
 }
 
 impl DutyLimit {
-    pub fn cap(&self, bus: &SignalBus) -> f64 {
+    /// The duty cap for a command of sign `u_sign` (EQ-CTRL-05): motoring allows the
+    /// back-EMF headroom, plugging (u against ω) subtracts it.
+    pub fn cap(&self, bus: &SignalBus, u_sign: f64) -> f64 {
         let v = bus.get(self.v_bus);
         if v <= 0.0 {
             return 0.0;
         }
-        let w = (self.omega.gain * bus.get(self.omega.id)).abs();
-        let num = self.k_e * w + self.v_f + 2.0 * (self.r + self.r_on) * self.i_max;
-        (num / (v + self.v_f)).min(1.0)
+        let w = self.omega.gain * bus.get(self.omega.id);
+        let emf = self.k_e * w.abs();
+        let base = self.v_f + 2.0 * (self.r + self.r_on) * self.i_max;
+        let plugging = w * u_sign < 0.0;
+        let num = if plugging { base - emf } else { base + emf };
+        (num.max(0.0) / (v + self.v_f)).min(1.0)
     }
 }
 
@@ -98,6 +117,11 @@ pub struct SixStepBlock {
     interp: Interp,
     /// `ctrl.six_step.omega`: the Hall-interval speed ω̂e/p [rad/s].
     omega_out: SignalId,
+    /// `ctrl.six_step.u_min`, `u_max`: the command limits this tick (current cap), for
+    /// the speed loop's anti-windup.
+    u_lim: (SignalId, SignalId),
+    /// The speed setpoint (`ctrl.omega_ref`): the speed loop's command keeps its sign.
+    speed_ref: Option<SignalId>,
     pole_pairs: f64,
 }
 
@@ -125,6 +149,20 @@ impl SixStepBlock {
             "motor speed from the Hall interval (ω̂e/p)",
             SignalKind::Output,
         )?;
+        let u_min = bus.register(
+            "ctrl.six_step.u_min",
+            "-",
+            "lowest command the current cap allows this tick",
+            SignalKind::Output,
+        )?;
+        let u_max = bus.register(
+            "ctrl.six_step.u_max",
+            "-",
+            "highest command the current cap allows this tick",
+            SignalKind::Output,
+        )?;
+        bus.set(u_min, -1.0);
+        bus.set(u_max, 1.0);
         let sector = bus.register(
             "ctrl.six_step.sector",
             "-",
@@ -142,8 +180,16 @@ impl SixStepBlock {
             sector,
             interp: Interp::default(),
             omega_out,
+            u_lim: (u_min, u_max),
+            speed_ref: None,
             pole_pairs: 1.0,
         })
+    }
+
+    /// Limit the speed loop's command to the direction of this setpoint signal.
+    pub fn with_speed_ref(mut self, id: SignalId) -> Self {
+        self.speed_ref = Some(id);
+        self
     }
 
     pub fn with_pole_pairs(mut self, p: f64) -> Self {
@@ -212,8 +258,22 @@ impl DiscreteBlock for SixStepBlock {
     }
     fn step(&mut self, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
         let t = ctx.t.as_secs_f64();
-        let cap = self.limit.map_or(1.0, |l| l.cap(ctx.bus));
-        let u = ctx.bus.get(self.cmd).clamp(-cap, cap);
+        let u_raw = ctx.bus.get(self.cmd).clamp(-1.0, 1.0);
+        let (cap_pos, cap_neg) = self
+            .limit
+            .map_or((1.0, 1.0), |l| (l.cap(ctx.bus, 1.0), l.cap(ctx.bus, -1.0)));
+        // The speed loop's limits: the setpoint's direction only (EQ-CTRL-05 step 2).
+        let dir = self.speed_ref.map_or(0.0, |id| ctx.bus.get(id));
+        let (lo, hi) = match self.speed_ref {
+            None => (-cap_neg, cap_pos),
+            Some(_) if dir > 0.0 => (0.0, cap_pos),
+            Some(_) if dir < 0.0 => (-cap_neg, 0.0),
+            // No setpoint (stop, or direct duty with the loop off): both directions.
+            Some(_) => (-cap_neg, cap_pos),
+        };
+        ctx.bus.set(self.u_lim.0, lo);
+        ctx.bus.set(self.u_lim.1, hi);
+        let u = u_raw.clamp(-cap_neg, cap_pos);
         let th = match self.angle {
             CommutationAngle::True(id) => Some(ctx.bus.get(id)),
             CommutationAngle::Hall(id) => {
@@ -250,6 +310,12 @@ impl DiscreteBlock for SixStepBlock {
             }
         }
         for ((out, duty), leg) in self.legs.iter().zip(self.duties).zip(legs) {
+            // Zero command: the High leg does not switch at all — it is Off (EQ-INV-07).
+            let leg = if leg == LegState::High && u == 0.0 {
+                LegState::Off
+            } else {
+                leg
+            };
             ctx.bus.set(*out, leg.to_signal());
             let d = if leg == LegState::High { u.abs() } else { 0.0 };
             ctx.bus.set(duty, d);
@@ -336,11 +402,13 @@ pub fn build(
         ));
     }
     let k_e = motor.pole_pairs * motor.lambda * emf_shape_ll(shape);
+    let sp = Setpoints::get_or_register(bus).map_err(e)?;
     let block = SixStepBlock::new(period, spec.advance, angle, legs, duties, bus)
         .map_err(e)?
+        .with_speed_ref(sp.omega)
         .with_pole_pairs(motor.pole_pairs)
         .with_duty_limit(DutyLimit {
-            k_e,
+            k_e: motor.pole_pairs * motor.lambda * emf_shape_ll_min(shape),
             r: motor.r,
             r_on: spec.r_on,
             v_f: spec.v_f,
@@ -348,7 +416,6 @@ pub fn build(
             omega: omega_m,
             v_bus,
         });
-    let sp = Setpoints::get_or_register(bus).map_err(e)?;
     let duty_ref = match bus.id("ctrl.duty_ref") {
         Ok(id) => id,
         Err(_) => bus
@@ -395,7 +462,9 @@ pub fn build(
         },
         Box::new(Pid::pi(kp, ki, (-1.0, 1.0), AntiWindup::Clamping)),
     )
-    .with_reference_limit(n * spec.speed_limit);
+    .with_reference_limit(n * spec.speed_limit)
+    // Anti-windup against the current cap that actually limits the command.
+    .with_dynamic_limits(block.u_lim.0, block.u_lim.1);
     // The speed loop first: at shared instants the commutation uses its fresh command.
     Ok(vec![Box::new(speed), Box::new(block)])
 }

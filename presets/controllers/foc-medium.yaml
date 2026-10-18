@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../../schemas/controller.schema.json
+# Sensored FOC, medium stiffness: gains from the motor (EQ-CTRL-03/04).
+family: foc
+current: { rate: 20 kHz, bandwidth: 1 kHz }
+velocity: { rate: 5 kHz, bandwidth: 25 Hz }
+position: { rate: 1 kHz, bandwidth: 5 Hz, enabled: false }
+limits: { current: 5 A }

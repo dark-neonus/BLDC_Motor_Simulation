@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=../../schemas/controller.schema.json
+# Open-loop V/f, slow ramp; V/f slope 1.1·λ and boost from the motor (EQ-CTRL-06).
+family: open_loop
+rate: 10 kHz
+accel: 30 rad/s^2
+limits: { current: 5 A }

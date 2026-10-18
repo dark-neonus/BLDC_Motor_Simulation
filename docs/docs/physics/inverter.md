@@ -152,7 +152,7 @@ Six-step drives two phases: the phase with the most positive back-EMF goes High 
 - **Averaged six-step**, High leg with $i > 0$: $\bar v_{xT} = d(V_{bus} - R_{on}i) + (1-d)(-V_f)$ and $\bar i_{dc} \mathrel{+}= d\,i$. With $i < 0$ the diode clamps to $V_{bus} + V_f$ during O, so $\bar v_{xT} = d(V_{bus} - R_{on}i) + (1-d)(V_{bus} + V_f)$ and $\bar i_{dc} \mathrel{+}= i$. Off legs follow EQ-INV-01.
 - Hall sensors give these sectors directly (EQ-SENS).
 
-**Averaged six-step at $i \approx 0$.** The two branches above are blended with $w = (1+\sigma(i))/2$ (weight on the $i > 0$ form), the same smoothing as EQ-INV-03. $i_\epsilon$ is the parameter `inverter.i_eps` (default 0.01 A).
+**Averaged six-step at $i \approx 0$.** The two branches above are blended with $w = (1+\sigma(i))/2$ (weight on the $i > 0$ form), the same smoothing as EQ-INV-03; the high-diode branch draws its current from the bus, so the blend stays energy-consistent. At $d = 0$ the High leg does not switch at all: the controller commands it **Off** (EQ-INV-01, the motor's floating-phase rule), because the blend alone would hold the terminal at ≈ $V_{bus}/2$ at zero current and drive a motor with zero duty (found in P09.T12; a version that let the O part float at $v_n + e_x$ instead created energy at small currents). $i_\epsilon$ is the parameter `inverter.i_eps` (default 0.01 A).
 
 ## Losses and DC-link current
 

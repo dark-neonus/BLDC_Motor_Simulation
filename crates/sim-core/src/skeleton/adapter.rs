@@ -484,7 +484,14 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
                 }
             };
             blocks.push(Box::new(MitBlock::new(
-                spec, io.theta_l, omega_l, n, info.kt, sig.iq_ref, &mut bus,
+                spec,
+                io.theta_l,
+                omega_l,
+                n,
+                info.kt,
+                info.j_motor,
+                sig.iq_ref,
+                &mut bus,
             )?));
         }
         ControllerSpec::Custom(spec) => {
@@ -524,6 +531,8 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
             let sp = crate::control::setpoint::Setpoints::get_or_register(&mut bus).map_err(err)?;
             blocks.push(Box::new(OpenLoopBlock::new(
                 spec.clone(),
+                mp.r,
+                mp.lambda,
                 sp.omega,
                 n * mp.p,
                 id(&bus, "motor.theta_e"),

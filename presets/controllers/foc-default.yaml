@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=../../schemas/controller.schema.json
-# Placeholder FOC tuning; real presets come with auto-tune (P09.T12).
+# The default FOC (tests and quick scenes); see foc-{soft,medium,stiff} for the tuned family.
 family: foc
 current: { rate: 20 kHz, bandwidth: 1 kHz }
 velocity: { rate: 5 kHz, bandwidth: 50 Hz }
