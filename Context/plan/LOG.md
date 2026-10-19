@@ -635,3 +635,20 @@ Phase-end review (P08.T09): 2 majors, 8 minors, no blockers. M1 (no sensor/estim
 
 ## 2026-10-18 — P09.T13 V-CTRL sweep
 - Every V-CTRL catalog case has an id-named test; `cargo nextest run -p sim-core v_ctrl` → 18/18 pass: 001 current-step τ63 (foc_current), 002 speed step at ω_c/20 (foc_cascade, renamed), 003 MIT deflection (mit), 004 PLL bandwidth (velocity estimator, renamed), 005 observer with a 3 % R error at 10 % and 100 % of rated speed: worst settled error 4.8° and 0.55° (< 5°), valid (new test; the catalog claim was checked first — it holds with little margin at 10 %), 006 observer invalid near standstill (new), 007 calibration, 008 auto-tune × 9 presets, 009 V/f loss of sync, 010 Luau PI = Rust PI. The Python halves of the "both" cases are P11.
+
+## 2026-10-19 — P09 phase gate
+- Efficiency mode adopted (user): PLAN.md header; same plan, tighter tasks, cheaper models for mechanical work.
+- `just check` green (314 tests incl. e2e), `just validate` 5/5. Exit criteria: every family builds from presets and is swept on three motors with tracking + `energy.ok` asserted; V-CTRL 18/18; auto-tune within ±20 % on 9 presets; Luau PI ≈ 1.6× real time.
+- Phase review (subagent): 6 majors, 14 minors. Fixed:
+  - M1 Luau determinism (seeded `math.random`, wall clock removed);
+  - M6 bumpless re-enable with a ramp;
+  - M5 sensorless applies the speed limit and ramp, and refuses `position`;
+  - M4 the sweep asserts tracking and energy. The MIT presets were retuned to 10/25/50 Hz: a bare-rotor 2–10 Hz hold sat where K_p·e met the cogging torque;
+  - M3 three new preset scenes (MIT arm hold, sensorless spin, open-loop spin) with tests;
+  - M2 energy creation in six-step had three causes (EQ-MOT-12/EQ-INV-07):
+    1. two Off legs, the coast at u = 0: the second Off phase's reversed current went backwards through its latched diode (23 A, bus to 67 V). Now the zero-current mode;
+    2. a diode reconnect starting at −1e-17 never crossed the zero event: offset by the zero tolerance;
+    3. the averaged H/O tanh blend assumed continuous conduction: the High leg now floats at its current zero, with lower clamp d·V − (1−d)V_f, and bounds are re-checked after every discrete event with leg-model voltages.
+
+    Trying a wider i_ε instead drove the motor at zero duty (V/2), and an inverter-side reverse-diode guard put a discontinuity inside RK stages; both were rejected. The six-step sweep load rose to 30 % (a unidirectional drive slows only through its load; user's choice).
+  - Minors: m1 (motor.md), m2 (coast note in EQ-CTRL-05), m3 (D-021), m10 (`VelocityTarget` enables the six-step speed loop), m12 (CONVENTIONS roots). The rest are in P10.T10.

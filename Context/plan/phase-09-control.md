@@ -155,7 +155,7 @@
   - **Verify:** `cargo nextest run -p sim-core v_ctrl`
   - **Done when:** Green.
 
-- [ ] **P09.T14** — Phase gate
+- [x] **P09.T14** — Phase gate
   - **Depends:** P09.T01, P09.T02, P09.T03, P09.T04, P09.T05, P09.T06, P09.T07, P09.T08, P09.T09, P09.T10, P09.T11, P09.T12, P09.T13, P09.T15
   - **Do:** PLAN §8 checklist.
   - **Done when:** Tagged `phase-09-done`.

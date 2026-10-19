@@ -97,3 +97,8 @@
 - **Context:** the scene YAML puts the controller under `controller:` and the tier/seed under `fidelity:` / `seed`, while CONVENTIONS §3 and signals.md listed the parameter roots as `ctrl.*` and `sim.*`. P09 adds the first live controller parameters (loop enable/bypass, gains), so one of the two had to give (one ID namespace).
 - **Decision:** a parameter's path is its scene path: `controller.position.enabled`, `controller.current.bandwidth`, `fidelity.tier`, `seed` (as D-019 did for `supply.*`). Runtime **signals** keep the `ctrl.*` root (`ctrl.omega_ref`, `ctrl.foc.iq_ref`, …); `sim.*` stays the root of actions (`sim.play`) and engine signals. User's choice.
 - **Consequences:** no YAML migration. CONVENTIONS §3 and signals.md list `controller` and `fidelity` as parameter roots. The interim skeleton parameter `ctrl.mode` disappears with the skeleton FOC (P09.T03).
+
+## D-021 — V-CTRL-002 designs the velocity loop at ω_c/20, not ω_c/10 · 2026-10-19 · accepted
+- **Context:** V-CTRL-002 checks the EQ-CTRL-04 PI design by its step overshoot. At the default ω_v = ω_c/10 the current loop's lag is not negligible, and the overshoot drifts several points from the design value, so the case would test the cascade's interaction instead of the design.
+- **Decision:** the case uses ω_v = ω_c/20, where the current loop adds ≈ 0.8 points (13.5 % expected, atol 2 %). The default FOC design keeps ω_c/10.
+- **Consequences:** the catalog entry states ω_c/20; the spec (control.md) explains the lag term. Found in P09.T13, recorded at the P09 gate (review m3).

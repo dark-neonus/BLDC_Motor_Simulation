@@ -427,6 +427,8 @@ impl Engine {
                 for (path, v) in [
                     ("controller.position.enabled", 0.0),
                     ("controller.velocity.enabled", 1.0),
+                    // Six-step's speed loop (absent elsewhere: skipped).
+                    ("controller.speed_loop.enabled", 1.0),
                 ] {
                     if self.get_param(path).is_some_and(|x| x != v) {
                         let ev = self.apply(EngineCommand::SetParam {

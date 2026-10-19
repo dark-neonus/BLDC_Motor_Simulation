@@ -93,7 +93,23 @@
   - **Verify:** Test: an inductive load forced to discharge the bus holds V_bus at −2V_f and the energy residual stays < 1e-6.
   - **Done when:** Passing.
 
+- [ ] **P10.T10** — P09 review follow-ups (minors m4–m9, m11, m13, m14)
+  - **Depends:** P09
+  - **Do:** One pass, each item small:
+    - m4: list the V-CTRL catalog cases without a Python half and add them to P11's list;
+    - m5: changing `controller.*.bandwidth` live with explicit gains must warn that the gains win;
+    - m6: auto-tune docs: method limits (slope methods, dead-time effect on λ);
+    - m7: Luau outputs restricted to actuator/`ctrl.*` paths;
+    - m8: a release-mode real-time bench for the Luau scene in `just bench`;
+    - m9: the six-step duty cap uses the Hall speed estimate, not the true speed;
+    - m11: remove the stale `framework::build_family` stub and its build.rs call;
+    - m13: calibration result handling (apply/report on failure);
+    - m14: nits (dead code, stale comments).
+  - **Files:** `crates/sim-core/src/control/*`, `docs/docs/control/*`
+  - **Verify:** `just check-fast`; a test per behavioural item (m5, m7, m9, m13).
+  - **Done when:** Passing.
+
 - [ ] **P10.T08** — Phase gate
-  - **Depends:** P10.T01, P10.T02, P10.T03, P10.T04, P10.T05, P10.T06, P10.T07, P10.T09
+  - **Depends:** P10.T01, P10.T02, P10.T03, P10.T04, P10.T05, P10.T06, P10.T07, P10.T09, P10.T10
   - **Do:** PLAN §8 checklist. Also: confirm every catalog case with `side: rust` or `both` has a Rust test (`grep` the catalog IDs vs the test names; script it in `scripts/catalog_coverage.py` and add it to `just check`).
   - **Done when:** Tagged `phase-10-done`.

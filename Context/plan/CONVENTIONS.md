@@ -49,7 +49,7 @@ Every parameter, signal, action and panel has **one dotted path**, used identica
 | Panel | `plots`, `viz`, `control-diagram` | `data-agent-id="panel:plots"` | `panel:plots` |
 
 Rules:
-- Path segments are `snake_case`. Top-level roots: `sim`, `motor`, `inverter`, `supply`, `bus`, `sensors`, `ctrl`, `gearbox`, `load`, `thermal`, `fault`, `protect`, `energy`, `scenario`.
+- Path segments are `snake_case`. Top-level roots: `sim`, `motor`, `inverter`, `supply`, `bus`, `sensors`, `est`, `ctrl`, `controller`, `fidelity`, `seed`, `gearbox`, `load`, `thermal`, `fault`, `protect`, `energy`, `scenario`. Parameters use their scene path (`controller.*`, `fidelity.*`, `seed`); controller signals live under `ctrl.*`, estimator outputs under `est.*` (D-020).
 - A **parameter** path is its scene path (`controller.velocity.bandwidth`, `fidelity.tier`, `seed`); controller **signals** live under `ctrl.*` and actions/engine signals under `sim.*` (D-020).
 - Paths are **stable API**. Renaming one requires a decision entry and a YAML migration.
 - Every interactive UI element has a `data-agent-id` **and** an `aria-label`. The Playwright audit (P13.T04) enforces this.
@@ -83,7 +83,7 @@ Rules:
 - **No `unwrap()`/`expect()` in non-test code** except on provable invariants, with a `// INVARIANT:` comment.
 - Physics: one function per equation, named after it, with a doc comment citing the spec ID:
   ```rust
-  /// Electromagnetic torque, dq frame. EQ-MOT-04.
+  /// Electromagnetic torque, dq frame. EQ-MOT-07.
   fn torque_dq(p: f64, lambda_m: f64, l_d: f64, l_q: f64, i_d: f64, i_q: f64) -> f64 { ... }
   ```
 - Hot loop: no heap allocation per step (preallocate), no locks. Commands come via a channel and are applied at step boundaries.
@@ -108,7 +108,7 @@ Rules:
 
 ## 8. Docs & help
 
-- Physics spec pages give each equation an ID anchor, using the **MDX comment form** (Docusaurus 3 parses `{#id}` as a JS expression and fails): `### EQ-MOT-04 — Electromagnetic torque (dq) {/* #eq-mot-04 */}` → anchor `#eq-mot-04`.
+- Physics spec pages give each equation an ID anchor, using the **MDX comment form** (Docusaurus 3 parses `{#id}` as a JS expression and fails): `### EQ-MOT-07 — Electromagnetic torque {/* #eq-mot-07 */}` → anchor `#eq-mot-07`.
 - Help registry entry:
   ```yaml
   param:motor.electrical.kv:
