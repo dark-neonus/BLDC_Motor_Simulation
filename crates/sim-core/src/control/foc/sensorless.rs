@@ -88,6 +88,9 @@ struct State {
     /// Blend: θ̂ − θ* unwrapped, and its last wrapped value.
     delta: f64,
     last: f64,
+    /// The limited, ramped speed reference [rad/s electrical].
+    #[serde(default)]
+    r: f64,
 }
 
 impl Default for State {
@@ -100,6 +103,7 @@ impl Default for State {
             since: None,
             delta: 0.0,
             last: 0.0,
+            r: 0.0,
         }
     }
 }
@@ -150,6 +154,9 @@ pub struct SensorlessBlock {
     /// N·p: load rad/s → electrical rad/s; p: electrical → mechanical (motor).
     n_p: f64,
     p: f64,
+    /// `controller.limits.speed` and `controller.ramp`, electrical (∞ = none).
+    limit_e: f64,
+    ramp_e: f64,
     st: State,
 }
 
@@ -172,8 +179,18 @@ impl SensorlessBlock {
             i_max,
             n_p,
             p,
+            limit_e: f64::INFINITY,
+            ramp_e: f64::INFINITY,
             st: State::default(),
         }
+    }
+
+    /// The speed limit [rad/s] and reference ramp [rad/s²], load side, as the cascade
+    /// applies them (EQ-CTRL-02): the setpoint is clamped, then rate-limited.
+    pub fn with_reference_limits(mut self, speed_limit: f64, ramp: f64) -> Self {
+        self.limit_e = self.n_p * speed_limit;
+        self.ramp_e = self.n_p * ramp;
+        self
     }
 }
 
@@ -191,7 +208,11 @@ impl DiscreteBlock for SensorlessBlock {
         let now = ctx.t.as_secs_f64();
         let t = self.period.as_secs_f64();
         let b = &*ctx.bus;
-        let target_e = self.n_p * b.get(self.io.omega_ref);
+        let r_in = (self.n_p * b.get(self.io.omega_ref)).clamp(-self.limit_e, self.limit_e);
+        let r_in = if r_in.is_finite() { r_in } else { 0.0 };
+        let dr = self.ramp_e * t;
+        self.st.r += (r_in - self.st.r).clamp(-dr, dr);
+        let target_e = self.st.r;
         let (th_hat, w_hat) = (b.get(self.io.est_theta), b.get(self.io.est_omega));
         let valid = b.get(self.io.est_valid) > 0.5;
         let (s, st) = (self.s, &mut self.st);

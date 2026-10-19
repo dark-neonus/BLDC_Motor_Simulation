@@ -230,7 +230,10 @@ impl DiscreteBlock for LoopBlock {
             // Bypass: the inner loop gets the setpoint of its own quantity. The law
             // follows it, and the ramp restarts from the measurement on re-enable.
             let u = self.io.bypass.read(ctx.bus).clamp(lo, hi);
-            self.law.track(u, r_in, y);
+            // Track where the reference resumes: from the measurement with a ramp (it
+            // restarts there), at the setpoint without one — so re-enabling is bumpless.
+            let r_resume = if self.cfg.ramp.is_finite() { y } else { r_in };
+            self.law.track(u, r_resume, y);
             self.ramp.restart(Some(y));
             u
         };
@@ -489,6 +492,49 @@ mod tests {
         assert!((a - 0.3).abs() < 1e-12 && a == b, "{a} vs {b}");
         assert!(blk.set_param("enabled", 0.5).is_err());
         assert!(blk.set_param("gain", 1.0).is_err());
+    }
+
+    /// Review M6: a PI re-enabled with a finite ramp continues from the bypassed output
+    /// (one ramp step of difference), not with a −K_p(r − y) jump.
+    #[test]
+    fn pi_with_a_ramp_re_enables_bumplessly() {
+        let mut bus = SignalBus::new();
+        let mut reg = |p: &str| bus.register(p, "-", "", SignalKind::Input).unwrap();
+        let (r, y, byp, out) = (reg("x.r"), reg("x.y"), reg("x.b"), reg("x.u"));
+        let s = |id| Scaled { id, gain: 1.0 };
+        let (kp, ramp) = (2.0, 100.0);
+        let mut blk = LoopBlock::new(
+            "controller.velocity",
+            LoopConfig::from_hz(false, 1e3, (-50.0, 50.0), ramp).unwrap(),
+            LoopWiring {
+                reference: s(r),
+                feedback: s(y),
+                bypass: s(byp),
+                out,
+            },
+            Box::new(crate::control::pid::Pid::pi(
+                kp,
+                10.0,
+                (-50.0, 50.0),
+                crate::control::pid::AntiWindup::Clamping,
+            )),
+        );
+        bus.set(r, 10.0);
+        bus.set(y, 2.0);
+        bus.set(byp, 3.0);
+        let step = |blk: &mut LoopBlock, bus: &mut SignalBus, k: i64| {
+            let mut ctx = StepCtx {
+                t: SimTime::from_nanos(k * 1_000_000),
+                bus,
+            };
+            blk.step(&mut ctx).unwrap();
+            ctx.bus.get(out)
+        };
+        assert_eq!(step(&mut blk, &mut bus, 1), 3.0);
+        blk.set_param("enabled", 1.0).unwrap();
+        let u = step(&mut blk, &mut bus, 2);
+        // The ramp moves 0.1 per step: u = 3 + K_p·0.1 (± the first integration).
+        assert!((u - (3.0 + kp * ramp * 1e-3)).abs() < 1e-9, "u {u}");
     }
 
     #[test]

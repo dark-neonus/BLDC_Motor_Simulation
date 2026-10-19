@@ -22,6 +22,7 @@ These are the canonical dotted paths (CONVENTIONS §3). They are used identicall
 | `motor.torque_em`, `motor.torque_cog`, `motor.torque_fe` | N·m | electromagnetic / cogging / iron-drag torque | motor | EQ-MOT-07/08/09 |
 | `motor.p_cu`, `motor.p_fe`, `motor.p_fric` | W | copper / iron loss, bearing + load friction loss (thermal heat inputs) | motor | EQ-MOT-09/13, EQ-MECH-05 |
 | `motor.open_phase` | – | open-phase mode: −1 none, 0/1/2 = a/b/c (also the parameter that requests it) | motor | EQ-MOT-11 |
+| `motor.open_phase2` | – | zero-current mode: the second floating phase, −1 none, 0/1/2 = a/b/c | motor | EQ-MOT-12 |
 | `motor.diode_a`, `.diode_b`, `.diode_c` | – | the diode a floating terminal reconnected through: −1 high, +1 low, 0 none (read by the inverter) | motor | EQ-MOT-12 |
 | `gearbox.delta`, `gearbox.torque_contact`, `gearbox.p_loss` | rad, N·m, W | backlash deflection, contact torque, loss | gearbox | EQ-MECH-03/04 |
 | `load.theta`, `load.omega` | rad, rad/s | load-side angle, speed | mech | EQ-MECH-02/04 |

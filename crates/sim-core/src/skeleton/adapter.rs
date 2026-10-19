@@ -270,6 +270,10 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
                 legs,
                 v_bus: dc.v_id(),
                 v_f: o.devices.v_f,
+                r_on: o.devices.r_on,
+                ho_duty: (six && !o.switching).then(|| {
+                    ["inverter.duty_a", "inverter.duty_b", "inverter.duty_c"].map(|n| id(&bus, n))
+                }),
                 dead_time: o.dead_time,
             })
             .with_internal_terminals();
@@ -523,6 +527,10 @@ pub fn try_build_engine_with(mp: PmsmParams, opts: SkeletonOptions) -> Result<En
                     params,
                     memory: luau_block::DEFAULT_MEMORY,
                     budget: luau_block::DEFAULT_BUDGET,
+                    seed: (crate::engine::rng::RngService::new(opts.sensors.seed)
+                        .stream("controller.custom")
+                        .uniform()
+                        * f64::from(u32::MAX)) as u32,
                 },
                 &bus,
             )?));

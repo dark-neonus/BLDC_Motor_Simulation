@@ -58,6 +58,7 @@ fn block(script: &str, rig: &Rig, budget: u64, memory: usize) -> Result<LuauBloc
             ],
             memory,
             budget,
+            seed: 7,
         },
         &rig.bus,
     )
@@ -231,4 +232,22 @@ end
     e.step_until(SimTime::from_secs_f64(1.0)).unwrap();
     let w = e.bus.get(e.bus.id("motor.omega").unwrap());
     assert!((w / 30.0 - 1.0).abs() < 0.02, "ω {w}");
+}
+
+/// Review M1: `math.random` is seeded from the configuration and the wall clock is
+/// gone, so two runs give the same outputs.
+#[test]
+fn luau_runs_are_deterministic() {
+    let script = "function init(p) return {} end\nfunction step(i, s, dt)\n  assert(os.clock == nil and os.time == nil)\n  return { [\"x.u\"] = math.random() }\nend\n";
+    let run = || {
+        let mut rg = rig();
+        let mut b = block(script, &rg, DEFAULT_BUDGET, DEFAULT_MEMORY).unwrap();
+        (0..5)
+            .map(|k| {
+                step(&mut b, &mut rg.bus, k).unwrap();
+                rg.bus.get(rg.u)
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(run(), run());
 }

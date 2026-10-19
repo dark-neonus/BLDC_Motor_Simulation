@@ -12,6 +12,7 @@ use super::backemf::Shape;
 use crate::energy::PowerKind;
 use crate::engine::plant::PlantModule;
 use crate::engine::signals::{SignalBus, SignalError, SignalId, SignalKind};
+use crate::physics::inverter::leg::{lower_clamp, six_step_high_voltage};
 
 const SQRT3: f64 = 1.732_050_807_568_877_2;
 const TWO_PI_3: f64 = 2.0 * FRAC_PI_3;
@@ -190,8 +191,12 @@ pub struct LegInputs {
     /// `inverter.leg_a..c` (+1 High, −1 Low, 0 Off).
     pub legs: [SignalId; 3],
     pub v_bus: SignalId,
-    /// Diode forward drop V_f [V].
+    /// Diode forward drop V_f [V] and switch on-resistance R_on [Ω].
     pub v_f: f64,
+    pub r_on: f64,
+    /// Averaged six-step: `inverter.duty_a..c`. Its High legs (H/O) are floatable too,
+    /// with the lower clamp d·V_bus − (1 − d)·V_f (EQ-MOT-12).
+    pub ho_duty: Option<[SignalId; 3]>,
     /// PWM dead time t_d [s] (two legs Off for longer than 2·t_d is commanded).
     pub dead_time: f64,
 }
@@ -219,6 +224,7 @@ struct Out {
     torque: SignalId,
     p_cu: SignalId,
     open_phase: SignalId,
+    open_phase2: SignalId,
     diode: [SignalId; 3],
 }
 
@@ -254,6 +260,10 @@ pub struct MotorElectrical {
     /// Open-phase mode (EQ-MOT-11): the disconnected phase; state 0 is then the line
     /// flux ψ_yz of the two connected phases (y = k+1, z = k+2 mod 3).
     open: Option<usize>,
+    /// Zero-current mode (EQ-MOT-12): a second floating phase m (its leg Off too, its
+    /// current reached zero). The state stays the line flux of the pair (j, m), held at
+    /// zero current by the inverter's floating terminal voltages.
+    open2: Option<usize>,
     /// Requested open phases, per phase: the sign of its current at the request (so g
     /// starts positive: no false crossing). The first to cross zero opens (state event).
     pending: [Option<f64>; 3],
@@ -332,6 +342,12 @@ impl MotorElectrical {
                 "open phase: -1 none, 0/1/2 = a/b/c",
                 o,
             )?,
+            open_phase2: r(
+                "motor.open_phase2",
+                "-",
+                "zero-current mode: second floating phase, -1 none, 0/1/2 = a/b/c",
+                o,
+            )?,
             diode: [
                 r(
                     "motor.diode_a",
@@ -369,6 +385,7 @@ impl MotorElectrical {
             jump: 0.0,
             last_lambda: lambda,
             open: None,
+            open2: None,
             pending: [None; 3],
             two_off_since: None,
             diode: [0.0; 3],
@@ -503,9 +520,10 @@ impl MotorElectrical {
         {
             return (*s, th, lambda);
         }
-        let s = match self.open {
-            None => self.solve(x[off], x[off + 1], th, lambda),
-            Some(k) => self.solve_open(x[off], th, lambda, k),
+        let s = match (self.open, self.open2) {
+            (Some(_), Some(_)) => self.from_currents(0.0, 0.0, th, lambda),
+            (None, _) => self.solve(x[off], x[off + 1], th, lambda),
+            (Some(k), None) => self.solve_open(x[off], th, lambda, k),
         };
         (s, th, lambda)
     }
@@ -640,6 +658,7 @@ impl MotorElectrical {
 
     /// Leave open-phase mode: rebuild ψαβ from the current state (continuous, EQ-MOT-12).
     fn reconnect(&mut self, x_own: &mut [f64]) {
+        self.leave_zero(x_own);
         if let Some(k) = self.open.take() {
             let (th, lam) = (self.last_theta_e, self.last_lambda);
             let s = self.solve_open(x_own[0], th, lam, k);
@@ -660,30 +679,166 @@ impl MotorElectrical {
         self.pending[k] = Some(if i_k < 0.0 { -1.0 } else { 1.0 });
     }
 
+    /// Whether leg k lets its phase float at zero current: Off, or an averaged six-step
+    /// High leg (EQ-MOT-12).
+    fn floatable(&self, l: &LegInputs, k: usize, bus: &SignalBus) -> bool {
+        let s = bus.get(l.legs[k]);
+        s.abs() < 0.5 || (l.ho_duty.is_some() && s > 0.5)
+    }
+
+    /// Leg k's duty if it is an averaged six-step High leg, else 0 (Off).
+    fn ho_d(&self, l: &LegInputs, k: usize, bus: &SignalBus) -> f64 {
+        match l.ho_duty {
+            Some(d) if bus.get(l.legs[k]) > 0.5 => bus.get(d[k]).clamp(0.0, 1.0),
+            _ => 0.0,
+        }
+    }
+
+    /// Lower clamp of floatable leg k at zero current (EQ-MOT-12).
+    fn lower_bound(&self, l: &LegInputs, k: usize, bus: &SignalBus) -> f64 {
+        lower_clamp(self.ho_d(l, k, bus), bus.get(l.v_bus), l.v_f)
+    }
+
+    /// Terminal voltage of a connected leg from the leg model (EQ-INV-01/07) at current
+    /// i: the bus may still hold the voltages from before this discrete event.
+    fn terminal_model(&self, l: &LegInputs, x: usize, i: f64, bus: &SignalBus) -> f64 {
+        let v_bus = bus.get(l.v_bus);
+        let s = bus.get(l.legs[x]);
+        if s < -0.5 {
+            return -l.r_on * i;
+        }
+        if !self.floatable(l, x, bus) {
+            return bus.get(self.inp.v[x]);
+        }
+        let branch = match self.diode[x] {
+            0.0 if i < 0.0 => -1.0,
+            0.0 => 1.0,
+            d => d,
+        };
+        let dev = crate::physics::inverter::leg::Devices {
+            r_on: l.r_on,
+            v_f: l.v_f,
+        };
+        six_step_high_voltage(self.ho_d(l, x, bus), i, v_bus, &dev, branch).0
+    }
+
     /// A phase just opened by an Off leg (not a fault): if its free terminal voltage
     /// v_n + e_k already lies beyond a diode bound, that diode conducts at once and the
     /// current reverses through it (EQ-MOT-12). The bound events only see a terminal
     /// moving *past* a bound, so this case is decided here.
-    fn reconnect_if_beyond_bound(&mut self, x_own: &mut [f64], bus: &SignalBus) {
+    /// `except`: a diode whose conduction just ended (its terminal sits at that bound
+    /// moving inside): only the opposite one may take over at once.
+    fn reconnect_if_beyond_bound(&mut self, x_own: &mut [f64], bus: &SignalBus, except: f64) {
         let (Some(k), Some(l), false) = (self.open, self.legs, self.fault_open) else {
             return;
         };
         let (y, z) = ((k + 1) % 3, (k + 2) % 3);
-        let (v, e) = (
-            self.inp.v.map(|id| bus.get(id)),
-            self.out.e.map(|id| bus.get(id)),
-        );
-        let v_k = 0.5 * (v[y] + v[z] - e[y] - e[z]) + e[k];
-        let d = if v_k > bus.get(l.v_bus) + l.v_f {
-            -1.0
-        } else if v_k < -l.v_f {
-            1.0
-        } else {
-            return;
+        let e = self.out.e.map(|id| bus.get(id));
+        let s = self.solve_open(x_own[0], self.last_theta_e, self.last_lambda, k);
+        let iy = Self::phase_current(&s, y);
+        // v_n from the connected legs' model voltages; in zero-current mode from the
+        // driven leg j alone.
+        let v_n = match self.open2 {
+            Some(m) => {
+                let j = 3 - k - m;
+                self.terminal_model(&l, j, 0.0, bus) - e[j]
+            }
+            None => {
+                0.5 * (self.terminal_model(&l, y, iy, bus) + self.terminal_model(&l, z, -iy, bus)
+                    - e[y]
+                    - e[z])
+            }
         };
+        let hi = bus.get(l.v_bus) + l.v_f;
+        let beyond = |x: usize| {
+            let v = v_n + e[x];
+            if v > hi {
+                Some(-1.0)
+            } else if v < self.lower_bound(&l, x, bus) {
+                Some(1.0)
+            } else {
+                None
+            }
+        };
+        if let Some(d) = beyond(k).filter(|&d| d != except) {
+            self.reconnect_through(k, d, x_own);
+        } else if let Some(m) = self.open2
+            && let Some(d) = beyond(m)
+        {
+            self.leave_zero(x_own);
+            self.pending[m] = Some(d);
+            self.diode[m] = d;
+        }
+    }
+
+    /// Floating phase k's diode d starts conducting (EQ-MOT-12). In zero-current mode the
+    /// second floating phase keeps floating: it becomes the open phase.
+    fn reconnect_through(&mut self, k: usize, d: f64, x_own: &mut [f64]) {
+        let m = self.open2;
         self.reconnect(x_own);
+        if let Some(m) = m {
+            self.enter_open(m, x_own);
+        }
         self.pending[k] = Some(d);
         self.diode[k] = d;
+    }
+
+    /// The open-mode state (line flux ψ_yz of the pair, k open) at zero current.
+    fn zero_flux(&self, k: usize) -> f64 {
+        let (fa, fb, _, _) = self.flux_ab(0.0, 0.0, self.last_theta_e, self.last_lambda);
+        let f = inv_clarke(fa, fb);
+        f[(k + 1) % 3] - f[(k + 2) % 3]
+    }
+
+    /// Leave zero-current mode: the open-mode state is rebuilt at zero current (frozen
+    /// while in the mode, so continuous: i = 0 on both sides).
+    fn leave_zero(&mut self, x_own: &mut [f64]) {
+        if self.open2.take().is_some()
+            && let Some(k) = self.open
+        {
+            x_own[0] = self.zero_flux(k);
+            x_own[1] = 0.0;
+        }
+    }
+
+    /// Zero-current mode (EQ-MOT-12): phase m's current reached zero while phase k floats.
+    /// Every current is zero by definition while in it (the state is frozen; `state`
+    /// solves it as zero current); the round-off W_mag difference at entry is booked.
+    fn enter_zero(&mut self, m: usize, x_own: &mut [f64]) {
+        let Some(k) = self.open else { return };
+        let (th, lam) = (self.last_theta_e, self.last_lambda);
+        let before = self.solve_open(x_own[0], th, lam, k);
+        x_own[0] = self.zero_flux(k);
+        x_own[1] = 0.0;
+        self.open2 = Some(m);
+        self.diode[m] = 0.0;
+        self.pending = [None; 3];
+        let after = self.solve_open(x_own[0], th, lam, k);
+        self.jump += self.w_mag(&after, lam) - self.w_mag(&before, lam);
+    }
+
+    /// With phase k floating, the phase of a second Off leg (one leg left driven) waits for
+    /// its current zero: zero-current mode then (EQ-MOT-12).
+    fn arm_second(&mut self, x_own: &mut [f64]) {
+        let (Some(k), None, false) = (self.open, self.open2, self.fault_open) else {
+            return;
+        };
+        if self.leg_off.iter().filter(|&&o| o).count() != 2 || !self.leg_off[k] {
+            return;
+        }
+        let Some(m) = (0..3).find(|&m| m != k && self.leg_off[m]) else {
+            return;
+        };
+        if self.pending[m].is_some() {
+            return;
+        }
+        let s = self.solve_open(x_own[0], self.last_theta_e, self.last_lambda, k);
+        let i_m = Self::phase_current(&s, m);
+        if i_m.abs() <= 1e-12 * (1.0 + s.i_alpha.hypot(s.i_beta)) {
+            self.enter_zero(m, x_own);
+        } else {
+            self.pending[m] = Some(if i_m < 0.0 { -1.0 } else { 1.0 });
+        }
     }
 
     /// Switch to the open-phase state (EQ-MOT-11) with phase k's current at zero.
@@ -744,6 +899,9 @@ impl PlantModule for MotorElectrical {
             // Exact single-path currents (the αβ round trip leaves ~1e-16 in phase k).
             let (y, z) = ((k + 1) % 3, (k + 2) % 3);
             (i[k], i[z]) = (0.0, -i[y]);
+            if self.open2.is_some() {
+                i = [0.0; 3];
+            }
         }
         let e: [f64; 3] = if self.p.shape.is_sinusoidal() {
             // k = −sin(θ − x·2π/3) from one sin_cos.
@@ -783,6 +941,7 @@ impl PlantModule for MotorElectrical {
         };
         bus.set(o.v_n, v_n);
         bus.set(o.open_phase, self.open.map_or(-1.0, |k| k as f64));
+        bus.set(o.open_phase2, self.open2.map_or(-1.0, |k| k as f64));
         for (id, d) in o.diode.iter().zip(self.diode) {
             bus.set(*id, d);
         }
@@ -794,6 +953,12 @@ impl PlantModule for MotorElectrical {
     }
     fn derivatives(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, dx: &mut [f64]) {
         let (s, _, _) = self.state(x, off, bus);
+        if self.open2.is_some() {
+            // Zero-current mode: no current path, the state is frozen (EQ-MOT-12).
+            dx[0] = 0.0;
+            dx[1] = 0.0;
+            return;
+        }
         if let Some(k) = self.open {
             // EQ-MOT-11: dψ_yz/dt = v_yT − v_zT − 2R·i.
             let (y, z) = ((k + 1) % 3, (k + 2) % 3);
@@ -890,16 +1055,21 @@ impl PlantModule for MotorElectrical {
         std::mem::take(&mut self.jump)
     }
     fn n_events(&self) -> usize {
-        5
+        7
     }
     fn event_functions(&self, _t: f64, x: &[f64], off: usize, bus: &SignalBus, g: &mut [f64]) {
         // 0, 1, 2: each pending phase's current; constant (no crossing) otherwise.
         (g[0], g[1], g[2]) = (1.0, 1.0, 1.0);
         if self.pending.iter().any(Option::is_some) {
             let s = self.state(x, off, bus).0;
+            // Offset by the zero tolerance of `request_open`: a diode reconnect starts the
+            // current at round-off zero, and a start at −1e-17 with the current then
+            // growing the wrong way never crosses (found in the P09 review: a low diode
+            // conducted backwards for a whole commutation interval, creating energy).
+            let tol = 1e-12 * (1.0 + s.i_alpha.hypot(s.i_beta));
             for (k, gk) in g.iter_mut().take(3).enumerate() {
                 if let Some(sign) = self.pending[k] {
-                    *gk = sign * Self::phase_current(&s, k);
+                    *gk = sign * Self::phase_current(&s, k) + tol;
                 }
             }
         }
@@ -916,7 +1086,17 @@ impl PlantModule for MotorElectrical {
             let v_n = 0.5 * (v[y] + v[z] - e[y] - e[z]);
             let v_k = v_n + e[k];
             g[3] = bus.get(l.v_bus) + l.v_f - v_k;
-            g[4] = v_k + l.v_f;
+            g[4] = v_k - self.lower_bound(&l, k, bus);
+            // 5, 6: the second floating terminal in zero-current mode (same v_n: both
+            // floating terminals sit at v_n + e).
+            (g[5], g[6]) = (1.0, 1.0);
+            if let Some(m) = self.open2 {
+                let v_m = v_n + e[m];
+                g[5] = bus.get(l.v_bus) + l.v_f - v_m;
+                g[6] = v_m - self.lower_bound(&l, m, bus);
+            }
+        } else {
+            (g[5], g[6]) = (1.0, 1.0);
         }
     }
     fn on_event(
@@ -932,9 +1112,20 @@ impl PlantModule for MotorElectrical {
                 // The first pending phase to reach zero opens (one floating phase at a
                 // time; two at zero is the zero-current mode, P10).
                 if self.pending[idx].is_some() {
+                    if self.open.is_some_and(|k| k != idx) {
+                        // A second phase reaches zero: zero-current mode (EQ-MOT-12).
+                        self.enter_zero(idx, x_own);
+                        self.reconnect_if_beyond_bound(x_own, bus, 0.0);
+                        return;
+                    }
+                    // A diode whose conduction ends here does not reconnect at once (its
+                    // terminal is at that bound moving inside); the opposite one may, when
+                    // the EMF has already carried the terminal past it (diode handover).
+                    let ended = self.diode[idx];
                     self.pending = [None; 3];
                     self.enter_open(idx, x_own);
-                    self.reconnect_if_beyond_bound(x_own, bus);
+                    self.reconnect_if_beyond_bound(x_own, bus, ended);
+                    self.arm_second(x_own);
                 }
             }
             _ => {
@@ -945,20 +1136,28 @@ impl PlantModule for MotorElectrical {
                 if rising {
                     return;
                 }
+                let d = if idx == 3 || idx == 5 { -1.0 } else { 1.0 };
+                if idx >= 5 {
+                    // The second floating terminal's diode: it conducts again (pair state
+                    // unchanged, zero current: continuous); phase k keeps floating.
+                    let Some(m) = self.open2 else { return };
+                    self.leave_zero(x_own);
+                    self.pending[m] = Some(d);
+                    self.diode[m] = d;
+                    return;
+                }
                 let Some(k) = self.open else { return };
                 // A diode starts conducting: back to two states; the current grows out of
                 // the high diode (i < 0) or into the low one (i > 0) and the phase opens
                 // again at its next zero while the leg stays Off.
-                self.reconnect(x_own);
-                let d = if idx == 3 { -1.0 } else { 1.0 };
-                self.pending[k] = Some(d);
-                self.diode[k] = d;
+                self.reconnect_through(k, d, x_own);
             }
         }
     }
     fn after_discrete(&mut self, t: f64, x_own: &mut [f64], bus: &SignalBus) {
         let Some(l) = self.legs else { return };
-        let off: [bool; 3] = std::array::from_fn(|k| bus.get(l.legs[k]).abs() < 0.5);
+        // "Off" here: floatable (an Off leg, or an averaged six-step High leg).
+        let off: [bool; 3] = std::array::from_fn(|k| self.floatable(&l, k, bus));
         self.leg_off = off;
         if self.fault_open {
             // Another leg Off during the fault: a second floating phase is not modelled.
@@ -971,10 +1170,20 @@ impl PlantModule for MotorElectrical {
             }
             return;
         }
+        if let Some(m) = self.open2
+            && !off[m]
+        {
+            // Driven again: back to the pair (j, m) at zero current (continuous).
+            self.leave_zero(x_own);
+        }
         if let Some(k) = self.open
             && !off[k]
         {
+            let m = self.open2;
             self.reconnect(x_own);
+            if let Some(m) = m {
+                self.enter_open(m, x_own);
+            }
         }
         for (k, &leg_off) in off.iter().enumerate() {
             if !leg_off {
@@ -983,14 +1192,15 @@ impl PlantModule for MotorElectrical {
             }
         }
         let offs: Vec<usize> = (0..3).filter(|&k| off[k]).collect();
-        // Two legs Off together for longer than any dead time: a commanded state (e.g.
-        // all-Off), not a PWM transient. Zero-current mode is not modelled yet (P10).
-        if offs.len() > 1 {
+        // All three legs Off for longer than any dead time: a commanded state, not a PWM
+        // transient. With no driven leg the zero-current mode is not modelled (P10); two
+        // Off legs are (EQ-MOT-12).
+        if offs.len() > 2 {
             let since = *self.two_off_since.get_or_insert(t);
             if t - since > (2.0 * l.dead_time).max(TWO_OFF_WARN_MIN) && !self.warned_two_off {
                 self.warned_two_off = true;
                 self.warnings.push(
-                    "two or more inverter legs stay Off: one phase at a time is modelled as floating (zero-current mode arrives with faults, P10)".into(),
+                    "all three inverter legs stay Off: one phase at a time is modelled as floating (zero-current mode with no driven leg arrives with faults, P10)".into(),
                 );
             }
         } else {
@@ -1004,11 +1214,15 @@ impl PlantModule for MotorElectrical {
                 }
                 if self.open.is_some() {
                     self.pending = [None; 3];
-                    self.reconnect_if_beyond_bound(x_own, bus);
+                    self.reconnect_if_beyond_bound(x_own, bus, 0.0);
                     break;
                 }
             }
         }
+        self.arm_second(x_own);
+        // The bounds move with the leg states and duties: a terminal now beyond one
+        // conducts (no crossing will come).
+        self.reconnect_if_beyond_bound(x_own, bus, 0.0);
     }
     fn take_warnings(&mut self) -> Vec<String> {
         if self.unconverged.take() && !self.warned {
@@ -1023,7 +1237,7 @@ impl PlantModule for MotorElectrical {
         let p = &self.p;
         serde_json::json!({
             "r": p.r, "ld": p.ld, "lq": p.lq, "lambda": p.lambda,
-            "open": self.open, "pending": self.pending, "two_off_since": self.two_off_since,
+            "open": self.open, "open2": self.open2, "pending": self.pending, "two_off_since": self.two_off_since,
             "diode": self.diode, "leg_off": self.leg_off,
             "last_theta_e": self.last_theta_e, "last_lambda": self.last_lambda, "jump": self.jump, "warned": self.warned,
             "fault_open": self.fault_open,
@@ -1041,6 +1255,7 @@ impl PlantModule for MotorElectrical {
                 .map_err(|e| e.to_string())
         };
         let open = k("open")?;
+        let open2 = k("open2")?;
         // Per-phase pending signs; snapshots from before P08.T10 hold one phase + sign.
         let raw = v.get("pending").cloned().unwrap_or_default();
         let pending: [Option<f64>; 3] = match serde_json::from_value(raw.clone()) {
@@ -1060,6 +1275,7 @@ impl PlantModule for MotorElectrical {
         let (th, lam, jump) = (f("last_theta_e")?, f("last_lambda")?, f("jump")?);
         (self.p.r, self.p.ld, self.p.lq, self.p.lambda) = (r, ld, lq, lambda);
         (self.open, self.pending, self.two_off_since) = (open, pending, two_off_since);
+        self.open2 = open2.filter(|_| open.is_some());
         self.diode = match v.get("diode") {
             Some(d) => serde_json::from_value(d.clone()).map_err(|e| e.to_string())?,
             None => [0.0; 3],

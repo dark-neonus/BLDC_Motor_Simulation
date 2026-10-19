@@ -1,6 +1,7 @@
 //! P09.T12: every controller preset on three motor presets for 1 s — no instability (the
-//! tracking error envelope does not grow), no over-current (≤ 1.5·limit, the trip level
-//! protection uses), no bus over-voltage, open loop stays in sync.
+//! tracking error envelope does not grow), tracking (the mean of the last 0.2 s near the
+//! target), the energy balance closed at every sample, no over-current (≤ 1.5·limit, the
+//! trip level protection uses), no bus over-voltage, open loop stays in sync.
 
 use std::f64::consts::PI;
 
@@ -31,6 +32,26 @@ fn rated(motor: &str) -> f64 {
         .unwrap()
 }
 
+/// The peak cogging torque [N·m]: the sum of the harmonic amplitudes.
+fn cogging(motor: &str) -> f64 {
+    let text = std::fs::read_to_string(format!(
+        "{}/../../presets/motors/{motor}.yaml",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    text.lines()
+        .filter(|l| l.trim_start().starts_with("cogging"))
+        .flat_map(|l| {
+            l.split('"')
+                .skip(1)
+                .step_by(2)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .filter_map(|v| v.strip_suffix(" N*m").and_then(|x| x.parse::<f64>().ok()))
+        .sum()
+}
+
 fn scene_for(preset: &str, motor: &str) -> (sim_model::scene::ResolvedScene, f64) {
     let dir = std::env::temp_dir().join(format!("bldc-cp-{}", std::process::id()));
     let lib = Library::new(None, dir.join("user"), vec![]).unwrap();
@@ -55,7 +76,19 @@ fn scene_for(preset: &str, motor: &str) -> (sim_model::scene::ResolvedScene, f64
     let mp: sim_model::params::MotorParams = parse_yaml(&text, motor).unwrap();
     let _ = lib0;
     let mm = pmsm_from(&mp, 0.0).unwrap();
-    let tau = 0.1 * 1.5 * mm.p * mm.lambda * i_lim;
+    // An MIT hold has no load: its stiffness K_p = ω²J comes from the bare rotor
+    // (EQ-CTRL-12), so a Coulomb brake holds the rotor wherever K_p·e < τ_brake.
+    // A unidirectional six-step slows down only through its load: with 10 % the 5010
+    // overshoots, coasts and hunts ±1.5 % (P09 review: the diode braking that used to
+    // damp this was non-physical, EQ-MOT-12), so it gets 30 %.
+    let share = if preset.starts_with("mit") {
+        0.0
+    } else if preset.starts_with("six-step") {
+        0.3
+    } else {
+        0.1
+    };
+    let tau = share * 1.5 * mm.p * mm.lambda * i_lim;
     let yaml = format!(
         "schema_version: 1\nname: s\nseed: 1\n\
          motor: {{ preset: \"builtin:motors/{motor}\" }}\n\
@@ -100,6 +133,7 @@ fn run(preset: &str, motor: &str) {
         source: ChangeSource::Internal,
     });
     let (mut early, mut late, mut peak_i) = (0.0f64, 0.0f64, 0.0f64);
+    let (mut sum, mut count, mut worst_r) = (0.0, 0.0, 0.0f64);
     for k in 1..=1000 {
         let t = k as f64 * 1e-3;
         e.step_until(SimTime::from_secs_f64(t))
@@ -117,12 +151,21 @@ fn run(preset: &str, motor: &str) {
             "{preset} × {motor}: bus {} V",
             g("bus.v")
         );
+        let r = g("energy.residual");
+        worst_r = worst_r.max(r.abs());
+        assert_eq!(
+            g("energy.ok"),
+            1.0,
+            "{preset} × {motor}: energy residual {r:.2e} at {t:.3} s"
+        );
         let err = (y - target).abs();
         if (0.4..0.6).contains(&t) {
             early = early.max(err);
         }
         if t >= 0.8 {
             late = late.max(err);
+            sum += y;
+            count += 1.0;
         }
     }
     assert!(
@@ -134,6 +177,24 @@ fn run(preset: &str, motor: &str) {
     assert!(
         late <= (1.1 * early).max(0.02 * target.abs().max(PI / 180.0)),
         "{preset} × {motor}: error grows {early} → {late}"
+    );
+    // Tracking: the mean over the last 0.2 s within 2 % of the target (1° for a hold).
+    let mean = sum / count;
+    let band = if judged == "motor.theta" {
+        // A compliant hold stops where K_p·e meets the cogging torque (EQ-MOT-08).
+        let kp = e.get_param("controller.kp").unwrap();
+        let band = cogging(motor) / kp + PI / 180.0;
+        assert!(
+            band <= 0.5 * target,
+            "{preset} × {motor}: K_p {kp:.3} N·m/rad cannot hold against cogging"
+        );
+        band
+    } else {
+        0.02 * target.abs()
+    };
+    assert!(
+        (mean - target).abs() <= band,
+        "{preset} × {motor}: mean {mean:.4} vs target {target:.4} (worst residual {worst_r:.1e})"
     );
     if preset.starts_with("open-loop") {
         let lost = e.bus.get(e.bus.id("ctrl.open_loop.sync_lost").unwrap());

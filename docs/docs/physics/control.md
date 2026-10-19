@@ -107,6 +107,7 @@ $$
 - Damping ratio: $\zeta = K_d / (2\sqrt{K_p J_{L,tot}})$.
 - The law runs on top of the current loop at its own rate.
 - Gains relative to the motor (presets): without `kp`, $K_p = J_{L,tot}\,\omega_{mit}^2$ from `bandwidth`; without `kd`, $K_d = 2\zeta\sqrt{K_p J_{L,tot}}$ with `damping` ζ (default 0.7), as EQ-CTRL-12 suggests.
+- Cogging is a load too: a hold stops anywhere $K_p|e| \le \tau_{cog}$ (EQ-MOT-08), so the static error can reach $\tau_{cog}/K_p$. On a bare rotor $K_p = J\omega_{mit}^2$ is tiny: a 5 Hz hold on a 2804 gives $\tau_{cog}/K_p \approx 0.5$ rad. The presets therefore start at 10 Hz (soft) and go to 25 and 50 Hz.
 - No efficiency factor is applied: gear loss is speed-dependent and zero at standstill (EQ-MECH-03), so holding torque transmits without loss.
 
 ## Estimators
@@ -166,6 +167,8 @@ $$
 - Blend: $\theta = \theta^* + w\,\delta$ with $w$ rising linearly 0 → 1 over $t_{blend}$, where $\delta$ is $\hat\theta_e - \theta^*$ **unwrapped** (wrapped at the start of the blend, then the wrapped per-tick change is accumulated); $i_q^*$ stays $I_{if}$. Wrapping $\delta$ every tick jumps it by $2\pi$ when it crosses ±π, which turns the current vector by $w\cdot 2\pi$ in one tick (found: a 48 A spike with a 20 A limit on a 5010 whose I/f lag was ≈ 100°).
 - Closed loop: $\theta = \hat\theta_e$, the velocity PI (EQ-CTRL-04) on $\hat\omega_e/p$, started from $i_q^* = I_{if}$ (bumpless).
 - Fallback: `est.valid` false for $t_{valid}$ in closed loop → I/f with $\theta^* = \hat\theta_e$ and $\omega^*_e = \hat\omega_e$.
+- Reference: `ctrl.omega_ref` is clamped to `controller.limits.speed` and rate-limited by `controller.limits.ramp` (EQ-CTRL-02) before every step uses it, as in the cascade.
+- A speed loop only: `controller.position` together with `sensorless: true` is refused at build (the observer has no angle at standstill, so a position hold cannot work).
 - Defaults: $I_{align} = I_{if} = 0.5\,I_{lim}$, $t_{align}$ = 0.3 s, $a = 0.25\,K_t I_{if}/(N J)$ (load side), $\omega_{handoff} = 3\,\omega_{min}$, $t_{valid}$ = 20 ms, $t_{blend}$ = 50 ms.
 - **Bound** (verified): $i_q^*$ is continuous across the hand-off, and the measured current magnitude stays below `controller.limits.current` through the whole start.
 

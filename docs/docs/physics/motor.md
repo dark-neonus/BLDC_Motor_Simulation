@@ -226,6 +226,23 @@ $$
 - **Physical disconnect fault:** the phase never reconnects.
 - Entering open-phase mode is also a state event: the leg is off **and** $i_c$ crosses zero.
 - **Leaving open-phase mode:** $\psi_{\alpha\beta}$ is rebuilt from $(i, \theta_e)$ with EQ-MOT-02 (it is continuous), and the clamp side is set by which bound $v_{cT}$ crossed: above $V_{bus} + V_f$ means the high-side diode, below $-V_f$ means the low side. It is not taken from $\mathrm{sgn}(i_c)$, which is 0 at that instant.
+- **Only a crossing *past* a bound turns a diode on** (the terminal moving outward, the event function falling through zero). A terminal coming back inside reverse-biases the diode.
+- **A phase opening by an Off leg** (not a fault) whose terminal already lies beyond a bound reconnects at once through that diode, since no crossing will come. When the phase's own diode conduction just ended, its terminal is at that bound moving inside, so only the opposite diode may take over at once (handover).
+- **The current-zero event** of a pending phase is $g = \mathrm{sgn}\cdot i_k + 10^{-12}(1 + |i_{\alpha\beta}|)$. A diode reconnect starts $i_k$ at round-off zero; without the offset, a start at $-10^{-17}$ with the current then growing the wrong way never crosses, and the diode conducts backwards.
+
+- **Floatable legs:** an Off leg, and in averaged six-step the High (H/O) leg, whose lower clamp is $d\,V_{bus} - (1-d)V_f$ instead of $-V_f$ (EQ-INV-07). Both clamps move with the leg states and the duty, so the bounds are re-checked after every discrete event: a terminal left beyond one conducts at once. The check uses the leg model's voltages, since the bus still holds the values from before the event.
+
+#### Zero-current mode (two floating phases)
+
+With phase $k$ floating and the leg of a second phase $m$ also Off (one leg $j$ driven, e.g. a six-step drive coasting at $u = 0$), $m$'s current reaching zero is a state event. Phase $m$ floats too and every current is zero. No current path is left: $j$ alone cannot carry current.
+
+$$
+i_a = i_b = i_c = 0,\qquad v_n = v_{jT} - e_j,\qquad v_{xT} = v_n + e_x\ \ (x = k, m)
+$$
+
+- The state stays the line flux of the pair $(j, m)$, pinned to its zero-current value at entry (the tiny $W_{mag}$ difference is booked as a jump). The inverter applies $v_{mT} - v_{jT} = e_m - e_j$, so the current stays zero.
+- **Leaving:** a floating terminal moving past a diode bound (the same rule as above) reconnects that phase through the diode, and the other phase keeps floating. A leg turning on reconnects its phase with zero current (continuous).
+- All three legs Off (no driven leg) is not modelled: one phase floats and a warning is raised (faults, P10).
 
 ## Power and energy
 

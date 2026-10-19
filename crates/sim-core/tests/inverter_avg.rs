@@ -100,6 +100,8 @@ fn rig_adc(averaged: bool, f_loss: f64, adc: bool) -> Engine {
             legs,
             v_bus: vb,
             v_f: D.v_f,
+            r_on: D.r_on,
+            ho_duty: None,
             dead_time: PWM.dead_ns as f64 * 1e-9,
         })
         .with_internal_terminals();

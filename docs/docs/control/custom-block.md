@@ -52,6 +52,7 @@ The script runs on top of the FOC current loop (EQ-CTRL-03) at the same rate, so
 ## Limits and errors
 
 - The VM is sandboxed (Luau `sandbox` mode: no file or OS access, read-only standard library).
+- Runs are deterministic: `math.random` is seeded from the scene seed, and the wall-clock functions (`os.clock`, `os.time`, `os.date`, `os.difftime`) are removed. Use `dt` for time.
 - Memory limit: 16 MB. An allocation beyond it is an error.
 - Instruction budget: 1 000 000 interrupts (loop iterations and calls) per call to `step` or `init`. Exceeding it is an error: an endless loop stops the run instead of hanging it.
 - Errors stop the simulation (the UI pauses) and name the script line, e.g. `custom:3: attempt to perform arithmetic on a nil value`. A syntax error is reported when the scene is built. A script without `init` or `step` is refused.

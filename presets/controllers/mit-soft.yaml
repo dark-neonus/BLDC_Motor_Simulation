@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=../../schemas/controller.schema.json
-# MIT / impedance hold, compliant: K_p, K_d from the inertia (EQ-CTRL-07/12).
+# MIT / impedance hold, compliant (K_p·e beats the cogging beyond ≈ 9°): K_p, K_d from the inertia (EQ-CTRL-07/12).
 family: mit
 current: { rate: 20 kHz, bandwidth: 1 kHz }
 rate: 5 kHz
-bandwidth: 2 Hz
+bandwidth: 10 Hz
 damping: 0.7
 limits: { current: 5 A }

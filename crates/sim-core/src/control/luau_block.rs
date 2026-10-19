@@ -30,6 +30,8 @@ pub struct LuauConfig {
     pub params: Vec<(String, f64)>,
     pub memory: usize,
     pub budget: u64,
+    /// Seed of the script's `math.random` (a substream of the scene seed): runs repeat.
+    pub seed: u32,
 }
 
 pub struct LuauBlock {
@@ -75,6 +77,14 @@ impl LuauBlock {
             }
             Ok(VmState::Continue)
         });
+        // Determinism (PLAN §4): math.random from the scene seed, no wall clock. Time
+        // comes from `dt`.
+        lua.load(format!(
+            "math.randomseed({}); os.clock = nil; os.time = nil; os.date = nil; os.difftime = nil",
+            cfg.seed
+        ))
+        .exec()
+        .map_err(lua_err)?;
         lua.load(cfg.script.as_str())
             .set_name("=custom")
             .exec()

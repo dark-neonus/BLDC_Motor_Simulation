@@ -3,6 +3,6 @@
 family: mit
 current: { rate: 20 kHz, bandwidth: 1 kHz }
 rate: 5 kHz
-bandwidth: 5 Hz
+bandwidth: 25 Hz
 damping: 0.7
 limits: { current: 5 A }

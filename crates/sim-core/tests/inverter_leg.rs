@@ -82,6 +82,8 @@ fn rig_dt(locked: bool, omega0: f64, legs: [LegState; 3], dead_time: f64) -> Eng
             legs: leg_ids,
             v_bus: vb,
             v_f: D.v_f,
+            r_on: D.r_on,
+            ho_duty: None,
             dead_time,
         });
     let rotor = rotor.with_internal(bus.id("motor.torque_em").unwrap());
@@ -248,8 +250,9 @@ fn a_second_floating_phase_is_refused_or_warned() {
     );
 }
 
-/// The two-legs-Off warning threshold follows the dead time, 2·t_d (P08 review m4):
-/// 15 µs with two legs Off is a transient at t_d = 10 µs, a commanded state at t_d = 0.
+/// The all-legs-Off warning threshold follows the dead time, 2·t_d (P08 review m4):
+/// 15 µs with every leg Off is a transient at t_d = 10 µs, a commanded state at t_d = 0.
+/// (Two legs Off with one driven is the modelled zero-current mode, EQ-MOT-12.)
 #[test]
 fn two_off_warning_threshold_follows_the_dead_time() {
     use LegState::*;
@@ -257,11 +260,12 @@ fn two_off_warning_threshold_follows_the_dead_time() {
         let mut e = rig_dt(false, 0.0, [High, Low, Low], dt);
         e.step_until(SimTime::from_secs_f64(0.01)).unwrap();
         e.drain_events();
+        set_leg(&mut e, "a", Off);
         set_leg(&mut e, "b", Off);
         set_leg(&mut e, "c", Off);
         e.step_until(SimTime::from_secs_f64(0.01 + 15e-6)).unwrap();
-        // A discrete event while both are still Off evaluates the warning.
-        set_leg(&mut e, "a", High);
+        // A discrete event while all are still Off evaluates the warning.
+        set_leg(&mut e, "a", Off);
         e.step_until(SimTime::from_secs_f64(0.01 + 16e-6)).unwrap();
         let w = warnings(&mut e);
         assert_eq!(

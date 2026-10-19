@@ -75,6 +75,8 @@ pub struct SwitchingInverter {
     i_dc: SignalId,
     /// `motor.open_phase` (−1 none, k: phase k floats).
     open_phase: Option<SignalId>,
+    /// `motor.open_phase2`: the second floating phase (zero-current mode, EQ-MOT-12).
+    open_phase2: Option<SignalId>,
     /// `motor.diode_x`: the diode a reconnect went through (−1 high, +1 low, 0 none).
     diode: Option<[SignalId; 3]>,
     /// Conducting diode of an Off leg: +1 low diode (i > 0), −1 high diode (i < 0), 0 none.
@@ -146,15 +148,24 @@ pub fn averaged_voltage(
         - sigma * dead_frac * (v_bus + 2.0 * dev.v_f - 2.0 * dev.r_on * i.abs())
 }
 
-/// Averaged six-step High leg (EQ-INV-07): H for d, O otherwise (the low diode clamps to
-/// −V_f for i > 0, the high diode to V_bus + V_f for i < 0), blended with
-/// w = (1 + σ(i))/2. Returns (v̄_xT, its DC-link current). At d = 0 the controller commands
-/// the leg Off instead (the blend would hold it at ≈ V_bus/2 at zero current).
-pub fn six_step_high_voltage(d: f64, i: f64, v_bus: f64, dev: &Devices, i_eps: f64) -> (f64, f64) {
-    let w = 0.5 * (1.0 + (i / i_eps).tanh());
+/// Averaged six-step High leg (EQ-INV-07): H for d, O otherwise. `branch` +1: the
+/// current flows into the motor (i > 0), the low diode clamps the O part to −V_f;
+/// −1: out of the motor (i < 0) through the high diode, V_bus + V_f. Returns (v̄_xT, its
+/// DC-link current). When the current reaches zero the phase floats instead (the leg is
+/// floatable, EQ-MOT-12): no branch conducts.
+pub fn six_step_high_voltage(d: f64, i: f64, v_bus: f64, dev: &Devices, branch: f64) -> (f64, f64) {
     let on = d * (v_bus - dev.r_on * i);
-    let v = w * (on + (1.0 - d) * (-dev.v_f)) + (1.0 - w) * (on + (1.0 - d) * (v_bus + dev.v_f));
-    (v, w * d * i + (1.0 - w) * i)
+    if branch < 0.0 {
+        (on + (1.0 - d) * (v_bus + dev.v_f), i)
+    } else {
+        (on - (1.0 - d) * dev.v_f, d * i)
+    }
+}
+
+/// Lower clamp of a floatable leg at zero current (EQ-MOT-12): −V_f for an Off leg (d = 0),
+/// the H/O on-average d·V_bus − (1 − d)·V_f for an averaged six-step High leg.
+pub fn lower_clamp(d: f64, v_bus: f64, v_f: f64) -> f64 {
+    d * v_bus - (1.0 - d) * v_f
 }
 
 impl SwitchingInverter {
@@ -239,6 +250,7 @@ impl SwitchingInverter {
             v,
             i_dc,
             open_phase: None,
+            open_phase2: None,
             diode: None,
             latch: [0.0; 3],
             prev: [LegState::Low; 3],
@@ -262,6 +274,7 @@ impl SwitchingInverter {
         self.e = [id("motor.e_a")?, id("motor.e_b")?, id("motor.e_c")?];
         self.v_n = id("motor.v_n")?;
         self.open_phase = Some(id("motor.open_phase")?);
+        self.open_phase2 = bus.id("motor.open_phase2").ok();
         self.diode = Some([
             id("motor.diode_a")?,
             id("motor.diode_b")?,
@@ -281,8 +294,36 @@ impl SwitchingInverter {
 /// Below this phase current [A] the fallback diode choice uses the terminal voltage,
 /// not the sign of i (round-off).
 const LATCH_I_MIN: f64 = 1e-9;
-
 impl SwitchingInverter {
+    /// Whether a leg in state `s` lets its phase float at zero current (EQ-MOT-12): Off,
+    /// or an averaged six-step High leg (H/O: no current path while the switch is off).
+    fn floatable(&self, s: LegState) -> bool {
+        s == LegState::Off || (self.six_step && self.averaged.is_some() && s == LegState::High)
+    }
+
+    /// The lower clamp of leg k at zero current (`lower_clamp`).
+    fn lower_clamp_of(&self, k: usize, v_bus: f64, bus: &SignalBus) -> f64 {
+        let s = LegState::from_signal(bus.get(self.legs[k]));
+        let d = match (self.averaged, self.six_step && s == LegState::High) {
+            (Some(a), true) => bus.get(a.duty[k]).clamp(0.0, 1.0),
+            _ => 0.0,
+        };
+        lower_clamp(d, v_bus, self.d.v_f)
+    }
+
+    /// The conducting branch of an averaged six-step High leg: the motor's reconnect
+    /// diode, else the current's sign (+1 at zero: the drive pushes current in).
+    fn high_branch(&self, k: usize, i: f64, bus: &SignalBus) -> f64 {
+        let from_motor = self.diode.map_or(0.0, |d| bus.get(d[k]));
+        if from_motor != 0.0 {
+            from_motor
+        } else if i < -LATCH_I_MIN {
+            -1.0
+        } else {
+            1.0
+        }
+    }
+
     /// The conducting diode of Off leg k that is not floating (−1 high, +1 low), without
     /// mutating state (D-017): the motor's reconnect diode, else the latch set at the
     /// turn-off (`after_discrete`), else the current's sign, or at i ≈ 0 the bound the
@@ -317,16 +358,28 @@ impl PlantModule for SwitchingInverter {
     fn outputs(&mut self, _t: f64, _x: &[f64], _off: usize, bus: &mut SignalBus) {
         let v_bus = bus.get(self.v_bus);
         let open = self.open_phase.map_or(-1.0, |id| bus.get(id));
+        let open2 = self.open_phase2.map_or(-1.0, |id| bus.get(id));
+        let floating = |k: usize| open == k as f64 || open2 == k as f64;
+        let lo: [f64; 3] = std::array::from_fn(|k| self.lower_clamp_of(k, v_bus, bus));
         let mut i_dc = 0.0;
-        for k in 0..3 {
+        for (k, &lo_k) in lo.iter().enumerate() {
             let s = LegState::from_signal(bus.get(self.legs[k]));
             let i = bus.get(self.i[k]);
             let mut dc = None;
-            let v = if let (Some(a), true) = (self.averaged, s != LegState::Off) {
+            let v = if floating(k) && self.floatable(s) {
+                // Floating: v_n + e_x (EQ-MOT-12); i = 0, no diode conducts.
+                // max/min, not clamp: a bus below −2V_f (no reverse clamp yet, P10.T09)
+                // would invert the bounds, and clamp panics on that.
+                dc = Some(0.0);
+                (bus.get(self.v_n) + bus.get(self.e[k]))
+                    .min(v_bus + self.d.v_f)
+                    .max(lo_k)
+            } else if let (Some(a), true) = (self.averaged, s != LegState::Off) {
                 let d = bus.get(a.duty[k]).clamp(0.0, 1.0);
                 match (self.six_step, s) {
                     (true, LegState::High) => {
-                        let (v, idc) = six_step_high_voltage(d, i, v_bus, &self.d, a.i_eps);
+                        let branch = self.high_branch(k, i, bus);
+                        let (v, idc) = six_step_high_voltage(d, i, v_bus, &self.d, branch);
                         dc = Some(idc);
                         v
                     }
@@ -338,13 +391,6 @@ impl PlantModule for SwitchingInverter {
                 }
             } else if s != LegState::Off {
                 terminal_voltage(s, i, v_bus, &self.d).unwrap_or(0.0)
-            } else if open == k as f64 {
-                // Floating: v_n + e_x (EQ-MOT-12); i = 0, no diode conducts.
-                // max/min, not clamp: a bus below −2V_f (no reverse clamp yet, P10.T09)
-                // would invert the bounds, and clamp panics on that.
-                (bus.get(self.v_n) + bus.get(self.e[k]))
-                    .min(v_bus + self.d.v_f)
-                    .max(-self.d.v_f)
             } else {
                 terminal_voltage(s, self.diode_of(k, i, v_bus, bus), v_bus, &self.d).unwrap_or(0.0)
             };
@@ -356,9 +402,22 @@ impl PlantModule for SwitchingInverter {
                 let d = bus.get(a.duty[k]).clamp(0.0, 1.0);
                 i_dc += (d - (i / a.i_eps).tanh() * dead_eff(d, a.dead_frac)) * i;
             } else if s == LegState::High
-                || (s == LegState::Off && open != k as f64 && self.diode_of(k, i, v_bus, bus) < 0.0)
+                || (s == LegState::Off && !floating(k) && self.diode_of(k, i, v_bus, bus) < 0.0)
             {
                 i_dc += i;
+            }
+        }
+        if open2 >= 0.0 {
+            // Zero-current mode: both floating terminals at v_n + e_x with v_n set by the
+            // driven leg j alone (i = 0 everywhere), so v_m − v_j = e_m − e_j holds exactly.
+            let (k, m) = (open as usize, open2 as usize);
+            let j = 3 - k - m;
+            let v_n = bus.get(self.v[j]) - bus.get(self.e[j]);
+            for x in [k, m] {
+                let v = (v_n + bus.get(self.e[x]))
+                    .min(v_bus + self.d.v_f)
+                    .max(lo[x]);
+                bus.set(self.v[x], v);
             }
         }
         bus.set(self.i_dc, i_dc);
@@ -514,10 +573,10 @@ mod tests {
     #[test]
     fn six_step_high_leg_average() {
         let (d, v) = (0.3, 24.0);
-        let (vp, ip) = six_step_high_voltage(d, 2.0, v, &D, 0.01);
+        let (vp, ip) = six_step_high_voltage(d, 2.0, v, &D, 1.0);
         assert!((vp - (d * (v - D.r_on * 2.0) - (1.0 - d) * D.v_f)).abs() < 1e-12);
         assert!((ip - d * 2.0).abs() < 1e-12);
-        let (vn, i_n) = six_step_high_voltage(d, -2.0, v, &D, 0.01);
+        let (vn, i_n) = six_step_high_voltage(d, -2.0, v, &D, -1.0);
         assert!((vn - (d * (v + D.r_on * 2.0) + (1.0 - d) * (v + D.v_f))).abs() < 1e-12);
         assert!((i_n + 2.0).abs() < 1e-12);
     }

@@ -28,7 +28,7 @@ fn scene_with(motor_overrides: &str, extra: &str, load: Option<&str>) -> Engine 
     let yaml = format!(
         "schema_version: 1\nname: s\nseed: 1\n\
          motor: {{ preset: \"builtin:motors/5010-outrunner\", {motor_overrides} }}\n{load}\
-         inverter: {{ preset: \"builtin:inverters/medium-48v-40a\" }}\n\
+         inverter: {{ preset: \"builtin:inverters/medium-48v-40a\"}}\n\
          supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n\
          sensors: {{ preset: \"builtin:sensors/hall-set\" }}\n\
          controller: {{ family: six_step, rate: 20 kHz, speed_loop: {{ rate: 1 kHz, bandwidth: 10 Hz }}, limits: {{ current: 5 A, speed: 3000 rpm }} }}\n{extra}"
@@ -58,12 +58,24 @@ fn signal(e: &mut Engine, path: &str, value: f64) {
 }
 
 /// The six-step demo (Halls with hysteresis and latency, flywheel, averaged inverter)
-/// with a trapezoidal motor reaches and holds a speed target through its speed PI.
+/// with a trapezoidal motor reaches and holds a speed target through its speed PI, the
+/// energy balance closed throughout.
 #[test]
 fn trapezoidal_motor_reaches_steady_speed() {
     let mut e = scene("", Some("{ preset: \"builtin:loads/flywheel\" }"));
     signal(&mut e, "ctrl.omega_ref", 150.0);
-    e.step_until(SimTime::from_secs_f64(3.0)).unwrap();
+    for k in 1..=300 {
+        e.step_until(SimTime::from_secs_f64(k as f64 * 0.01))
+            .unwrap();
+        // Energy closes through the discontinuous conduction near the target (EQ-MOT-12).
+        assert_eq!(
+            sig(&e, "energy.ok"),
+            1.0,
+            "t {}: residual {:.2e}",
+            k as f64 * 0.01,
+            sig(&e, "energy.residual")
+        );
+    }
     let w = sig(&e, "motor.omega");
     assert!((w / 150.0 - 1.0).abs() < 0.01, "ω {w} rad/s");
     assert!(sig(&e, "ctrl.six_step.sector") >= 0.0, "valid Hall sectors");
@@ -159,7 +171,7 @@ fn negative_command_reverses_and_ideal_drive_is_refused() {
     let yaml = format!(
         "schema_version: 1\nname: s\n\
          motor: {{ preset: \"builtin:motors/5010-outrunner\", {TRAP} }}\n\
-         inverter: {{ preset: \"builtin:inverters/medium-48v-40a\" }}\n\
+         inverter: {{ preset: \"builtin:inverters/medium-48v-40a\"}}\n\
          supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n\
          controller: {{ family: six_step, rate: 20 kHz, limits: {{ current: 5 A }} }}\n\
          fidelity: {{ inverter_mode: ideal }}\n"
@@ -205,4 +217,50 @@ fn switching_six_step_pulses_the_high_leg_and_spins() {
     }
     assert!(seen_h && seen_o, "H/O pulses");
     assert!(sig(&e, "motor.omega") > 1.0, "ω {}", sig(&e, "motor.omega"));
+}
+
+/// The shipped six-step demo scene: spin up, then command a lower speed. The
+/// unidirectional drive coasts (u = 0: High leg Off, Low leg on, the third Off — the
+/// zero-current mode, EQ-MOT-12) and the frictionless flywheel keeps its speed; the
+/// energy balance closes at every sample (EQ-ENER) and the PSU bus stays at its set
+/// point (P09 review M2: the bus climbed to 67 V and the rotor sped up while coasting).
+#[test]
+fn six_step_demo_closes_the_energy_balance() {
+    let dir = std::env::temp_dir().join(format!("bldc-sixd-{}", std::process::id()));
+    let lib = Library::new(None, dir.join("user"), vec![]).unwrap();
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../presets/scenes/six-step-demo.yaml"
+    ))
+    .unwrap();
+    let sc: Scene = parse_yaml(&text, "six-step-demo").unwrap();
+    let mut e = build_engine(&sc.resolve(&lib).unwrap()).unwrap().engine;
+    let mut w_cmd_change = 0.0;
+    for (t0, t1, w) in [(0.0, 2.0, 200.0), (2.0, 4.0, 60.0)] {
+        signal(&mut e, "ctrl.omega_ref", w);
+        for k in 1..=((t1 - t0) * 1e3) as usize {
+            let t = t0 + k as f64 * 1e-3;
+            e.step_until(SimTime::from_secs_f64(t)).unwrap();
+            assert_eq!(
+                sig(&e, "energy.ok"),
+                1.0,
+                "t {t:.3}: residual {:.2e}",
+                sig(&e, "energy.residual")
+            );
+            assert!(
+                sig(&e, "bus.v") < 24.5,
+                "t {t:.3}: bus {} V",
+                sig(&e, "bus.v")
+            );
+        }
+        if t1 == 2.0 {
+            w_cmd_change = sig(&e, "motor.omega");
+        }
+    }
+    let w = sig(&e, "motor.omega");
+    assert!(w > 50.0, "spun up: {w_cmd_change} rad/s at 2 s");
+    assert!(
+        w <= w_cmd_change * 1.001,
+        "coasting cannot speed up: {w_cmd_change} → {w} rad/s"
+    );
 }

@@ -196,6 +196,13 @@ pub fn build(
         },
     };
     if let Some(opts) = &spec.sensorless {
+        if position.is_some() {
+            return Err(
+                "sensorless FOC runs a speed loop only: remove `controller.position` \
+                 (the flux observer has no angle at standstill, EQ-CTRL-09)"
+                    .into(),
+            );
+        }
         return sensorless_family(
             spec, opts, motor, plant, io, sig, t_c, omega_c, omega_v, bus,
         );
@@ -341,7 +348,8 @@ fn sensorless_family(
     let (kp_d, ki_d) = velocity_loop::design(omega_v, plant.j_motor, plant.kt);
     let pi = sensorless::velocity_pi(v.kp.unwrap_or(kp_d), v.ki.unwrap_or(ki_d), spec.i_max);
     let sup =
-        sensorless::SensorlessBlock::new(t_c, startup, sio, pi, spec.i_max, n_p, motor.pole_pairs);
+        sensorless::SensorlessBlock::new(t_c, startup, sio, pi, spec.i_max, n_p, motor.pole_pairs)
+            .with_reference_limits(spec.speed_limit, spec.ramp);
     let mut io = *io;
     io.angle_e = Scaled {
         id: theta,

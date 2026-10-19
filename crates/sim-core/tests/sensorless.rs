@@ -13,6 +13,10 @@ use sim_model::scene::Scene;
 const I_LIM: f64 = 4.0;
 
 fn scene() -> Engine {
+    try_scene("").unwrap()
+}
+
+fn try_scene(extra: &str) -> Result<Engine, String> {
     let dir = std::env::temp_dir().join(format!("bldc-sl-{}", std::process::id()));
     let lib = Library::new(None, dir.join("user"), vec![]).unwrap();
     let yaml = format!(
@@ -20,10 +24,12 @@ fn scene() -> Engine {
          motor: {{ preset: \"builtin:motors/4108-outrunner\" }}\n\
          inverter: {{ preset: \"builtin:inverters/small-24v-10a\" }}\n\
          supply: {{ preset: \"builtin:supplies/psu-24v-5a\" }}\n\
-         controller: {{ family: foc, sensorless: true, current: {{ rate: 20 kHz, bandwidth: 1 kHz }}, velocity: {{ rate: 20 kHz, bandwidth: 10 Hz }}, limits: {{ current: {I_LIM} A }} }}\n"
+         controller: {{ family: foc, sensorless: true, current: {{ rate: 20 kHz, bandwidth: 1 kHz }}, velocity: {{ rate: 20 kHz, bandwidth: 10 Hz }}, limits: {{ current: {I_LIM} A{extra} }} }}\n"
     );
     let sc: Scene = parse_yaml(&yaml, "s").unwrap();
-    build_engine(&sc.resolve(&lib).unwrap()).unwrap().engine
+    build_engine(&sc.resolve(&lib).unwrap())
+        .map(|b| b.engine)
+        .map_err(|e| e.to_string())
 }
 
 fn sig(e: &Engine, n: &str) -> f64 {
@@ -81,4 +87,43 @@ fn starts_from_standstill_and_hands_off_smoothly() {
         fell_back |= sig(&e, "ctrl.sensorless.state") == 1.0;
     }
     assert!(fell_back, "fallback to I/f");
+}
+
+#[test]
+fn speed_limit_and_ramp_apply() {
+    // limits.speed 20 rad/s, ramp 20 rad/s²: a 30 rad/s command settles at 20 and gets
+    // there no sooner than 1 s.
+    let mut e = try_scene(", speed: 20 rad/s, ramp: 20 rad/s^2").unwrap();
+    e.queue(EngineCommand::SetSignal {
+        path: "ctrl.omega_ref".into(),
+        value: 30.0,
+        source: ChangeSource::Internal,
+    });
+    let mut at_half = 0.0;
+    for k in 1..=3000 {
+        e.step_until(SimTime::from_secs_f64(k as f64 * 1e-3))
+            .unwrap();
+        if k == 500 {
+            at_half = sig(&e, "motor.omega");
+        }
+    }
+    assert!(at_half < 0.5 * 20.0 * 1.1, "ramped: ω(0.5 s) = {at_half}");
+    let w = sig(&e, "motor.omega");
+    assert!((w / 20.0 - 1.0).abs() < 0.02, "limited: ω {w} rad/s");
+}
+
+#[test]
+fn position_with_sensorless_is_refused() {
+    let dir = std::env::temp_dir().join(format!("bldc-slp-{}", std::process::id()));
+    let lib = Library::new(None, dir.join("user"), vec![]).unwrap();
+    let yaml = "schema_version: 1\nname: s\n\
+         motor: { preset: \"builtin:motors/4108-outrunner\" }\n\
+         inverter: { preset: \"builtin:inverters/small-24v-10a\" }\n\
+         supply: { preset: \"builtin:supplies/psu-24v-5a\" }\n\
+         controller: { family: foc, sensorless: true, current: { rate: 20 kHz }, velocity: { rate: 20 kHz }, position: { rate: 2 kHz }, limits: { current: 4 A } }\n";
+    let sc: Scene = parse_yaml(yaml, "s").unwrap();
+    let err = build_engine(&sc.resolve(&lib).unwrap())
+        .err()
+        .expect("refused");
+    assert!(err.to_string().contains("sensorless"), "{err}");
 }
