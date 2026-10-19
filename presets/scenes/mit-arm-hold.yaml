@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/scene.schema.json
+# The arm joint as an impedance (MIT) controller: stiffness and damping from the inertia.
+schema_version: 1
+name: MIT arm hold
+description: 8108 motor, 1:9 planetary, 2 kg at 15 cm, held by an MIT-mode impedance law.
+motor: { preset: "builtin:motors/8108-outrunner" }
+gearbox: { preset: "builtin:gearboxes/planetary-9" }
+load: { preset: "builtin:loads/arm-15cm-2kg" }
+inverter: { preset: "builtin:inverters/medium-48v-40a" }
+supply: { preset: "builtin:supplies/lipo-6s" }
+sensors: { preset: "builtin:sensors/as5047p" }
+controller:
+  preset: "builtin:controllers/mit-stiff"
+  overrides: { limits.current: 20 A }
+seed: 1
+# load.theta: 0 = hanging straight down, 90 deg = horizontal (EQ-CONV-05).
+initial: { theta: 0 deg }

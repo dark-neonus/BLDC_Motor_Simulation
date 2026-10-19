@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=../../schemas/scene.schema.json
+# Open-loop V/f: no sensor, no feedback; the rotor follows the rotating voltage.
+schema_version: 1
+name: Open-loop spin
+description: 2804 gimbal motor driven open loop (V/f) with pole-slip detection.
+motor: { preset: "builtin:motors/2804-outrunner" }
+inverter: { preset: "builtin:inverters/small-24v-10a" }
+supply: { preset: "builtin:supplies/psu-24v-5a" }
+controller:
+  preset: "builtin:controllers/open-loop-slow"
+  overrides: { limits.current: 1 A }
+seed: 1

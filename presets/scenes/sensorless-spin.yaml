@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=../../schemas/scene.schema.json
+# Sensorless FOC from standstill: align, I/f ramp, hand-off to the flux observer.
+schema_version: 1
+name: Sensorless spin
+description: 4108 motor on a 24 V bench supply, sensorless FOC with an I/f start.
+motor: { preset: "builtin:motors/4108-outrunner" }
+inverter: { preset: "builtin:inverters/small-24v-10a" }
+supply: { preset: "builtin:supplies/psu-24v-5a" }
+controller:
+  preset: "builtin:controllers/foc-sensorless"
+  overrides: { limits.current: 4 A }
+seed: 1
